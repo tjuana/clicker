@@ -258,7 +258,7 @@ describe('createRoomState', () => {
 - [ ] **Step 5: Убедиться, что тест падает**
 
 Run: `pnpm --filter @clicker/game test`
-Expected: FAIL, `Failed to resolve import "../src/state"`.
+Expected: FAIL, `Cannot find module "../src/state"`.
 
 - [ ] **Step 6: Создать `packages/game/src/config.ts`**
 
@@ -457,7 +457,7 @@ describe('computeResults', () => {
 - [ ] **Step 3: Убедиться, что тест падает**
 
 Run: `pnpm --filter @clicker/game test`
-Expected: FAIL, `Failed to resolve import "../src/results"`.
+Expected: FAIL, `Cannot find module "../src/results"`.
 
 - [ ] **Step 4: Создать `packages/game/src/results.ts`**
 
@@ -611,7 +611,7 @@ describe('advance', () => {
 - [ ] **Step 2: Убедиться, что тест падает**
 
 Run: `pnpm --filter @clicker/game test`
-Expected: FAIL, `Failed to resolve import "../src/advance"`.
+Expected: FAIL, `Cannot find module "../src/advance"`.
 
 - [ ] **Step 3: Создать `packages/game/src/advance.ts`**
 
@@ -841,7 +841,7 @@ describe('join', () => {
 - [ ] **Step 2: Убедиться, что тест падает**
 
 Run: `pnpm --filter @clicker/game test`
-Expected: FAIL, `Failed to resolve import "../src/apply"`.
+Expected: FAIL, `Cannot find module "../src/apply"`.
 
 - [ ] **Step 3: Создать `packages/game/src/commands.ts`**
 
@@ -1525,7 +1525,7 @@ describe('nextDeadline', () => {
 - [ ] **Step 2: Убедиться, что тест падает**
 
 Run: `pnpm --filter @clicker/game test`
-Expected: FAIL, `Failed to resolve import "../src/deadline"`.
+Expected: FAIL, `Cannot find module "../src/deadline"`.
 
 - [ ] **Step 3: Создать `packages/game/src/deadline.ts`**
 
@@ -1656,7 +1656,7 @@ describe('syncConnections', () => {
 - [ ] **Step 2: Убедиться, что тест падает**
 
 Run: `pnpm --filter @clicker/game test`
-Expected: FAIL, `Failed to resolve import "../src/recovery"`.
+Expected: FAIL, `Cannot find module "../src/recovery"`.
 
 - [ ] **Step 3: Создать `packages/game/src/recovery.ts`**
 
@@ -1829,7 +1829,7 @@ describe('isId', () => {
 - [ ] **Step 5: Убедиться, что тест падает**
 
 Run: `pnpm --filter @clicker/protocol test`
-Expected: FAIL, `Failed to resolve import "../src/ids"`.
+Expected: FAIL, `Cannot find module "../src/ids"`.
 
 - [ ] **Step 6: Создать `packages/protocol/src/ids.ts`**
 
@@ -1949,7 +1949,7 @@ describe('parseClientMessage', () => {
 - [ ] **Step 2: Убедиться, что тест падает**
 
 Run: `pnpm --filter @clicker/protocol test`
-Expected: FAIL, `Failed to resolve import "../src/client"`.
+Expected: FAIL, `Cannot find module "../src/client"`.
 
 - [ ] **Step 3: Создать `packages/protocol/src/client.ts`**
 
@@ -2145,7 +2145,7 @@ describe('parseServerMessage', () => {
 - [ ] **Step 2: Убедиться, что тест падает**
 
 Run: `pnpm --filter @clicker/protocol test`
-Expected: FAIL, `Failed to resolve import "../src/server"`.
+Expected: FAIL, `Cannot find module "../src/server"`.
 
 - [ ] **Step 3: Создать `packages/protocol/src/server.ts`**
 
