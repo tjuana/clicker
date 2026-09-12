@@ -170,19 +170,17 @@ function click(state: RoomState, playerId: string, now: number, config: GameConf
     player.bucket.tokens + (elapsed * config.clicksPerSecond) / 1000,
   );
 
-  if (tokens < 1) {
-    return {
-      state: withPlayer(state, playerId, { ...player, bucket: { tokens, updatedAt: now } }),
-      events: [],
-    };
-  }
+  // Пополнение линейно: пересчёт от прежней точки отсчёта позже даст тот же результат,
+  // поэтому отказ ничего не меняет и не может сдвинуть точку отсчёта.
+  if (tokens < 1) return { state, events: [] };
 
   return {
     state: withPlayer(state, playerId, {
       ...player,
       clicks: player.clicks + 1,
       lastCountedAt: now,
-      bucket: { tokens: tokens - 1, updatedAt: now },
+      // Метка времени из прошлого не отматывает точку отсчёта назад.
+      bucket: { tokens: tokens - 1, updatedAt: Math.max(player.bucket.updatedAt, now) },
     }),
     events: [],
   };
