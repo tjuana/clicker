@@ -1420,7 +1420,7 @@ function click(state: RoomState, playerId: string, now: number, config: GameConf
 - [ ] **Step 5: Убедиться, что проходят все тесты пакета, включая отложенный из Task 5**
 
 Run: `pnpm --filter @clicker/game test`
-Expected: `Test Files 6 passed (6)`, `Tests 32 passed (32)`.
+Expected: `Test Files 7 passed (7)`, `Tests 36 passed (36)`.
 
 - [ ] **Step 6: Закоммитить**
 
@@ -1561,7 +1561,7 @@ export function nextDeadline(state: RoomState, config: GameConfig = DEFAULT_CONF
 - [ ] **Step 4: Убедиться, что тесты проходят**
 
 Run: `pnpm --filter @clicker/game test`
-Expected: `Test Files 7 passed (7)`, `Tests 37 passed (37)`.
+Expected: `Test Files 8 passed (8)`, `Tests 41 passed (41)`.
 
 - [ ] **Step 5: Закоммитить**
 
@@ -1695,7 +1695,7 @@ export function syncConnections(
 - [ ] **Step 4: Убедиться, что тесты проходят**
 
 Run: `pnpm --filter @clicker/game test`
-Expected: `Test Files 8 passed (8)`, `Tests 41 passed (41)`.
+Expected: `Test Files 9 passed (9)`, `Tests 45 passed (45)`.
 
 - [ ] **Step 5: Закоммитить**
 
@@ -1729,7 +1729,7 @@ export { createRoomState } from './state';
 - [ ] **Step 2: Проверить типы и тесты**
 
 Run: `pnpm --filter @clicker/game typecheck && pnpm --filter @clicker/game test`
-Expected: `tsc --noEmit` ничего не печатает, `Tests 41 passed (41)`.
+Expected: `tsc --noEmit` ничего не печатает, `Tests 45 passed (45)`.
 
 - [ ] **Step 3: Закоммитить**
 
@@ -2308,7 +2308,7 @@ pnpm test
 Expected:
 - `pnpm check`: `Checked N files ... No fixes applied.`
 - `pnpm typecheck`: две строки `$ tsc --noEmit` и больше ничего;
-- `pnpm test`: `Tests 41 passed (41)` для game и `Tests 23 passed (23)` для protocol.
+- `pnpm test`: `Tests 45 passed (45)` для game и `Tests 23 passed (23)` для protocol.
 
 - [ ] **Step 3: Закоммитить**
 
@@ -2381,7 +2381,7 @@ pnpm test
 Ожидается:
 - линтер и форматтер без замечаний;
 - обе проверки типов молчат;
-- 41 тест в `@clicker/game` и 23 теста в `@clicker/protocol`, ноль падений.
+- 45 тестов в `@clicker/game` и 23 теста в `@clicker/protocol`, ноль падений.
 
 Сверить с разделами спецификации:
 - §5 «Ядро» — реализовано в `packages/game`, включая `apply`, `nextDeadline`, `abortRound`, `syncConnections`;
