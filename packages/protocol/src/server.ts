@@ -1,6 +1,5 @@
 import { comparePublicIds, type RoomState } from '@clicker/game';
 import * as v from 'valibot';
-import { MAX_MESSAGE_BYTES } from './client';
 
 const phaseSchema = v.picklist(['lobby', 'countdown', 'running', 'results']);
 
@@ -51,12 +50,15 @@ export const errorSchema = v.strictObject({
 
 export const serverMessageSchema = v.variant('type', [welcomeSchema, snapshotSchema, errorSchema]);
 
+/** Снимок на 50 игроков занимает около 3 КБ; предел на порядок крупнее сообщений клиента. */
+export const MAX_SERVER_MESSAGE_BYTES = 64 * 1024;
+
 export type ServerMessage = v.InferOutput<typeof serverMessageSchema>;
 export type SnapshotMessage = v.InferOutput<typeof snapshotSchema>;
 export type ServerErrorCode = v.InferOutput<typeof errorCodeSchema>;
 
 export function parseServerMessage(raw: string): ServerMessage | null {
-  if (new TextEncoder().encode(raw).length > MAX_MESSAGE_BYTES * 64) return null;
+  if (new TextEncoder().encode(raw).length > MAX_SERVER_MESSAGE_BYTES) return null;
 
   let data: unknown;
   try {

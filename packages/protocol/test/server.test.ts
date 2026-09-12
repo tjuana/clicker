@@ -1,6 +1,6 @@
 import { apply, createRoomState, type RoomState } from '@clicker/game';
 import { describe, expect, it } from 'vitest';
-import { parseServerMessage, toSnapshot } from '../src/server';
+import { MAX_SERVER_MESSAGE_BYTES, parseServerMessage, toSnapshot } from '../src/server';
 
 /** Хост «secret-1» и игрок «secret-2», раунд отыгран. */
 function playedRoom(): RoomState {
@@ -117,5 +117,11 @@ describe('parseServerMessage', () => {
 
   it('rejects an unknown error code', () => {
     expect(parseServerMessage(JSON.stringify({ type: 'error', code: 'nope' }))).toBeNull();
+  });
+
+  it('rejects a message over the server byte limit', () => {
+    const raw = `"${'x'.repeat(MAX_SERVER_MESSAGE_BYTES)}"`;
+
+    expect(parseServerMessage(raw)).toBeNull();
   });
 });

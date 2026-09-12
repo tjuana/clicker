@@ -12,6 +12,7 @@ export {
 export { generateId, ID_PATTERN, isId } from './ids';
 export {
   errorSchema,
+  MAX_SERVER_MESSAGE_BYTES,
   parseServerMessage,
   type ServerErrorCode,
   type ServerMessage,
