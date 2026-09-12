@@ -47,6 +47,28 @@ describe('parseClientMessage', () => {
     expect(parseClientMessage(encode({ type: 'join', playerId, name: 'a'.repeat(21) }))).toBeNull();
   });
 
+  it('rejects a name containing a newline', () => {
+    expect(parseClientMessage(encode({ type: 'join', playerId, name: 'A\nB' }))).toBeNull();
+  });
+
+  it('rejects a name containing a NUL byte', () => {
+    expect(parseClientMessage(encode({ type: 'join', playerId, name: 'A\u0000B' }))).toBeNull();
+  });
+
+  it('rejects a name containing a right-to-left override', () => {
+    expect(parseClientMessage(encode({ type: 'join', playerId, name: 'A\u202EB' }))).toBeNull();
+  });
+
+  it('accepts a plain name', () => {
+    expect(parseClientMessage(encode({ type: 'join', playerId, name: 'Alice' }))).not.toBeNull();
+  });
+
+  it('accepts a ZWJ emoji sequence in a name', () => {
+    const name = '👨‍👩‍👧';
+
+    expect(parseClientMessage(encode({ type: 'join', playerId, name }))).not.toBeNull();
+  });
+
   it('rejects a malformed player id', () => {
     expect(parseClientMessage(encode({ type: 'join', playerId: 'nope', name: 'Аня' }))).toBeNull();
   });

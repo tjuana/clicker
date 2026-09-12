@@ -9,6 +9,9 @@ const encoder = new TextEncoder();
 
 const idSchema = v.pipe(v.string(), v.regex(ID_PATTERN));
 
+/** Управляющие символы и знаки смены направления письма (U+202A–U+202E, U+2066–U+2069). */
+const FORBIDDEN_NAME_CHARS = /[\p{Cc}\u202A-\u202E\u2066-\u2069]/u;
+
 /** Ник хранится обрезанным, длина считается в code points. */
 const nameSchema = v.pipe(
   v.string(),
@@ -17,6 +20,7 @@ const nameSchema = v.pipe(
     const length = [...value].length;
     return length >= 1 && length <= MAX_NAME_LENGTH;
   }, 'name must be 1..20 characters'),
+  v.check((value) => !FORBIDDEN_NAME_CHARS.test(value), 'name must not contain control characters'),
 );
 
 export const joinSchema = v.strictObject({
