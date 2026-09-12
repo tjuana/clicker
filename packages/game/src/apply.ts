@@ -1,0 +1,119 @@
+import { advance } from './advance';
+import type { Command, ErrorCode, GameEvent, JoinCommand } from './commands';
+import { DEFAULT_CONFIG, type GameConfig } from './config';
+import type { Player, RoomState } from './state';
+
+export interface ApplyResult {
+  state: RoomState;
+  events: GameEvent[];
+}
+
+/**
+ * Единственная точка изменения состояния комнаты.
+ * Входное состояние не мутируется, время приходит параметром.
+ */
+export function apply(
+  state: RoomState,
+  command: Command,
+  now: number,
+  config: GameConfig = DEFAULT_CONFIG,
+): ApplyResult {
+  const advanced = advance(state, now, config);
+  const phaseEvents: GameEvent[] = advanced.phases.map((phase) => ({
+    type: 'phaseChanged',
+    phase,
+  }));
+  const handled = handle(advanced.state, command, now, config);
+  return { state: handled.state, events: [...phaseEvents, ...handled.events] };
+}
+
+function handle(state: RoomState, command: Command, now: number, config: GameConfig): ApplyResult {
+  switch (command.type) {
+    case 'tick':
+      return { state, events: [] };
+    case 'join':
+      return join(state, command, now, config);
+    case 'leave':
+      return leave(state, command.playerId, now);
+    default:
+      return { state, events: [] };
+  }
+}
+
+function reject(state: RoomState, playerId: string, code: ErrorCode): ApplyResult {
+  return { state, events: [{ type: 'rejected', playerId, code }] };
+}
+
+function withPlayer(state: RoomState, playerId: string, player: Player): RoomState {
+  return { ...state, players: { ...state.players, [playerId]: player } };
+}
+
+function join(
+  state: RoomState,
+  command: JoinCommand,
+  now: number,
+  config: GameConfig,
+): ApplyResult {
+  const existing = state.players[command.playerId];
+  let nextSeq = state.nextSeq;
+  let player: Player;
+
+  if (existing !== undefined) {
+    player = {
+      ...existing,
+      name: command.name,
+      connections: existing.connections + 1,
+      disconnectedAt: null,
+    };
+  } else {
+    if (Object.keys(state.players).length >= config.maxPlayers) {
+      return reject(state, command.playerId, 'room_full');
+    }
+    player = {
+      publicId: String(state.nextSeq),
+      name: command.name,
+      connections: 1,
+      disconnectedAt: null,
+      clicks: 0,
+      lastCountedAt: null,
+      bucket: { tokens: config.burst, updatedAt: now },
+    };
+    nextSeq = state.nextSeq + 1;
+  }
+
+  let hostKey = state.hostKey;
+  let hosts = state.hosts;
+  if (command.hostKey !== undefined) {
+    if (hostKey === null) hostKey = command.hostKey;
+    if (hostKey === command.hostKey && !hosts.includes(command.playerId)) {
+      hosts = [...hosts, command.playerId];
+    }
+  }
+
+  return {
+    state: { ...withPlayer(state, command.playerId, player), nextSeq, hostKey, hosts },
+    events: [
+      {
+        type: 'welcome',
+        playerId: command.playerId,
+        publicId: player.publicId,
+        isHost: hosts.includes(command.playerId),
+      },
+    ],
+  };
+}
+
+function leave(state: RoomState, playerId: string, now: number): ApplyResult {
+  const player = state.players[playerId];
+  if (player === undefined) return { state, events: [] };
+
+  const connections = Math.max(0, player.connections - 1);
+  return {
+    state: withPlayer(state, playerId, {
+      ...player,
+      connections,
+      disconnectedAt: connections === 0 ? now : player.disconnectedAt,
+    }),
+    events: [],
+  };
+}

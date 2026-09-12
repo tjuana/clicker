@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { advance } from '../src/advance';
+import { apply } from '../src/apply';
 import type { RoomState } from '../src/state';
 import { config, player, room } from './support';
 
@@ -88,5 +89,16 @@ describe('advance', () => {
     const result = advance(state, 13000, CONFIG);
 
     expect(Object.keys(result.state.players)).toEqual(['secret-1']);
+  });
+});
+
+describe('apply', () => {
+  it('reports the phases it walked through before handling the command', () => {
+    const result = apply(countdown(), { type: 'click', playerId: 'nobody' }, 4000, CONFIG);
+
+    expect(result.events).toEqual([
+      { type: 'phaseChanged', phase: 'running' },
+      { type: 'rejected', playerId: 'nobody', code: 'not_joined' },
+    ]);
   });
 });
