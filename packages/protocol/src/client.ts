@@ -5,6 +5,8 @@ import { ID_PATTERN } from './ids';
 export const MAX_MESSAGE_BYTES = 1024;
 export const MAX_NAME_LENGTH = 20;
 
+const encoder = new TextEncoder();
+
 const idSchema = v.pipe(v.string(), v.regex(ID_PATTERN));
 
 /** Ник хранится обрезанным, длина считается в code points. */
@@ -34,7 +36,10 @@ export type ClientMessage = v.InferOutput<typeof clientMessageSchema>;
 export type JoinMessage = v.InferOutput<typeof joinSchema>;
 
 export function parseClientMessage(raw: string): ClientMessage | null {
-  if (new TextEncoder().encode(raw).length > MAX_MESSAGE_BYTES) return null;
+  // UTF-8 занимает не меньше байт, чем UTF-16 — единиц; это дешёвый способ отсеять
+  // заведомо большие сообщения, не выделяя память под их байтовое представление.
+  if (raw.length > MAX_MESSAGE_BYTES) return null;
+  if (encoder.encode(raw).length > MAX_MESSAGE_BYTES) return null;
 
   let data: unknown;
   try {

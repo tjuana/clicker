@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { MAX_MESSAGE_BYTES, parseClientMessage } from '../src/client';
 import { generateId } from '../src/ids';
 
@@ -67,5 +67,28 @@ describe('parseClientMessage', () => {
     const raw = `"${'x'.repeat(MAX_MESSAGE_BYTES)}"`;
 
     expect(parseClientMessage(raw)).toBeNull();
+  });
+
+  it('rejects a message that fits in UTF-16 units but is over the byte limit', () => {
+    // 513 единиц UTF-16, но 1026 байт в UTF-8: предел считает байты, а не символы.
+    const raw = 'я'.repeat(513);
+
+    expect(raw.length).toBeLessThan(MAX_MESSAGE_BYTES);
+    expect(parseClientMessage(raw)).toBeNull();
+  });
+
+  it('rejects an oversized frame without calling JSON.parse, but still parses a small malformed frame', () => {
+    const parseSpy = vi.spyOn(JSON, 'parse');
+
+    try {
+      const oversized = 'x'.repeat(MAX_MESSAGE_BYTES + 1);
+      expect(parseClientMessage(oversized)).toBeNull();
+      expect(parseSpy).not.toHaveBeenCalled();
+
+      expect(parseClientMessage('{')).toBeNull();
+      expect(parseSpy).toHaveBeenCalled();
+    } finally {
+      parseSpy.mockRestore();
+    }
   });
 });
