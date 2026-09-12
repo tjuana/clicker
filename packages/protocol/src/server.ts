@@ -1,4 +1,4 @@
-import type { RoomState } from '@clicker/game';
+import { comparePublicIds, type RoomState } from '@clicker/game';
 import * as v from 'valibot';
 import { MAX_MESSAGE_BYTES } from './client';
 
@@ -82,7 +82,7 @@ export function toSnapshot(state: RoomState, now: number): SnapshotMessage {
         clicks: player.clicks,
         connected: player.connectionIds.length > 0,
       }))
-      .sort((a, b) => Number(a.id) - Number(b.id)),
+      .sort((a, b) => comparePublicIds(a.id, b.id)),
     round: state.round === null ? null : { goAt: state.round.goAt, endsAt: state.round.endsAt },
     results:
       state.results === null
