@@ -126,7 +126,7 @@ export interface RoomState {
 export interface Player {
   publicId: string;                  // String(nextSeq) на момент входа
   name: string;
-  connections: number;               // открытых соединений с этим playerId
+  connectionIds: string[];           // id открытых соединений этого игрока
   disconnectedAt: number | null;
   clicks: number;
   lastCountedAt: number | null;      // время последнего засчитанного клика
@@ -145,8 +145,8 @@ export interface ResultRow { publicId: string; name: string; clicks: number; ran
 
 ```ts
 export type Command =
-  | { type: 'join'; playerId: string; name: string; hostKey?: string }
-  | { type: 'leave'; playerId: string }
+  | { type: 'join'; playerId: string; connectionId: string; name: string; hostKey?: string }
+  | { type: 'leave'; playerId: string; connectionId: string }
   | { type: 'start'; playerId: string }
   | { type: 'click'; playerId: string }
   | { type: 'tick' };
@@ -163,7 +163,7 @@ export function apply(state: RoomState, command: Command, now: number, config?: 
   { state: RoomState; events: GameEvent[] };
 export function nextDeadline(state: RoomState, config?: GameConfig): number | null;
 export function abortRound(state: RoomState): RoomState;
-export function syncConnections(state: RoomState, counts: Record<string, number>, now: number): RoomState;
+export function syncConnections(state: RoomState, live: Record<string, string[]>, now: number): RoomState;
 ```
 
 `apply`, `abortRound` и `syncConnections` не мутируют входное состояние.
@@ -177,39 +177,46 @@ export function syncConnections(state: RoomState, counts: Record<string, number>
 `advance` выполняет шаги по порядку, за один вызов можно пройти несколько:
 1. `countdown` и `now ≥ goAt` → `running`, событие `phaseChanged`.
 2. `running` и `now ≥ endsAt + lateGraceMs` → `results`, считаются результаты, событие `phaseChanged`.
-3. В `lobby` и `results` удаляются игроки с `connections = 0` и `disconnectedAt + reconnectGraceMs ≤ now`,
+3. В `lobby` и `results` удаляются игроки без открытых соединений, у которых `disconnectedAt + reconnectGraceMs ≤ now`,
    их `playerId` убирается из `hosts`. Строки в уже посчитанных `results` остаются.
 
 ### Правила
 
 - **join**
-  - Игрок с таким `playerId` уже есть: `connections += 1`, `disconnectedAt = null`, ник обновляется,
-    счёт сохраняется.
+  - Игрок с таким `playerId` уже есть: `connectionId` добавляется в `connectionIds`, если его там
+    ещё нет, `disconnectedAt = null`, ник обновляется, счёт сохраняется. Повторный `join` с того же
+    соединения ничего не меняет: счёт соединений нельзя накрутить, отправив `join` много раз.
   - Нового игрока при `maxPlayers` игроках не пускаем: `rejected room_full`. Иначе он добавляется
     с `publicId = String(nextSeq)`, `clicks = 0`, `lastCountedAt = null`,
-    `bucket = { tokens: burst, updatedAt: now }`, `connections = 1`; `nextSeq += 1`.
+    `bucket = { tokens: burst, updatedAt: now }`, `connectionIds = [connectionId]`; `nextSeq += 1`.
   - Хост: если передан `hostKey` и `state.hostKey === null`, ключ закрепляется и `playerId` добавляется
     в `hosts`. Если ключ передан и совпадает, `playerId` добавляется в `hosts`. Повторов в `hosts` нет.
     В остальных случаях статус хоста не меняется.
   - Событие `welcome` с `isHost = hosts.includes(playerId)`.
   - Войти можно в любой фазе. Новый игрок во время раунда начинает с нуля.
-- **leave.** `connections -= 1`; при нуле `disconnectedAt = now`. Во время `countdown` и `running`
-  игрок не удаляется, счёт сохраняется.
+- **leave.** `connectionId` убирается из `connectionIds`. Если список опустел и `disconnectedAt`
+  ещё не стоял — `disconnectedAt = now`; повторный `leave` того же соединения ничего не меняет и не
+  сдвигает срок удаления. Во время `countdown` и `running` игрок не удаляется, счёт сохраняется.
 - **start.** Неизвестный `playerId` → `not_joined`; игрок не из `hosts` → `not_host`; фаза не `lobby`
   и не `results` → `wrong_phase`. Иначе:
   `phase = countdown`, `round = { goAt: now + countdownMs, endsAt: now + countdownMs + roundMs }`;
   у всех игроков `clicks = 0`, `lastCountedAt = null`, `bucket = { tokens: burst, updatedAt: goAt }`;
   `results = null`, `notice = null`; событие `phaseChanged`.
 - **click.** Неизвестный `playerId` → `not_joined`. Вне фазы `running` клик молча игнорируется.
-  В `running` ведро пополняется на `(now − updatedAt) × clicksPerSecond / 1000`, но не выше `burst`,
-  `updatedAt = now`. Если токенов ≥ 1 — токен списывается, `clicks += 1`, `lastCountedAt = now`;
-  иначе клик молча отбрасывается.
+  В `running` ведро пополняется на `(now − updatedAt) × clicksPerSecond / 1000`, но не выше `burst`.
+  Если токенов ≥ 1 — токен списывается, `clicks += 1`, `lastCountedAt = now`,
+  `updatedAt = max(updatedAt, now)`. Если токенов меньше одного, состояние не меняется вообще.
+  Оба правила защищают от метки времени из прошлого: она не должна сдвигать точку отсчёта назад
+  и дарить игроку лишний запас кликов.
 - **Результаты.** Сортировка: `clicks` по убыванию → `lastCountedAt` по возрастанию (`null` в конце) →
   `publicId` по возрастанию как числа. `rank` — позиция начиная с 1. Победитель — первая строка,
   если у неё `clicks > 0`; иначе победителя нет.
-- **abortRound.** `phase = lobby`, `round = null`, `notice = 'round_aborted'`.
-- **syncConnections.** Для каждого игрока `connections = counts[playerId] ?? 0`. Если получилось 0
-  и `disconnectedAt === null` — `disconnectedAt = now`; если больше 0 — `disconnectedAt = null`.
+- **abortRound.** Только из `countdown` и `running`, иначе состояние возвращается как есть.
+  `phase = lobby`, `round = null`, `notice = 'round_aborted'`, у всех игроков `clicks = 0`
+  и `lastCountedAt = null`: показывать в лобби счёт прерванного раунда незачем.
+- **syncConnections.** Для каждого игрока `connectionIds = live[playerId] ?? []`. Если список пуст
+  и `disconnectedAt === null` — `disconnectedAt = now`; если не пуст — `disconnectedAt = null`.
+  Уже проставленное время отключения сохраняется.
 
 ### nextDeadline
 
@@ -235,7 +242,8 @@ export function syncConnections(state: RoomState, counts: Record<string, number>
 
 - `Id` — строка формата из §4.
 - `Name` — строка, после `trim` длиной от 1 до 20 символов (считаются code points); дальше везде
-  используется обрезанное значение.
+  используется обрезанное значение. Управляющие символы и знаки смены направления письма
+  (U+202A–U+202E, U+2066–U+2069) запрещены: ник уходит всем игрокам в каждом снимке.
 
 Сервер → клиент:
 
@@ -254,7 +262,8 @@ export function syncConnections(state: RoomState, counts: Record<string, number>
 Пакет экспортирует:
 - `parseClientMessage(raw: string): ClientMessage | null` — `null` для строк длиннее 1024 байт,
   некорректного JSON и всего, что не прошло схему;
-- `parseServerMessage(raw: string): ServerMessage | null` — для клиента;
+- `parseServerMessage(raw: string): ServerMessage | null` — для клиента; его предел больше,
+  64 КБ: снимок на 50 игроков занимает около 3 КБ, но он на порядок крупнее сообщений клиента;
 - `toSnapshot(state: RoomState, now: number): SnapshotMessage`;
 - `generateId(): string` — для `roomId`, `hostKey`, `playerId` на клиенте.
 
@@ -295,16 +304,19 @@ Worker запускается только для `/parties/*`: остально
 
 - **onStart**
   1. `state = (await ctx.storage.get('state')) ?? createRoomState()`; `config` — `DEFAULT_CONFIG`
-     с `COUNTDOWN_MS` и `ROUND_MS` из `env`.
+     с `COUNTDOWN_MS` и `ROUND_MS` из `env`. Этот же `config` передаётся и в `apply`,
+     и в `nextDeadline`: если отдать его только в одно место, будильник пойдёт по стандартным
+     длительностям, правила — по своим, и раунд зависнет до следующего сообщения от игрока.
   2. Если загруженная фаза `countdown` или `running`, значит объект перезапустился посреди раунда
      и клики в памяти потеряны: `state = abortRound(state)`.
-  3. Сверка соединений: по `getConnections()` и их состоянию считается число соединений на каждый
-     `playerId`, затем `state = syncConnections(state, counts, now)`.
+  3. Сверка соединений: по `getConnections()` и их состоянию собираются id живых соединений
+     на каждый `playerId`, затем `state = syncConnections(state, live, now)`.
   4. Сохранение, будильник.
 - **onConnect** — ничего: игрок появляется только после `join`.
 - **onMessage(conn, raw)**
   1. Бинарное сообщение или `parseClientMessage(raw) === null` — `error invalid_message` этому соединению.
-  2. `join`: если у соединения уже есть другой `playerId`, сначала `leave` для старого.
+  2. В командах `join` и `leave` всегда передаётся `connectionId` — это `conn.id` из partyserver.
+     `join`: если у соединения уже есть другой `playerId`, сначала `leave` для старого.
      `start` и `click`: `playerId` берётся из состояния соединения; если его нет — `error not_joined`.
   3. `apply(state, command, Date.now(), config)`.
   4. События: `welcome` — `conn.setState({ playerId, publicId })` и отправка `welcome` этому соединению;
@@ -415,6 +427,8 @@ export const theme = {
 | `join` в полную комнату | `error room_full` |
 | Клик вне `running` или сверх лимита | молча игнорируется |
 | Две вкладки с одним `playerId` | один игрок; отключён, когда закрыты обе |
+| Повторный `join` с того же соединения | ничего не меняется: соединение уже учтено |
+| Лишний `leave` того же соединения | ничего не меняется: живые соединения не трогаются, срок удаления не сдвигается |
 | Обрыв связи | PartySocket переподключается, клиент снова шлёт `join`; в лобби игрок ждёт 30 с, в раунде счёт сохраняется |
 | Объект перезапустился посреди раунда | `abortRound`: лобби и `notice = round_aborted` |
 | Будильник опоздал | не влияет: команды и `tick` сначала продвигают время |
@@ -443,12 +457,14 @@ export const theme = {
 
 - Node 22, pnpm через corepack, pnpm workspaces. Версии зависимостей фиксируются в плане реализации
   по актуальным стабильным релизам.
-- TypeScript в режиме `strict`, общий `tsconfig.base.json`, проверка `tsc -b` через project references.
+- TypeScript в режиме `strict`, общий `tsconfig.base.json`. Проверка типов идёт по пакетам:
+  `tsc --noEmit` в каждом, запуск через `pnpm -r typecheck`. Project references не нужны: пакеты
+  отдают исходники на TypeScript напрямую, собирать и упорядочивать нечего.
 - Biome — линтер и форматтер для всего репозитория.
 - Локальная разработка: `wrangler dev` для apps/server и Vite для apps/web с прокси `/parties`
   (включая WebSocket) на `wrangler dev`.
 - CI в GitHub Actions:
-  - на pull request и push: `biome ci`, `tsc -b`, тесты пакетов и apps/server, сборка web, Playwright;
+  - на любой push и на pull request: Biome, проверка типов, тесты пакетов и apps/server, сборка web, Playwright;
   - на push в `main` после проверок: `wrangler deploy` с `CLOUDFLARE_API_TOKEN` и
     `CLOUDFLARE_ACCOUNT_ID` из секретов репозитория.
 
