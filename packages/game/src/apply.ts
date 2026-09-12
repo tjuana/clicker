@@ -37,8 +37,8 @@ function handle(state: RoomState, command: Command, now: number, config: GameCon
       return leave(state, command.playerId, now);
     case 'start':
       return start(state, command.playerId, now, config);
-    default:
-      return { state, events: [] };
+    case 'click':
+      return click(state, command.playerId, now, config);
   }
 }
 
@@ -148,5 +148,35 @@ function start(state: RoomState, playerId: string, now: number, config: GameConf
       notice: null,
     },
     events: [{ type: 'phaseChanged', phase: 'countdown' }],
+  };
+}
+
+function click(state: RoomState, playerId: string, now: number, config: GameConfig): ApplyResult {
+  const player = state.players[playerId];
+  if (player === undefined) return reject(state, playerId, 'not_joined');
+  // Клик не в раунде — не ошибка: клиент мог не успеть узнать о конце.
+  if (state.phase !== 'running') return { state, events: [] };
+
+  const elapsed = Math.max(0, now - player.bucket.updatedAt);
+  const tokens = Math.min(
+    config.burst,
+    player.bucket.tokens + (elapsed * config.clicksPerSecond) / 1000,
+  );
+
+  if (tokens < 1) {
+    return {
+      state: withPlayer(state, playerId, { ...player, bucket: { tokens, updatedAt: now } }),
+      events: [],
+    };
+  }
+
+  return {
+    state: withPlayer(state, playerId, {
+      ...player,
+      clicks: player.clicks + 1,
+      lastCountedAt: now,
+      bucket: { tokens: tokens - 1, updatedAt: now },
+    }),
+    events: [],
   };
 }
