@@ -80,7 +80,7 @@ export function toSnapshot(state: RoomState, now: number): SnapshotMessage {
         id: player.publicId,
         name: player.name,
         clicks: player.clicks,
-        connected: player.connections > 0,
+        connected: player.connectionIds.length > 0,
       }))
       .sort((a, b) => Number(a.id) - Number(b.id)),
     round: state.round === null ? null : { goAt: state.round.goAt, endsAt: state.round.endsAt },

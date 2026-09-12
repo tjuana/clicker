@@ -11,8 +11,8 @@ export interface Player {
   /** Публичный идентификатор: только он уходит клиентам. */
   publicId: string;
   name: string;
-  /** Сколько соединений открыто с этим playerId. */
-  connections: number;
+  /** id открытых соединений этого игрока. */
+  connectionIds: string[];
   disconnectedAt: number | null;
   clicks: number;
   lastCountedAt: number | null;

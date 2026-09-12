@@ -1,5 +1,5 @@
 import { advance } from './advance';
-import type { Command, ErrorCode, GameEvent, JoinCommand } from './commands';
+import type { Command, ErrorCode, GameEvent, JoinCommand, LeaveCommand } from './commands';
 import { DEFAULT_CONFIG, type GameConfig } from './config';
 import type { Player, RoomState } from './state';
 
@@ -34,7 +34,7 @@ function handle(state: RoomState, command: Command, now: number, config: GameCon
     case 'join':
       return join(state, command, now, config);
     case 'leave':
-      return leave(state, command.playerId, now);
+      return leave(state, command, now);
     case 'start':
       return start(state, command.playerId, now, config);
     case 'click':
@@ -64,7 +64,10 @@ function join(
     player = {
       ...existing,
       name: command.name,
-      connections: existing.connections + 1,
+      // Повторный join с того же соединения ничего не накручивает.
+      connectionIds: existing.connectionIds.includes(command.connectionId)
+        ? existing.connectionIds
+        : [...existing.connectionIds, command.connectionId],
       disconnectedAt: null,
     };
   } else {
@@ -74,7 +77,7 @@ function join(
     player = {
       publicId: String(state.nextSeq),
       name: command.name,
-      connections: 1,
+      connectionIds: [command.connectionId],
       disconnectedAt: null,
       clicks: 0,
       lastCountedAt: null,
@@ -105,16 +108,20 @@ function join(
   };
 }
 
-function leave(state: RoomState, playerId: string, now: number): ApplyResult {
-  const player = state.players[playerId];
+function leave(state: RoomState, command: LeaveCommand, now: number): ApplyResult {
+  const player = state.players[command.playerId];
   if (player === undefined) return { state, events: [] };
+  // Соединения нет в списке: лишний leave не трогает живые соединения.
+  if (!player.connectionIds.includes(command.connectionId)) return { state, events: [] };
 
-  const connections = Math.max(0, player.connections - 1);
+  const connectionIds = player.connectionIds.filter((id) => id !== command.connectionId);
   return {
-    state: withPlayer(state, playerId, {
+    state: withPlayer(state, command.playerId, {
       ...player,
-      connections,
-      disconnectedAt: connections === 0 ? now : player.disconnectedAt,
+      connectionIds,
+      // Уже проставленное время не обновляется: срок удаления не сдвигается.
+      disconnectedAt:
+        connectionIds.length === 0 && player.disconnectedAt === null ? now : player.disconnectedAt,
     }),
     events: [],
   };

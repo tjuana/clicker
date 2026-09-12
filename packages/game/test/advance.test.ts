@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { advance } from '../src/advance';
 import { apply } from '../src/apply';
 import type { RoomState } from '../src/state';
-import { config, player, room } from './support';
+import { config, deepFreeze, player, room } from './support';
 
 const CONFIG = config({
   countdownMs: 3000,
@@ -25,21 +25,21 @@ function countdown(): RoomState {
 
 describe('advance', () => {
   it('waits while the countdown is still running', () => {
-    const result = advance(countdown(), 3999, CONFIG);
+    const result = advance(deepFreeze(countdown()), 3999, CONFIG);
 
     expect(result.state.phase).toBe('countdown');
     expect(result.phases).toEqual([]);
   });
 
   it('opens the round when the countdown is over', () => {
-    const result = advance(countdown(), 4000, CONFIG);
+    const result = advance(deepFreeze(countdown()), 4000, CONFIG);
 
     expect(result.state.phase).toBe('running');
     expect(result.phases).toEqual(['running']);
   });
 
   it('keeps the round open inside the grace window', () => {
-    const running: RoomState = { ...countdown(), phase: 'running' };
+    const running = deepFreeze<RoomState>({ ...countdown(), phase: 'running' });
 
     const result = advance(running, 14249, CONFIG);
 
@@ -48,7 +48,7 @@ describe('advance', () => {
   });
 
   it('closes the round after the grace window and fills the results', () => {
-    const running: RoomState = { ...countdown(), phase: 'running' };
+    const running = deepFreeze<RoomState>({ ...countdown(), phase: 'running' });
 
     const result = advance(running, 14250, CONFIG);
 
@@ -59,17 +59,19 @@ describe('advance', () => {
   });
 
   it('walks through both transitions when the alarm is late', () => {
-    const result = advance(countdown(), 20000, CONFIG);
+    const result = advance(deepFreeze(countdown()), 20000, CONFIG);
 
     expect(result.state.phase).toBe('results');
     expect(result.phases).toEqual(['running', 'results']);
   });
 
   it('drops a disconnected player from the lobby after the grace period', () => {
-    const state = room({
-      hosts: ['secret-1'],
-      players: { 'secret-1': player({ publicId: '1', connections: 0, disconnectedAt: 1000 }) },
-    });
+    const state = deepFreeze(
+      room({
+        hosts: ['secret-1'],
+        players: { 'secret-1': player({ publicId: '1', connectionIds: [], disconnectedAt: 1000 }) },
+      }),
+    );
 
     const before = advance(state, 30999, CONFIG);
     const after = advance(state, 31000, CONFIG);
@@ -80,11 +82,13 @@ describe('advance', () => {
   });
 
   it('keeps a disconnected player while the round is on', () => {
-    const state = room({
-      phase: 'running',
-      round: { goAt: 4000, endsAt: 14000 },
-      players: { 'secret-1': player({ publicId: '1', connections: 0, disconnectedAt: 1000 }) },
-    });
+    const state = deepFreeze(
+      room({
+        phase: 'running',
+        round: { goAt: 4000, endsAt: 14000 },
+        players: { 'secret-1': player({ publicId: '1', connectionIds: [], disconnectedAt: 1000 }) },
+      }),
+    );
 
     const result = advance(state, 13000, CONFIG);
 
@@ -94,7 +98,12 @@ describe('advance', () => {
 
 describe('apply', () => {
   it('reports the phases it walked through before handling the command', () => {
-    const result = apply(countdown(), { type: 'click', playerId: 'nobody' }, 4000, CONFIG);
+    const result = apply(
+      deepFreeze(countdown()),
+      { type: 'click', playerId: 'nobody' },
+      4000,
+      CONFIG,
+    );
 
     expect(result.events).toEqual([
       { type: 'phaseChanged', phase: 'running' },

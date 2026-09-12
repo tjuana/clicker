@@ -19,7 +19,7 @@ describe('nextDeadline', () => {
   it('waits for the go moment during the countdown', () => {
     const joined = apply(
       createRoomState(),
-      { type: 'join', playerId: 'secret-1', name: 'Аня', hostKey: 'key-1' },
+      { type: 'join', playerId: 'secret-1', connectionId: 'conn-1', name: 'Аня', hostKey: 'key-1' },
       0,
       CONFIG,
     );
@@ -31,7 +31,7 @@ describe('nextDeadline', () => {
   it('waits for the end of the round plus the grace window', () => {
     const joined = apply(
       createRoomState(),
-      { type: 'join', playerId: 'secret-1', name: 'Аня', hostKey: 'key-1' },
+      { type: 'join', playerId: 'secret-1', connectionId: 'conn-1', name: 'Аня', hostKey: 'key-1' },
       0,
       CONFIG,
     );
@@ -44,11 +44,16 @@ describe('nextDeadline', () => {
   it('waits to drop a disconnected player in the lobby', () => {
     const joined = apply(
       createRoomState(),
-      { type: 'join', playerId: 'secret-1', name: 'Аня' },
+      { type: 'join', playerId: 'secret-1', connectionId: 'conn-1', name: 'Аня' },
       0,
       CONFIG,
     );
-    const left = apply(joined.state, { type: 'leave', playerId: 'secret-1' }, 1000, CONFIG);
+    const left = apply(
+      joined.state,
+      { type: 'leave', playerId: 'secret-1', connectionId: 'conn-1' },
+      1000,
+      CONFIG,
+    );
 
     expect(nextDeadline(left.state, CONFIG)).toBe(31000);
   });
@@ -56,20 +61,25 @@ describe('nextDeadline', () => {
   it('takes the earliest of several deadlines', () => {
     const first = apply(
       createRoomState(),
-      { type: 'join', playerId: 'secret-1', name: 'Аня' },
+      { type: 'join', playerId: 'secret-1', connectionId: 'conn-1', name: 'Аня' },
       0,
       CONFIG,
     );
     const second = apply(
       first.state,
-      { type: 'join', playerId: 'secret-2', name: 'Боря' },
+      { type: 'join', playerId: 'secret-2', connectionId: 'conn-2', name: 'Боря' },
       0,
       CONFIG,
     );
-    const leftFirst = apply(second.state, { type: 'leave', playerId: 'secret-1' }, 1000, CONFIG);
+    const leftFirst = apply(
+      second.state,
+      { type: 'leave', playerId: 'secret-1', connectionId: 'conn-1' },
+      1000,
+      CONFIG,
+    );
     const leftSecond = apply(
       leftFirst.state,
-      { type: 'leave', playerId: 'secret-2' },
+      { type: 'leave', playerId: 'secret-2', connectionId: 'conn-2' },
       2000,
       CONFIG,
     );

@@ -17,7 +17,7 @@ export function deepFreeze<T>(value: T): T {
 export function player(overrides: Partial<Player> & { publicId: string }): Player {
   return {
     name: 'player',
-    connections: 1,
+    connectionIds: ['conn-1'],
     disconnectedAt: null,
     clicks: 0,
     lastCountedAt: null,

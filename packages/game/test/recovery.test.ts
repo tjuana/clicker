@@ -9,7 +9,7 @@ const CONFIG = config({ countdownMs: 3000, roundMs: 10000 });
 function running(): RoomState {
   const joined = apply(
     createRoomState(),
-    { type: 'join', playerId: 'secret-1', name: 'Аня', hostKey: 'key-1' },
+    { type: 'join', playerId: 'secret-1', connectionId: 'conn-1', name: 'Аня', hostKey: 'key-1' },
     0,
     CONFIG,
   );
@@ -36,17 +36,22 @@ describe('syncConnections', () => {
 
     const synced = syncConnections(state, {}, 9000);
 
-    expect(synced.players['secret-1']).toMatchObject({ connections: 0, disconnectedAt: 9000 });
+    expect(synced.players['secret-1']).toMatchObject({ connectionIds: [], disconnectedAt: 9000 });
   });
 
   it('keeps the earlier disconnect time', () => {
     const joined = apply(
       createRoomState(),
-      { type: 'join', playerId: 'secret-1', name: 'Аня' },
+      { type: 'join', playerId: 'secret-1', connectionId: 'conn-1', name: 'Аня' },
       0,
       CONFIG,
     );
-    const left = apply(joined.state, { type: 'leave', playerId: 'secret-1' }, 1000, CONFIG);
+    const left = apply(
+      joined.state,
+      { type: 'leave', playerId: 'secret-1', connectionId: 'conn-1' },
+      1000,
+      CONFIG,
+    );
 
     const synced = syncConnections(left.state, {}, 9000);
 
@@ -56,14 +61,22 @@ describe('syncConnections', () => {
   it('restores a player who has live connections', () => {
     const joined = apply(
       createRoomState(),
-      { type: 'join', playerId: 'secret-1', name: 'Аня' },
+      { type: 'join', playerId: 'secret-1', connectionId: 'conn-1', name: 'Аня' },
       0,
       CONFIG,
     );
-    const left = apply(joined.state, { type: 'leave', playerId: 'secret-1' }, 1000, CONFIG);
+    const left = apply(
+      joined.state,
+      { type: 'leave', playerId: 'secret-1', connectionId: 'conn-1' },
+      1000,
+      CONFIG,
+    );
 
-    const synced = syncConnections(left.state, { 'secret-1': 2 }, 9000);
+    const synced = syncConnections(left.state, { 'secret-1': ['conn-2', 'conn-3'] }, 9000);
 
-    expect(synced.players['secret-1']).toMatchObject({ connections: 2, disconnectedAt: null });
+    expect(synced.players['secret-1']).toMatchObject({
+      connectionIds: ['conn-2', 'conn-3'],
+      disconnectedAt: null,
+    });
   });
 });

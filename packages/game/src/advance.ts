@@ -44,7 +44,7 @@ function removeExpired(state: RoomState, now: number, config: GameConfig): RoomS
   const expired = Object.entries(state.players)
     .filter(
       ([, player]) =>
-        player.connections === 0 &&
+        player.connectionIds.length === 0 &&
         player.disconnectedAt !== null &&
         player.disconnectedAt + config.reconnectGraceMs <= now,
     )

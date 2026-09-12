@@ -16,7 +16,7 @@ export function nextDeadline(state: RoomState, config: GameConfig = DEFAULT_CONF
   }
   if (state.phase === 'lobby' || state.phase === 'results') {
     for (const player of Object.values(state.players)) {
-      if (player.connections === 0 && player.disconnectedAt !== null) {
+      if (player.connectionIds.length === 0 && player.disconnectedAt !== null) {
         candidates.push(player.disconnectedAt + config.reconnectGraceMs);
       }
     }

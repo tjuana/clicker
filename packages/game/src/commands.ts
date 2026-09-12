@@ -3,13 +3,22 @@ import type { Phase } from './state';
 export interface JoinCommand {
   type: 'join';
   playerId: string;
+  /** id соединения, по которому пришла команда. */
+  connectionId: string;
   name: string;
   hostKey?: string;
 }
 
+export interface LeaveCommand {
+  type: 'leave';
+  playerId: string;
+  /** id закрывшегося соединения. */
+  connectionId: string;
+}
+
 export type Command =
   | JoinCommand
-  | { type: 'leave'; playerId: string }
+  | LeaveCommand
   | { type: 'start'; playerId: string }
   | { type: 'click'; playerId: string }
   | { type: 'tick' };

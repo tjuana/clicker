@@ -6,10 +6,14 @@ import { parseServerMessage, toSnapshot } from '../src/server';
 function playedRoom(): RoomState {
   const host = apply(
     createRoomState(),
-    { type: 'join', playerId: 'secret-1', name: 'Аня', hostKey: 'key-1' },
+    { type: 'join', playerId: 'secret-1', connectionId: 'conn-1', name: 'Аня', hostKey: 'key-1' },
     0,
   );
-  const guest = apply(host.state, { type: 'join', playerId: 'secret-2', name: 'Боря' }, 0);
+  const guest = apply(
+    host.state,
+    { type: 'join', playerId: 'secret-2', connectionId: 'conn-2', name: 'Боря' },
+    0,
+  );
   const started = apply(guest.state, { type: 'start', playerId: 'secret-1' }, 1000);
   const clicked = apply(started.state, { type: 'click', playerId: 'secret-2' }, 5000);
   return apply(clicked.state, { type: 'tick' }, 999_999).state;
@@ -30,7 +34,12 @@ describe('toSnapshot', () => {
     for (let index = 1; index <= 12; index += 1) {
       state = apply(
         state,
-        { type: 'join', playerId: `secret-${index}`, name: `p${index}` },
+        {
+          type: 'join',
+          playerId: `secret-${index}`,
+          connectionId: `conn-${index}`,
+          name: `p${index}`,
+        },
         0,
       ).state;
     }
@@ -71,7 +80,7 @@ describe('toSnapshot', () => {
   it('reports the live round while it is on', () => {
     const host = apply(
       createRoomState(),
-      { type: 'join', playerId: 'secret-1', name: 'Аня', hostKey: 'key-1' },
+      { type: 'join', playerId: 'secret-1', connectionId: 'conn-1', name: 'Аня', hostKey: 'key-1' },
       0,
     );
     const started = apply(host.state, { type: 'start', playerId: 'secret-1' }, 1000);

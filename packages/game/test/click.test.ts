@@ -11,7 +11,7 @@ const ENDS_AT = 14000;
 function started(): RoomState {
   const host = apply(
     createRoomState(),
-    { type: 'join', playerId: 'secret-1', name: 'Аня', hostKey: 'key-1' },
+    { type: 'join', playerId: 'secret-1', connectionId: 'conn-1', name: 'Аня', hostKey: 'key-1' },
     0,
     CONFIG,
   );

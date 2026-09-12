@@ -1,17 +1,27 @@
 import { describe, expect, it } from 'vitest';
 import { apply } from '../src/apply';
+import { nextDeadline } from '../src/deadline';
 import { createRoomState } from '../src/state';
+import { deepFreeze } from './support';
 
 function withPlayer() {
-  return apply(createRoomState(), { type: 'join', playerId: 'secret-1', name: 'Аня' }, 0).state;
+  return apply(
+    createRoomState(),
+    { type: 'join', playerId: 'secret-1', connectionId: 'conn-1', name: 'Аня' },
+    0,
+  ).state;
 }
 
 describe('leave', () => {
   it('marks the player as disconnected when the last connection closes', () => {
-    const result = apply(withPlayer(), { type: 'leave', playerId: 'secret-1' }, 5000);
+    const result = apply(
+      deepFreeze(withPlayer()),
+      { type: 'leave', playerId: 'secret-1', connectionId: 'conn-1' },
+      5000,
+    );
 
     expect(result.state.players['secret-1']).toMatchObject({
-      connections: 0,
+      connectionIds: [],
       disconnectedAt: 5000,
     });
   });
@@ -19,22 +29,67 @@ describe('leave', () => {
   it('keeps the player connected while another tab is open', () => {
     const twoTabs = apply(
       withPlayer(),
-      { type: 'join', playerId: 'secret-1', name: 'Аня' },
+      { type: 'join', playerId: 'secret-1', connectionId: 'conn-2', name: 'Аня' },
       1000,
     ).state;
 
-    const result = apply(twoTabs, { type: 'leave', playerId: 'secret-1' }, 5000);
+    const result = apply(
+      deepFreeze(twoTabs),
+      { type: 'leave', playerId: 'secret-1', connectionId: 'conn-1' },
+      5000,
+    );
 
     expect(result.state.players['secret-1']).toMatchObject({
-      connections: 1,
+      connectionIds: ['conn-2'],
+      disconnectedAt: null,
+    });
+  });
+
+  it('ignores a repeated leave of the same connection and keeps the deadline', () => {
+    const left = apply(
+      withPlayer(),
+      { type: 'leave', playerId: 'secret-1', connectionId: 'conn-1' },
+      5000,
+    ).state;
+    const deadline = nextDeadline(left);
+
+    const again = apply(
+      deepFreeze(left),
+      { type: 'leave', playerId: 'secret-1', connectionId: 'conn-1' },
+      9000,
+    );
+
+    expect(again.state.players['secret-1']).toMatchObject({
+      connectionIds: [],
+      disconnectedAt: 5000,
+    });
+    expect(nextDeadline(again.state)).toBe(deadline);
+  });
+
+  it('ignores a leave from a connection the player never had', () => {
+    const state = deepFreeze(withPlayer());
+
+    const result = apply(
+      state,
+      { type: 'leave', playerId: 'secret-1', connectionId: 'conn-9' },
+      5000,
+    );
+
+    expect(result.state).toBe(state);
+    expect(result.state.players['secret-1']).toMatchObject({
+      connectionIds: ['conn-1'],
       disconnectedAt: null,
     });
   });
 
   it('ignores an unknown player', () => {
-    const state = withPlayer();
+    const state = deepFreeze(withPlayer());
 
-    const result = apply(state, { type: 'leave', playerId: 'nobody' }, 5000);
+    const result = apply(
+      state,
+      { type: 'leave', playerId: 'nobody', connectionId: 'conn-1' },
+      5000,
+    );
 
     expect(result.state.players).toEqual(state.players);
     expect(result.events).toEqual([]);
