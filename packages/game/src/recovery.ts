@@ -2,9 +2,18 @@ import type { Player, RoomState } from './state';
 
 /**
  * Раунд прерван: сервер перезапустился и клики из памяти потеряны.
+ * Вне раунда прерывать нечего: состояние возвращается как есть.
  */
 export function abortRound(state: RoomState): RoomState {
-  return { ...state, phase: 'lobby', round: null, notice: 'round_aborted' };
+  if (state.phase !== 'countdown' && state.phase !== 'running') return state;
+
+  // Показывать в лобби счёт прерванного раунда незачем.
+  const players: Record<string, Player> = {};
+  for (const [playerId, player] of Object.entries(state.players)) {
+    players[playerId] = { ...player, clicks: 0, lastCountedAt: null };
+  }
+
+  return { ...state, phase: 'lobby', round: null, notice: 'round_aborted', players };
 }
 
 /**

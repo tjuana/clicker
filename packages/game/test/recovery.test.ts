@@ -28,6 +28,45 @@ describe('abortRound', () => {
     expect(aborted.notice).toBe('round_aborted');
     expect(state.phase).toBe('running');
   });
+
+  it('aborts a countdown as well', () => {
+    const joined = apply(
+      createRoomState(),
+      { type: 'join', playerId: 'secret-1', connectionId: 'conn-1', name: 'Аня', hostKey: 'key-1' },
+      0,
+      CONFIG,
+    );
+    const state = deepFreeze(
+      apply(joined.state, { type: 'start', playerId: 'secret-1' }, 1000, CONFIG).state,
+    );
+    expect(state.phase).toBe('countdown');
+
+    const aborted = abortRound(state);
+
+    expect(aborted.phase).toBe('lobby');
+    expect(aborted.notice).toBe('round_aborted');
+  });
+
+  it('clears the scores of the aborted round', () => {
+    const clicked = apply(running(), { type: 'click', playerId: 'secret-1' }, 5000, CONFIG).state;
+    expect(clicked.players['secret-1']).toMatchObject({ clicks: 1, lastCountedAt: 5000 });
+
+    const aborted = abortRound(deepFreeze(clicked));
+
+    expect(aborted.players['secret-1']).toMatchObject({ clicks: 0, lastCountedAt: null });
+  });
+
+  it('leaves a room that is not in a round untouched', () => {
+    const lobby = deepFreeze(createRoomState());
+    const results = deepFreeze<RoomState>({
+      ...createRoomState(),
+      phase: 'results',
+      results: [{ publicId: '1', name: 'Аня', clicks: 7, rank: 1 }],
+    });
+
+    expect(abortRound(lobby)).toBe(lobby);
+    expect(abortRound(results)).toBe(results);
+  });
 });
 
 describe('syncConnections', () => {
