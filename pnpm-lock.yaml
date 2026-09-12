@@ -179,6 +179,22 @@ importers:
         specifier: 4.1.11
         version: 4.1.11(vite@8.3.0)
 
+  packages/protocol:
+    dependencies:
+      '@clicker/game':
+        specifier: workspace:*
+        version: link:../game
+      valibot:
+        specifier: 1.5.0
+        version: 1.5.0(typescript@7.0.2)
+    devDependencies:
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+      vitest:
+        specifier: 4.1.11
+        version: 4.1.11(vite@8.3.0)
+
 packages:
 
   '@biomejs/biome@2.5.13':
@@ -681,6 +697,14 @@ packages:
     engines: {node: '>=16.20.0'}
     hasBin: true
 
+  valibot@1.5.0:
+    resolution: {integrity: sha512-nil6AkP2TChWL43Z5uJ6GTxX01CUA+g8LWUM+N/rB9NBbkUMaUsi9PUNzlUPgoKASgmx9f7eGOYpJ04/fSa6FQ==}
+    peerDependencies:
+      typescript: '>=5'
+    peerDependenciesMeta:
+      typescript:
+        optional: true
+
   vite@8.3.0:
     resolution: {integrity: sha512-lhZBVvEHefgE+HQZC9O7EBJgCU/nVzFNl7vkS4RE0APtWLP02/8QVIkQtzBxPquh7lq5/78NHipTj7ODQ6XuyQ==}
     engines: {node: ^20.19.0 || >=22.12.0}
@@ -1124,6 +1148,10 @@ snapshots:
       '@typescript/typescript-sunos-x64': 7.0.2
       '@typescript/typescript-win32-arm64': 7.0.2
       '@typescript/typescript-win32-x64': 7.0.2
+
+  valibot@1.5.0(typescript@7.0.2):
+    optionalDependencies:
+      typescript: 7.0.2
 
   vite@8.3.0:
     dependencies:
