@@ -35,6 +35,8 @@ function handle(state: RoomState, command: Command, now: number, config: GameCon
       return join(state, command, now, config);
     case 'leave':
       return leave(state, command.playerId, now);
+    case 'start':
+      return start(state, command.playerId, now, config);
     default:
       return { state, events: [] };
   }
@@ -115,5 +117,36 @@ function leave(state: RoomState, playerId: string, now: number): ApplyResult {
       disconnectedAt: connections === 0 ? now : player.disconnectedAt,
     }),
     events: [],
+  };
+}
+
+function start(state: RoomState, playerId: string, now: number, config: GameConfig): ApplyResult {
+  if (state.players[playerId] === undefined) return reject(state, playerId, 'not_joined');
+  if (!state.hosts.includes(playerId)) return reject(state, playerId, 'not_host');
+  if (state.phase !== 'lobby' && state.phase !== 'results')
+    return reject(state, playerId, 'wrong_phase');
+
+  const goAt = now + config.countdownMs;
+  const endsAt = goAt + config.roundMs;
+  const players: Record<string, Player> = {};
+  for (const [id, player] of Object.entries(state.players)) {
+    players[id] = {
+      ...player,
+      clicks: 0,
+      lastCountedAt: null,
+      bucket: { tokens: config.burst, updatedAt: goAt },
+    };
+  }
+
+  return {
+    state: {
+      ...state,
+      phase: 'countdown',
+      round: { goAt, endsAt },
+      players,
+      results: null,
+      notice: null,
+    },
+    events: [{ type: 'phaseChanged', phase: 'countdown' }],
   };
 }
