@@ -1,3 +1,3 @@
 export function App() {
-  return <main>Кликер</main>;
+  return <main>Clicker</main>;
 }
