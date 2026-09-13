@@ -16,6 +16,8 @@ export function connect(roomId: string, name: string): Connection {
     room: roomId,
   });
 
+  let closedByUs = false;
+
   const send = (message: unknown): boolean => {
     // Копить нажатия во время обрыва нельзя: они долетят пачкой после конца раунда.
     if (socket.readyState !== WebSocket.OPEN) return false;
@@ -34,7 +36,11 @@ export function connect(roomId: string, name: string): Connection {
     });
   });
 
-  socket.addEventListener('close', () => useClient.getState().setStatus('reconnecting'));
+  socket.addEventListener('close', () => {
+    // PartySocket still fires close for a socket we closed ourselves; that one never reconnects.
+    if (closedByUs) return;
+    useClient.getState().setStatus('reconnecting');
+  });
 
   socket.addEventListener('message', (event) => {
     if (typeof event.data !== 'string') return;
@@ -50,6 +56,9 @@ export function connect(roomId: string, name: string): Connection {
     click: () => {
       if (send({ type: 'click' })) useClient.getState().countClick();
     },
-    close: () => socket.close(),
+    close: () => {
+      closedByUs = true;
+      socket.close();
+    },
   };
 }
