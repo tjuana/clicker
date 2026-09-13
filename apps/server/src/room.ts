@@ -31,8 +31,8 @@ export class Room extends Server<Env> {
   override async onStart(): Promise<void> {
     this.#config = {
       ...DEFAULT_CONFIG,
-      countdownMs: Number(this.env.COUNTDOWN_MS ?? DEFAULT_CONFIG.countdownMs),
-      roundMs: Number(this.env.ROUND_MS ?? DEFAULT_CONFIG.roundMs),
+      countdownMs: this.#duration(this.env.COUNTDOWN_MS, DEFAULT_CONFIG.countdownMs),
+      roundMs: this.#duration(this.env.ROUND_MS, DEFAULT_CONFIG.roundMs),
     };
 
     const stored = await this.ctx.storage.get<RoomState>('state');
@@ -183,6 +183,11 @@ export class Room extends Server<Env> {
 
   async #persist(): Promise<void> {
     await this.ctx.storage.put('state', this.#state);
+  }
+
+  #duration(value: string | undefined, fallback: number): number {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
   }
 
   async #scheduleAlarm(): Promise<void> {

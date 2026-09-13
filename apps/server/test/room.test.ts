@@ -122,4 +122,33 @@ describe('room over websocket', () => {
 
     host.close();
   });
+
+  it('falls back to default durations when the env vars are malformed', async () => {
+    const roomId = generateId();
+    const mutableEnv = env as unknown as { COUNTDOWN_MS: string; ROUND_MS: string };
+    const original = { countdown: mutableEnv.COUNTDOWN_MS, round: mutableEnv.ROUND_MS };
+    mutableEnv.COUNTDOWN_MS = 'not-a-number';
+    mutableEnv.ROUND_MS = 'also-not-a-number';
+
+    try {
+      const host = await connect(roomId);
+      host.send({ type: 'join', playerId: generateId(), name: 'Аня', hostKey: generateId() });
+      await host.waitFor(isWelcome);
+      host.send({ type: 'start' });
+
+      const snapshot = await host.waitFor(
+        (message): message is Snapshot => isSnapshot(message) && message.round !== null,
+      );
+
+      // Без фолбэка goAt/endsAt были бы NaN, setAlarm(NaN) бросал бы исключение на
+      // каждой команде, и этот снимок никогда бы не пришёл.
+      expect(Number.isFinite(snapshot.round?.goAt)).toBe(true);
+      expect(Number.isFinite(snapshot.round?.endsAt)).toBe(true);
+
+      host.close();
+    } finally {
+      mutableEnv.COUNTDOWN_MS = original.countdown;
+      mutableEnv.ROUND_MS = original.round;
+    }
+  });
 });
