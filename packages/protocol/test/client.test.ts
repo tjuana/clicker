@@ -34,7 +34,7 @@ describe('parseClientMessage', () => {
   });
 
   it('measures the name in code points, not in UTF-16 units', () => {
-    const name = '😀'.repeat(11); // 11 символов, но 22 единицы UTF-16
+    const name = '😀'.repeat(11); // 11 characters, but 22 UTF-16 units
 
     expect(parseClientMessage(encode({ type: 'join', playerId, name }))).not.toBeNull();
   });
@@ -92,7 +92,7 @@ describe('parseClientMessage', () => {
   });
 
   it('rejects a message that fits in UTF-16 units but is over the byte limit', () => {
-    // 513 единиц UTF-16, но 1026 байт в UTF-8: предел считает байты, а не символы.
+    // 513 UTF-16 units, but 1026 bytes in UTF-8: the limit counts bytes, not characters.
     const raw = 'я'.repeat(513);
 
     expect(raw.length).toBeLessThan(MAX_MESSAGE_BYTES);

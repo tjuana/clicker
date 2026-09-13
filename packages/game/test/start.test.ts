@@ -5,7 +5,7 @@ import { config, deepFreeze } from './support';
 
 const CONFIG = config({ countdownMs: 3000, roundMs: 10000 });
 
-/** Хост «secret-1» и обычный игрок «secret-2» в лобби. */
+/** Host "secret-1" and regular player "secret-2" in the lobby. */
 function lobby(): RoomState {
   const host = apply(
     createRoomState(),

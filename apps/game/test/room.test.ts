@@ -23,8 +23,8 @@ describe('room over websocket', () => {
     const response = await SELF.fetch(new Request('https://example.com/parties/room/not-a-room'));
     expect(response.status).toBe(404);
 
-    // Обе проверки идут по одному и тому же формату из isId: плохой GET не должен
-    // успеть создать объект (и записать в него состояние) до отказа.
+    // Both checks go through the same isId format: a bad GET must not
+    // manage to create the object (and write state into it) before being rejected.
     const stub = env.Room.get(env.Room.idFromName('not-a-room'));
     const stored = await runInDurableObject(stub, (_instance, state) => state.storage.get('state'));
     expect(stored).toBeUndefined();
@@ -74,9 +74,9 @@ describe('room over websocket', () => {
 
     host.send({ type: 'start' });
 
-    // goAt отсчитывается от момента, когда сервер обработал start, а не от
-    // отправки сообщения: ждём фазу running по снимку, а не фиксированную паузу,
-    // иначе на медленном раннере клики попадут ещё в countdown и молча пропадут.
+    // goAt is measured from when the server handled start, not from when
+    // the message was sent: we wait for the running phase in a snapshot instead of a fixed pause,
+    // otherwise on a slow runner clicks would still land during countdown and silently vanish.
     await host.waitFor(isRunningSnapshot);
     for (let i = 0; i < 5; i += 1) {
       guest.send({ type: 'click' });
@@ -117,9 +117,9 @@ describe('room over websocket', () => {
       state.storage.get<RoomState>('state'),
     );
 
-    // Инвариант, который защищает фикс: хранилище не должно отставать от снимков,
-    // даже когда именно клик (а не будильник) закрывает раунд — advance выполняется
-    // перед каждой командой, поэтому обычный клик способен сам закрыть раунд.
+    // The invariant this fix protects: storage must not lag behind snapshots,
+    // even when it's a click (not the alarm) that closes the round — advance runs
+    // before every command, so an ordinary click can close the round by itself.
     expect(stored?.phase).toBe('results');
     expect(stored?.results?.length).toBeGreaterThan(0);
 
@@ -143,8 +143,8 @@ describe('room over websocket', () => {
         (message): message is Snapshot => isSnapshot(message) && message.round !== null,
       );
 
-      // Без фолбэка goAt/endsAt были бы NaN, setAlarm(NaN) бросал бы исключение на
-      // каждой команде, и этот снимок никогда бы не пришёл.
+      // Without the fallback, goAt/endsAt would be NaN, setAlarm(NaN) would throw on
+      // every command, and this snapshot would never arrive.
       expect(Number.isFinite(snapshot.round?.goAt)).toBe(true);
       expect(Number.isFinite(snapshot.round?.endsAt)).toBe(true);
 
@@ -164,8 +164,8 @@ describe('room over websocket', () => {
     host.send({ type: 'start' });
     await host.waitFor(isRunningSnapshot);
 
-    // Пять кликов подряд во время раунда: дедлайн (endsAt + lateGraceMs) не
-    // меняется, так что будильник не должен переписываться ни разу.
+    // Five clicks in a row during the round: the deadline (endsAt + lateGraceMs) doesn't
+    // change, so the alarm must never be rewritten.
     const stub = env.Room.get(env.Room.idFromName(roomId));
     const setAlarmCalls = await runInDurableObject(stub, async (instance, state) => {
       const original = state.storage.setAlarm.bind(state.storage);
@@ -219,8 +219,8 @@ describe('room over websocket', () => {
     host.send({ type: 'start' });
     await host.waitFor(isRunningSnapshot);
 
-    // 10 Гц рассылка — сердце сервера: ждём, пока накопится хотя бы три снимка
-    // фазы running, вместо того чтобы гадать с фиксированной паузой.
+    // The 10 Hz broadcast is the server's heartbeat: we wait until at least three running-phase
+    // snapshots pile up, instead of guessing with a fixed pause.
     const deadline = Date.now() + 2000;
     let runningSnapshots: Snapshot[] = [];
     do {

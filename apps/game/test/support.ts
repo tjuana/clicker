@@ -11,7 +11,7 @@ export const isSnapshot = (message: ServerMessage): message is Snapshot =>
   message.type === 'snapshot';
 export const isError = (message: ServerMessage): message is ServerError => message.type === 'error';
 
-/** Копит входящие сообщения и позволяет дождаться нужного. */
+/** Accumulates incoming messages and lets you wait for the one you need. */
 export class Client {
   readonly received: ServerMessage[] = [];
 
@@ -27,7 +27,7 @@ export class Client {
     this.socket.send(JSON.stringify(message));
   }
 
-  /** Отправка сырой строки в обход JSON.stringify — для проверки битых кадров. */
+  /** Sends a raw string, bypassing JSON.stringify — for testing malformed frames. */
   sendRaw(raw: string): void {
     this.socket.send(raw);
   }
@@ -52,9 +52,9 @@ export class Client {
   }
 }
 
-// Соединения, открытые текущим тестом: если тест упадёт на середине, они всё
-// равно закроются в afterEach и не будут держать Durable Object живым до
-// конца файла.
+// Connections opened by the current test: if the test fails partway through, they'll
+// still be closed in afterEach and won't keep the Durable Object alive until
+// the end of the file.
 const openClients = new Set<Client>();
 
 afterEach(() => {

@@ -9,8 +9,8 @@ export interface ApplyResult {
 }
 
 /**
- * Единственная точка изменения состояния комнаты.
- * Входное состояние не мутируется, время приходит параметром.
+ * The single point where room state changes.
+ * The input state is never mutated; time comes in as a parameter.
  */
 export function apply(
   state: RoomState,
@@ -64,7 +64,7 @@ function join(
     player = {
       ...existing,
       name: command.name,
-      // Повторный join с того же соединения ничего не накручивает.
+      // A repeated join from the same connection doesn't add anything.
       connectionIds: existing.connectionIds.includes(command.connectionId)
         ? existing.connectionIds
         : [...existing.connectionIds, command.connectionId],
@@ -111,7 +111,7 @@ function join(
 function leave(state: RoomState, command: LeaveCommand, now: number): ApplyResult {
   const player = state.players[command.playerId];
   if (player === undefined) return { state, events: [] };
-  // Соединения нет в списке: лишний leave не трогает живые соединения.
+  // The connection isn't in the list: a stray leave doesn't touch live connections.
   if (!player.connectionIds.includes(command.connectionId)) return { state, events: [] };
 
   const connectionIds = player.connectionIds.filter((id) => id !== command.connectionId);
@@ -119,7 +119,7 @@ function leave(state: RoomState, command: LeaveCommand, now: number): ApplyResul
     state: withPlayer(state, command.playerId, {
       ...player,
       connectionIds,
-      // Уже проставленное время не обновляется: срок удаления не сдвигается.
+      // A timestamp that's already set doesn't get updated: the removal deadline never shifts.
       disconnectedAt:
         connectionIds.length === 0 && player.disconnectedAt === null ? now : player.disconnectedAt,
     }),
@@ -161,7 +161,7 @@ function start(state: RoomState, playerId: string, now: number, config: GameConf
 function click(state: RoomState, playerId: string, now: number, config: GameConfig): ApplyResult {
   const player = state.players[playerId];
   if (player === undefined) return reject(state, playerId, 'not_joined');
-  // Клик не в раунде — не ошибка: клиент мог не успеть узнать о конце.
+  // A click outside a round isn't an error: the client may not have learned it ended yet.
   if (state.phase !== 'running') return { state, events: [] };
 
   const elapsed = Math.max(0, now - player.bucket.updatedAt);
@@ -170,8 +170,8 @@ function click(state: RoomState, playerId: string, now: number, config: GameConf
     player.bucket.tokens + (elapsed * config.clicksPerSecond) / 1000,
   );
 
-  // Пополнение линейно: пересчёт от прежней точки отсчёта позже даст тот же результат,
-  // поэтому отказ ничего не меняет и не может сдвинуть точку отсчёта.
+  // Refill is linear: recomputing from the earlier anchor later gives the same result,
+  // so a rejection changes nothing and can't move the anchor.
   if (tokens < 1) return { state, events: [] };
 
   return {
@@ -179,7 +179,7 @@ function click(state: RoomState, playerId: string, now: number, config: GameConf
       ...player,
       clicks: player.clicks + 1,
       lastCountedAt: now,
-      // Метка времени из прошлого не отматывает точку отсчёта назад.
+      // A timestamp from the past never winds the anchor backwards.
       bucket: { tokens: tokens - 1, updatedAt: Math.max(player.bucket.updatedAt, now) },
     }),
     events: [],

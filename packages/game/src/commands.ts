@@ -3,7 +3,7 @@ import type { Phase } from './state';
 export interface JoinCommand {
   type: 'join';
   playerId: string;
-  /** id соединения, по которому пришла команда. */
+  /** id of the connection the command arrived on. */
   connectionId: string;
   name: string;
   hostKey?: string;
@@ -12,7 +12,7 @@ export interface JoinCommand {
 export interface LeaveCommand {
   type: 'leave';
   playerId: string;
-  /** id закрывшегося соединения. */
+  /** id of the connection that closed. */
   connectionId: string;
 }
 

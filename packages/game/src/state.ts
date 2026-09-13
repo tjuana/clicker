@@ -8,10 +8,10 @@ export interface Bucket {
 }
 
 export interface Player {
-  /** Публичный идентификатор: только он уходит клиентам. */
+  /** Public identifier: only this one goes out to clients. */
   publicId: string;
   name: string;
-  /** id открытых соединений этого игрока. */
+  /** ids of this player's open connections. */
   connectionIds: string[];
   disconnectedAt: number | null;
   clicks: number;
@@ -34,9 +34,9 @@ export interface Round {
 export interface RoomState {
   phase: Phase;
   hostKey: string | null;
-  /** playerId хостов. */
+  /** playerId of the hosts. */
   hosts: string[];
-  /** Ключ — секретный playerId. */
+  /** Keyed by the secret playerId. */
   players: Record<string, Player>;
   nextSeq: number;
   round: Round | null;

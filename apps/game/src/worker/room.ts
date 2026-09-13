@@ -13,7 +13,7 @@ import {
 import { parseClientMessage, type ServerMessage, toSnapshot } from '@clicker/protocol';
 import { type Connection, Server, type WSMessage } from 'partyserver';
 
-/** Что помним про соединение: переживает сон объекта. */
+/** What we remember about a connection: survives the object going to sleep. */
 interface Session {
   playerId: string;
   publicId: string;
@@ -39,8 +39,8 @@ export class Room extends Server<Env> {
     const stored = await this.ctx.storage.get<RoomState>('state');
     let state = stored ?? createRoomState();
 
-    // Фаза раунда в хранилище означает, что объект перезапустился посреди игры
-    // и клики из памяти потеряны.
+    // A round phase in storage means the object restarted mid-game
+    // and the clicks held in memory are lost.
     if (state.phase === 'countdown' || state.phase === 'running') {
       state = abortRound(state);
     }
@@ -121,13 +121,13 @@ export class Room extends Server<Env> {
   }
 
   override async onAlarm(): Promise<void> {
-    // Сработавший будильник runtime сам стирает: сверять с ним больше не с чем,
-    // и следующий вызов #scheduleAlarm должен записать срок заново.
+    // The runtime clears a fired alarm on its own: there's nothing left to compare against,
+    // so the next #scheduleAlarm call must write the deadline again.
     this.#alarmAt = undefined;
     await this.#run({ type: 'tick' });
   }
 
-  /** Единственный путь изменения состояния: правила, события, хранилище, будильник, рассылка. */
+  /** The single path that changes state: rules, events, storage, alarm, broadcast. */
   async #run(command: Command, source?: Connection<Session>): Promise<void> {
     const applied = apply(this.#state, command, Date.now(), this.#config);
     this.#state = applied.state;
@@ -138,16 +138,16 @@ export class Room extends Server<Env> {
       this.#handleEvent(event, source);
     }
 
-    // Клик тоже может закрыть раунд: advance выполняется перед каждой командой.
-    // Не сохраняем только клики, которые всего лишь увеличили счёт.
+    // A click can also close the round: advance runs before every command.
+    // We skip persisting only for clicks that merely bumped the score.
     if (phaseChanged || command.type !== 'click') {
       await this.#persist();
     }
     await this.#scheduleAlarm();
     this.#syncSnapshotTimer();
 
-    // Во время раунда снимки шлёт таймер, вне раунда — каждое изменение.
-    // Смену фазы отправляем сразу: ждать до сотни миллисекунд тут нельзя.
+    // During a round the timer sends snapshots; outside a round, every change does.
+    // A phase change is sent immediately: waiting up to a hundred milliseconds isn't acceptable here.
     if (phaseChanged || this.#timer === null) {
       this.#broadcastSnapshot();
     }
@@ -176,7 +176,7 @@ export class Room extends Server<Env> {
     }
   }
 
-  /** Снимок собирается один раз на всех, а не на каждое соединение. */
+  /** The snapshot is built once for everyone, not per connection. */
   #broadcastSnapshot(): void {
     this.broadcast(JSON.stringify(toSnapshot(this.#state, Date.now())));
   }

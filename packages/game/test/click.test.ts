@@ -7,7 +7,7 @@ const CONFIG = config({ countdownMs: 3000, roundMs: 10000, burst: 15, clicksPerS
 const GO_AT = 4000;
 const ENDS_AT = 14000;
 
-/** Хост в комнате, раунд запущен в 1000: отсчёт до 4000, конец в 14000. */
+/** Host is in the room, the round started at 1000: countdown to 4000, ends at 14000. */
 function started(): RoomState {
   const host = apply(
     createRoomState(),
@@ -26,7 +26,7 @@ function clickTimes(state: RoomState, times: number[]): RoomState {
   return next;
 }
 
-/** Ведро пусто, точка отсчёта — GO_AT. */
+/** The bucket is empty, the anchor is GO_AT. */
 function drained(): RoomState {
   return clickTimes(
     started(),
@@ -124,7 +124,7 @@ describe('click', () => {
     const spent = drained();
     expect(spent.players['secret-1']?.clicks).toBe(CONFIG.burst);
 
-    // Сообщение с меткой времени из прошлого: точка отсчёта не должна уехать назад.
+    // A message timestamped in the past: the anchor must not move backwards.
     const past = apply(
       deepFreeze(spent),
       { type: 'click', playerId: 'secret-1' },
@@ -140,7 +140,7 @@ describe('click', () => {
   });
 
   it('gives no more than a burst to a player who idled for ten seconds', () => {
-    // Ведро пополняется не выше ёмкости, сколько бы игрок ни ждал.
+    // The bucket never refills past capacity, no matter how long the player waited.
     const state = clickTimes(
       drained(),
       Array.from({ length: CONFIG.burst + 1 }, () => GO_AT + 10_000),

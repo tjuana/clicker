@@ -1,17 +1,17 @@
 export interface GameConfig {
-  /** Длительность отсчёта перед раундом. */
+  /** Duration of the countdown before a round. */
   countdownMs: number;
-  /** Длительность раунда. */
+  /** Duration of a round. */
   roundMs: number;
-  /** Сколько ещё принимаем клики после конца раунда: запас на сетевую задержку. */
+  /** How much longer we keep accepting clicks after the round ends: slack for network latency. */
   lateGraceMs: number;
-  /** Скорость пополнения ведра токенов. */
+  /** Refill rate of the token bucket. */
   clicksPerSecond: number;
-  /** Ёмкость ведра токенов. */
+  /** Capacity of the token bucket. */
   burst: number;
-  /** Сколько отключившийся игрок остаётся в списке. */
+  /** How long a disconnected player stays in the list. */
   reconnectGraceMs: number;
-  /** Максимум игроков в комнате. */
+  /** Maximum number of players in a room. */
   maxPlayers: number;
 }
 

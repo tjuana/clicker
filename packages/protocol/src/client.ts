@@ -1,7 +1,7 @@
 import * as v from 'valibot';
 import { ID_PATTERN } from './ids';
 
-/** Всё, что длиннее, до разбора не доходит. */
+/** Anything longer than this never reaches parsing. */
 export const MAX_MESSAGE_BYTES = 1024;
 export const MAX_NAME_LENGTH = 20;
 
@@ -9,10 +9,10 @@ const encoder = new TextEncoder();
 
 const idSchema = v.pipe(v.string(), v.regex(ID_PATTERN));
 
-/** Управляющие символы и знаки смены направления письма (U+202A–U+202E, U+2066–U+2069). */
+/** Control characters and bidirectional text override marks (U+202A–U+202E, U+2066–U+2069). */
 const FORBIDDEN_NAME_CHARS = /[\p{Cc}\u202A-\u202E\u2066-\u2069]/u;
 
-/** Ник хранится обрезанным, длина считается в code points. */
+/** The name is stored trimmed; its length is counted in code points. */
 const nameSchema = v.pipe(
   v.string(),
   v.trim(),
@@ -40,8 +40,8 @@ export type ClientMessage = v.InferOutput<typeof clientMessageSchema>;
 export type JoinMessage = v.InferOutput<typeof joinSchema>;
 
 export function parseClientMessage(raw: string): ClientMessage | null {
-  // UTF-8 занимает не меньше байт, чем UTF-16 — единиц; это дешёвый способ отсеять
-  // заведомо большие сообщения, не выделяя память под их байтовое представление.
+  // UTF-8 never takes fewer bytes than UTF-16 units, so this is a cheap way to reject
+  // obviously oversized messages without allocating memory for their byte representation.
   if (raw.length > MAX_MESSAGE_BYTES) return null;
   if (encoder.encode(raw).length > MAX_MESSAGE_BYTES) return null;
 

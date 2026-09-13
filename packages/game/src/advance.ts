@@ -4,13 +4,13 @@ import type { Phase, RoomState } from './state';
 
 export interface AdvanceResult {
   state: RoomState;
-  /** Фазы, в которые перешли, по порядку. */
+  /** Phases that were entered, in order. */
   phases: Phase[];
 }
 
 /**
- * Продвигает состояние во времени. Вызывается перед обработкой любой команды,
- * поэтому правила не зависят от того, вовремя ли сработал будильник.
+ * Advances the state through time. Called before handling any command,
+ * so the rules never depend on whether the alarm fired on time.
  */
 export function advance(state: RoomState, now: number, config: GameConfig): AdvanceResult {
   let next = state;
@@ -37,7 +37,7 @@ export function advance(state: RoomState, now: number, config: GameConfig): Adva
   return { state: removeExpired(next, now, config), phases };
 }
 
-/** Отключившиеся удаляются только вне раунда: во время раунда их счёт нужен. */
+/** Disconnected players are only removed outside a round: during a round their score is still needed. */
 function removeExpired(state: RoomState, now: number, config: GameConfig): RoomState {
   if (state.phase !== 'lobby' && state.phase !== 'results') return state;
 

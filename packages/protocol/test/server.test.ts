@@ -2,7 +2,7 @@ import { apply, createRoomState, type RoomState } from '@clicker/game';
 import { describe, expect, it } from 'vitest';
 import { MAX_SERVER_MESSAGE_BYTES, parseServerMessage, toSnapshot } from '../src/server';
 
-/** Хост «secret-1» и игрок «secret-2», раунд отыгран. */
+/** Host "secret-1" and player "secret-2", round already played out. */
 function playedRoom(): RoomState {
   const host = apply(
     createRoomState(),

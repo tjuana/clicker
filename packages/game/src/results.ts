@@ -1,13 +1,13 @@
 import type { Player, ResultRow } from './state';
 
-/** publicId — это число в строке: '2' идёт раньше '10', а не наоборот. */
+/** publicId is a number in a string: '2' comes before '10', not the other way around. */
 export function comparePublicIds(a: string, b: string): number {
   return Number(a) - Number(b);
 }
 
 /**
- * Больше кликов — выше. При равенстве выигрывает тот, кто набрал счёт раньше.
- * Полная ничья разбивается по publicId, чтобы порядок был предсказуемым.
+ * More clicks ranks higher. On a tie, whoever reached that score first wins.
+ * A complete tie is broken by publicId, so the order stays predictable.
  */
 function compare(a: Player, b: Player): number {
   if (a.clicks !== b.clicks) return b.clicks - a.clicks;

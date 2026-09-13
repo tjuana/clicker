@@ -19,7 +19,7 @@ export function connect(roomId: string, name: string): Connection {
   let closedByUs = false;
 
   const send = (message: unknown): boolean => {
-    // Копить нажатия во время обрыва нельзя: они долетят пачкой после конца раунда.
+    // Clicks can't be queued during a disconnect: they'd all arrive in a burst after the round ends.
     if (socket.readyState !== WebSocket.OPEN) return false;
     socket.send(JSON.stringify(message));
     return true;

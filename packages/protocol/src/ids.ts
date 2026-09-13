@@ -1,4 +1,4 @@
-/** 16 случайных байт в base64url: 22 символа. */
+/** 16 random bytes in base64url: 22 characters. */
 export const ID_PATTERN = /^[A-Za-z0-9_-]{22}$/;
 
 export function isId(value: string): boolean {

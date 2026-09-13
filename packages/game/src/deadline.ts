@@ -2,8 +2,8 @@ import { DEFAULT_CONFIG, type GameConfig } from './config';
 import type { RoomState } from './state';
 
 /**
- * Ближайший момент, когда состояние должно измениться само.
- * Сервер ставит на него будильник Durable Object.
+ * The nearest moment when the state must change on its own.
+ * The server sets the Durable Object's alarm to it.
  */
 export function nextDeadline(state: RoomState, config: GameConfig = DEFAULT_CONFIG): number | null {
   const candidates: number[] = [];

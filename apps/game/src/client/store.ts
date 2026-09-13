@@ -8,7 +8,7 @@ interface ClientState {
   you: string | null;
   isHost: boolean;
   snapshot: SnapshotMessage | null;
-  /** Разница между часами сервера и браузера, по максимуму последних значений. */
+  /** Difference between the server's and the browser's clocks, taken as the max of recent samples. */
   offset: number;
   localClicks: number;
   /** `goAt` of the current round: it shows a new round has started even if a snapshot was missed. */
@@ -37,7 +37,7 @@ export const useClient = create<ClientState>((set) => ({
   setStatus: (status) => set({ status }),
   welcome: (you, isHost) => set({ you, isHost }),
   receive: (snapshot) => {
-    // Задержка сети только уменьшает разницу, поэтому берём максимум из последних замеров.
+    // Network latency only shrinks the difference, so we take the max of the recent samples.
     samples.push(snapshot.serverNow - Date.now());
     if (samples.length > OFFSET_SAMPLES) samples.shift();
     set((state) => {
@@ -55,7 +55,7 @@ export const useClient = create<ClientState>((set) => ({
   countClick: () => set((state) => ({ localClicks: state.localClicks + 1 })),
 }));
 
-/** Серверное время по часам браузера. */
+/** Server time, computed from the browser's clock. */
 export function serverNow(): number {
   return Date.now() + useClient.getState().offset;
 }

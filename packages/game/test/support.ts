@@ -5,7 +5,7 @@ export function config(overrides: Partial<GameConfig> = {}): GameConfig {
   return { ...DEFAULT_CONFIG, ...overrides };
 }
 
-/** Замораживает состояние: если код попробует его изменить, тест упадёт. */
+/** Freezes the state: if code tries to mutate it, the test fails. */
 export function deepFreeze<T>(value: T): T {
   if (value !== null && typeof value === 'object') {
     for (const nested of Object.values(value as Record<string, unknown>)) deepFreeze(nested);

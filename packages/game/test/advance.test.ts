@@ -11,7 +11,7 @@ const CONFIG = config({
   reconnectGraceMs: 30000,
 });
 
-/** Отсчёт идёт: раунд откроется в 4000, закроется в 14000. */
+/** Countdown is in progress: the round opens at 4000, closes at 14000. */
 function countdown(): RoomState {
   return room({
     phase: 'countdown',

@@ -1,4 +1,4 @@
-// Минимальные объявления вместо всей библиотеки DOM: пакет живёт и в браузере, и в Workers.
+// Minimal declarations instead of the whole DOM lib: this package lives in both the browser and Workers.
 declare const crypto: {
   getRandomValues<T extends ArrayBufferView>(array: T): T;
 };

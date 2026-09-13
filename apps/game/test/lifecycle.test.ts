@@ -31,7 +31,7 @@ describe('room lifecycle', () => {
         message.players.some((player) => player.name === 'Боря' && !player.connected),
     );
 
-    // Игрок остаётся в списке: у него есть время вернуться.
+    // The player stays in the list: they still have time to reconnect.
     expect(snapshot.players).toHaveLength(2);
     staying.close();
   });
@@ -44,9 +44,9 @@ describe('room lifecycle', () => {
     client.send({ type: 'join', playerId, name: 'Аня' });
     await client.waitFor(isWelcome);
 
-    // Аварийно оборванные сокеты partyserver доставляет в onError, и onClose за
-    // ними может не прийти вовсе: бьём именно по этому пути напрямую на инстансе,
-    // раз настоящий обрыв транспорта нельзя воспроизвести детерминированно.
+    // partyserver delivers abruptly dropped sockets to onError, and onClose
+    // may never follow for them: we hit that exact path directly on the instance,
+    // since a real transport drop can't be reproduced deterministically.
     const stub = env.Room.get(env.Room.idFromName(roomId));
     await runInDurableObject(stub, async (instance) => {
       for (const connection of instance.getConnections<{ playerId: string; publicId: string }>()) {
@@ -75,8 +75,8 @@ describe('room lifecycle', () => {
       (message): message is Snapshot => isSnapshot(message) && message.phase === 'countdown',
     );
 
-    // Перезапуск объекта: память сбрасывается, хранилище остаётся.
-    // Мягкое выселение тут не подходит — во время раунда объект занят таймером рассылки.
+    // Restarting the object: memory resets, storage stays.
+    // A soft eviction won't do here — during a round the object is busy with the broadcast timer.
     await abortAllDurableObjects();
 
     const returning = await connect(roomId);
@@ -99,13 +99,13 @@ describe('room lifecycle', () => {
     await client.waitFor(isSnapshot);
     const before = client.received.length;
 
-    // Мягкое выселение (не abortAllDurableObjects): хранилище сохраняется, а
-    // хайбернейтящийся сокет клиента переживает пересоздание объекта.
+    // A soft eviction (not abortAllDurableObjects): storage persists, and
+    // the client's hibernating socket survives the object being recreated.
     const stub = env.Room.get(env.Room.idFromName(roomId));
     await evictDurableObject(stub);
 
-    // Будим объект обычным HTTP-запросом, а не через сокет клиента: если бы клиент
-    // сам что-то отправил, снимок пришёл бы из onMessage, а не из onStart.
+    // Wake the object with a plain HTTP request, not through the client's socket: if the client
+    // had sent something itself, the snapshot would come from onMessage, not from onStart.
     await SELF.fetch(new Request(`https://example.com/parties/room/${roomId}`));
 
     const snapshot = await client.waitFor(

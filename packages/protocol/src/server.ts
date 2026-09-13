@@ -50,7 +50,7 @@ export const errorSchema = v.strictObject({
 
 export const serverMessageSchema = v.variant('type', [welcomeSchema, snapshotSchema, errorSchema]);
 
-/** Снимок на 50 игроков занимает около 3 КБ; предел на порядок крупнее сообщений клиента. */
+/** A snapshot for 50 players is about 3 KB; the limit is an order of magnitude bigger than client messages. */
 export const MAX_SERVER_MESSAGE_BYTES = 64 * 1024;
 
 export type ServerMessage = v.InferOutput<typeof serverMessageSchema>;
@@ -71,7 +71,7 @@ export function parseServerMessage(raw: string): ServerMessage | null {
   return result.success ? result.output : null;
 }
 
-/** Секретные playerId и hostKey наружу не попадают. */
+/** Secret playerId and hostKey never leak outside. */
 export function toSnapshot(state: RoomState, now: number): SnapshotMessage {
   return {
     type: 'snapshot',

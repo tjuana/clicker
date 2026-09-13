@@ -16,14 +16,14 @@ function write(key: string, value: string): void {
   try {
     window.localStorage.setItem(key, value);
   } catch {
-    // Приватное окно или запрет на хранилище: играть это не мешает.
+    // Private window or storage blocked: this doesn't get in the way of playing.
   }
 }
 
 let cachedPlayerId: string | null = null;
 const memoryHostKeys = new Map<string, string>();
 
-/** Постоянный идентификатор игрока. Это секрет сессии, наружу он не уходит. */
+/** Persistent player identifier. It's a session secret and never leaves the client. */
 export function playerId(): string {
   if (cachedPlayerId !== null) return cachedPlayerId;
   const stored = read(PLAYER_ID);
@@ -41,7 +41,7 @@ export function saveName(name: string): void {
   write(NAME, name);
 }
 
-/** `/r/<roomId>` — сама ссылка и есть приглашение. */
+/** `/r/<roomId>` — the link itself is the invitation. */
 export function roomIdFromPath(): string | null {
   const match = window.location.pathname.match(/^\/r\/([A-Za-z0-9_-]{22})$/);
   return match?.[1] ?? null;
@@ -68,8 +68,8 @@ export function rememberHostKey(roomId: string, key: string): void {
 }
 
 /**
- * Ключ хоста приходит во фрагменте адреса: он не уходит на сервер.
- * Сразу после чтения стираем его из строки браузера — на дейли экран показывают всем.
+ * The host key arrives in the URL fragment: it never goes to the server.
+ * We strip it from the browser's address bar right after reading it — on a screen share, everyone can see it.
  */
 export function takeHostKeyFromHash(roomId: string): void {
   const match = window.location.hash.match(/^#host=([A-Za-z0-9_-]{22})$/);

@@ -81,7 +81,7 @@ describe('join', () => {
       { type: 'leave', playerId: 'secret-1', connectionId: 'conn-1' },
       2000,
     );
-    // reconnectGraceMs по умолчанию — 30000.
+    // reconnectGraceMs defaults to 30000.
     const expired = apply(left.state, { type: 'tick' }, 32000);
 
     expect(left.state.players['secret-1']?.disconnectedAt).toBe(2000);
