@@ -17,7 +17,7 @@ interface ClientState {
   setStatus: (status: Status) => void;
   welcome: (you: string, isHost: boolean) => void;
   receive: (snapshot: SnapshotMessage) => void;
-  fail: (code: ServerErrorCode | 'invalid_message') => void;
+  fail: (code: ServerErrorCode) => void;
   clearError: () => void;
   countClick: () => void;
 }
