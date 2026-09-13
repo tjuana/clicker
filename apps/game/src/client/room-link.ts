@@ -20,13 +20,17 @@ function write(key: string, value: string): void {
   }
 }
 
+let cachedPlayerId: string | null = null;
+const memoryHostKeys = new Map<string, string>();
+
 /** Постоянный идентификатор игрока. Это секрет сессии, наружу он не уходит. */
 export function playerId(): string {
+  if (cachedPlayerId !== null) return cachedPlayerId;
   const stored = read(PLAYER_ID);
-  if (stored !== null && isId(stored)) return stored;
-  const created = generateId();
-  write(PLAYER_ID, created);
-  return created;
+  const id = stored !== null && isId(stored) ? stored : generateId();
+  write(PLAYER_ID, id);
+  cachedPlayerId = id;
+  return id;
 }
 
 export function savedName(): string {
@@ -55,10 +59,11 @@ function hostKeys(): Record<string, string> {
 }
 
 export function hostKeyFor(roomId: string): string | undefined {
-  return hostKeys()[roomId];
+  return memoryHostKeys.get(roomId) ?? hostKeys()[roomId];
 }
 
 export function rememberHostKey(roomId: string, key: string): void {
+  memoryHostKeys.set(roomId, key);
   write(HOST_KEYS, JSON.stringify({ ...hostKeys(), [roomId]: key }));
 }
 
