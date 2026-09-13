@@ -67,7 +67,13 @@ export class Room extends Server<Env> {
       return;
     }
 
-    this.#send(connection, { type: 'error', code: 'not_joined' });
+    const session = connection.state;
+    if (session === null) {
+      this.#send(connection, { type: 'error', code: 'not_joined' });
+      return;
+    }
+
+    await this.#run({ type: parsed.type, playerId: session.playerId }, connection);
   }
 
   /** Единственный путь изменения состояния: правила, события, хранилище, будильник, рассылка. */

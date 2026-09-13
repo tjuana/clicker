@@ -1,7 +1,7 @@
 import { SELF } from 'cloudflare:test';
 import { generateId } from '@clicker/protocol';
 import { describe, expect, it } from 'vitest';
-import { connect, isSnapshot, isWelcome } from './support';
+import { connect, isError, isSnapshot, isWelcome } from './support';
 
 describe('room over websocket', () => {
   it('refuses a malformed room id before connecting', async () => {
@@ -27,6 +27,19 @@ describe('room over websocket', () => {
     expect(snapshot.phase).toBe('lobby');
     expect(snapshot.players).toEqual([{ id: '1', name: 'Аня', clicks: 0, connected: true }]);
     expect(JSON.stringify(snapshot)).not.toContain(playerId);
+
+    client.close();
+  });
+
+  it('refuses to start a round for a player who is not the host', async () => {
+    const client = await connect(generateId());
+    client.send({ type: 'join', playerId: generateId(), name: 'Боря' });
+    await client.waitFor(isWelcome);
+
+    client.send({ type: 'start' });
+
+    const error = await client.waitFor(isError);
+    expect(error.code).toBe('not_host');
 
     client.close();
   });
