@@ -1,4 +1,5 @@
 import {
+  abortRound,
   apply,
   type Command,
   createRoomState,
@@ -7,6 +8,7 @@ import {
   type GameEvent,
   nextDeadline,
   type RoomState,
+  syncConnections,
 } from '@clicker/game';
 import { parseClientMessage, type ServerMessage, toSnapshot } from '@clicker/protocol';
 import { type Connection, Server, type WSMessage } from 'partyserver';
@@ -33,7 +35,27 @@ export class Room extends Server<Env> {
       roundMs: Number(this.env.ROUND_MS ?? DEFAULT_CONFIG.roundMs),
     };
 
-    this.#state = (await this.ctx.storage.get<RoomState>('state')) ?? createRoomState();
+    const stored = await this.ctx.storage.get<RoomState>('state');
+    let state = stored ?? createRoomState();
+
+    // Фаза раунда в хранилище означает, что объект перезапустился посреди игры
+    // и клики из памяти потеряны.
+    if (state.phase === 'countdown' || state.phase === 'running') {
+      state = abortRound(state);
+    }
+
+    const live: Record<string, string[]> = {};
+    for (const connection of this.getConnections<Session>()) {
+      const session = connection.state;
+      if (session !== null) {
+        const ids = live[session.playerId] ?? [];
+        ids.push(connection.id);
+        live[session.playerId] = ids;
+      }
+    }
+
+    this.#state = syncConnections(state, live, Date.now());
+    await this.#persist();
     await this.#scheduleAlarm();
   }
 
