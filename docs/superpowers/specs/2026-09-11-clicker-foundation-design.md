@@ -42,7 +42,12 @@ e2e                сквозные тесты             Playwright
 
 - `packages/game` не импортирует ничего: ни Cloudflare, ни DOM, ни `Date.now()`, ни `Math.random()`.
   Время и конфиг приходят параметрами.
-- `packages/protocol` зависит только от `packages/game` (типы и функция снимка).
+- `packages/protocol` зависит только от `packages/game` (типы, схема данных режима и функция снимка).
+- **Платформа, а не одна игра.** Комната, лобби, хост, соединения, фазы, будильник, снимки и
+  восстановление не знают слова «клик»: всё, что относится к конкретной игре, живёт в папке режима
+  и в отдельном слоте протокола. Реестра режимов при этом нет и не будет, пока не появится второй
+  режим: интерфейс, выведенный из одной реализации, всегда оказывается неправильным. Сейчас
+  фиксируется только то, что дорого менять потом, — формат сообщений и границы состояния.
 - `apps/game` зависит от обоих пакетов. Клиент и Worker живут в одном приложении, потому что
   плагин `@cloudflare/vite-plugin` собирает их вместе и деплоит одной командой; общего кода у них
   нет, всё общее лежит в пакетах.
@@ -51,26 +56,19 @@ e2e                сквозные тесты             Playwright
 
 ```
 clicker/
-  apps/
-    server/
-      src/worker.ts        /parties/* → комната; остальное Worker не видит, отдаёт Static Assets
-      src/room.ts          класс Room (partyserver): адаптер между соединениями и ядром
-      test/                интеграционные тесты (@cloudflare/vitest-plugin)
-      wrangler.jsonc
-    web/
-      src/main.tsx
-      src/app.tsx          выбор экрана по маршруту и фазе
-      src/net/             соединение, отправка команд, поправка часов
-      src/store.ts         zustand
-      src/screens/         Landing, Join, Lobby, Arena, Results
-      src/scene/           RaceScene (react-three-fiber)
-      src/theme.ts         палитра
-      src/strings.ts       тексты интерфейса
+  apps/game/
+    src/worker/worker.ts   /parties/* → комната; остальное Worker не видит, отдаёт Static Assets
+    src/worker/room.ts     класс Room (partyserver): адаптер между соединениями и ядром
+    src/client/            экраны, HUD, сцена, соединение, состояние
+    src/client/modes/      арена и сцена конкретного режима
+    test/                  интеграционные тесты (@cloudflare/vitest-plugin)
+    e2e/                   сквозные тесты (Playwright)
+    index.html  vite.config.ts  vitest.config.ts  wrangler.jsonc
   packages/
-    game/src/              config, state, apply, advance, clicker, results, deadline
+    game/src/room/         общее: состояние, игроки, хост, фазы, продвижение времени, сроки
+    game/src/modes/clicker/  правила кликера: ввод, ведро токенов, итоги
     protocol/src/          ids, client, server, snapshot
-  e2e/
-  docs/superpowers/specs/
+  docs/superpowers/
   .github/workflows/ci.yml
   biome.json  pnpm-workspace.yaml  tsconfig.base.json  package.json
 ```
@@ -106,24 +104,38 @@ export interface GameConfig {
   burst: number;            // 15: ёмкость ведра
   reconnectGraceMs: number; // 30000
   maxPlayers: number;       // 50
+  /**
+   * Как часто комната сама двигает время во время раунда.
+   * `null` — только по командам и будильнику: так живёт кликер, ему двигаться незачем.
+   * Число — шаг симуляции в миллисекундах: змейке нужно ходить, даже когда никто не нажимает.
+   */
+  tickMs: number | null;    // null у кликера
 }
 export const DEFAULT_CONFIG: GameConfig;
 ```
+
+`clicksPerSecond` и `burst` — знания кликера, и когда появится второй режим, они переедут в
+конфиг режима вместе с его правилами. Сейчас разделять конфиг не на чем: выводить границу
+из одной реализации — тот самый способ провести её неправильно.
 
 ### Состояние
 
 ```ts
 export type Phase = 'lobby' | 'countdown' | 'running' | 'results';
+export type ModeId = 'clicker';
 
+/** Общее для всех игр. Ничего про конкретную игру здесь быть не должно. */
 export interface RoomState {
+  mode: ModeId;                      // выбирается при создании комнаты и больше не меняется
   phase: Phase;
   hostKey: string | null;
   hosts: string[];                   // playerId хостов
   players: Record<string, Player>;   // ключ — секретный playerId
   nextSeq: number;                   // счётчик для publicId, начинается с 1
   round: { goAt: number; endsAt: number } | null;
-  results: ResultRow[] | null;
   notice: 'round_aborted' | null;
+  /** Всё, что знает только режим: счёт игроков, итоги, внутренние таймеры. */
+  modeState: ClickerState;
 }
 
 export interface Player {
@@ -131,6 +143,15 @@ export interface Player {
   name: string;
   connectionIds: string[];           // id открытых соединений этого игрока
   disconnectedAt: number | null;
+}
+
+/** Состояние кликера. Ключи — publicId: наружу уходят те же идентификаторы. */
+export interface ClickerState {
+  scores: Record<string, ClickerScore>;
+  results: ResultRow[] | null;
+}
+
+export interface ClickerScore {
   clicks: number;
   lastCountedAt: number | null;      // время последнего засчитанного клика
   bucket: { tokens: number; updatedAt: number };
@@ -151,8 +172,11 @@ export type Command =
   | { type: 'join'; playerId: string; connectionId: string; name: string; hostKey?: string }
   | { type: 'leave'; playerId: string; connectionId: string }
   | { type: 'start'; playerId: string }
-  | { type: 'click'; playerId: string }
+  | { type: 'input'; playerId: string; input: ClickerInput }
   | { type: 'tick' };
+
+/** Ввод режима. У кликера он пустой: сам факт нажатия и есть ввод. */
+export type ClickerInput = { type: 'click' };
 
 export type ErrorCode = 'not_joined' | 'not_host' | 'wrong_phase' | 'room_full';
 
@@ -190,8 +214,9 @@ export function syncConnections(state: RoomState, live: Record<string, string[]>
     ещё нет, `disconnectedAt = null`, ник обновляется, счёт сохраняется. Повторный `join` с того же
     соединения ничего не меняет: счёт соединений нельзя накрутить, отправив `join` много раз.
   - Нового игрока при `maxPlayers` игроках не пускаем: `rejected room_full`. Иначе он добавляется
-    с `publicId = String(nextSeq)`, `clicks = 0`, `lastCountedAt = null`,
-    `bucket = { tokens: burst, updatedAt: now }`, `connectionIds = [connectionId]`; `nextSeq += 1`.
+    с `publicId = String(nextSeq)` и `connectionIds = [connectionId]`; `nextSeq += 1`. Затем режим
+    заводит ему свою строку счёта: у кликера это `clicks = 0`, `lastCountedAt = null`,
+    `bucket = { tokens: burst, updatedAt: now }` в `modeState.scores[publicId]`.
   - Хост: если передан `hostKey` и `state.hostKey === null`, ключ закрепляется и `playerId` добавляется
     в `hosts`. Если ключ передан и совпадает, `playerId` добавляется в `hosts`. Повторов в `hosts` нет.
     В остальных случаях статус хоста не меняется.
@@ -203,20 +228,24 @@ export function syncConnections(state: RoomState, live: Record<string, string[]>
 - **start.** Неизвестный `playerId` → `not_joined`; игрок не из `hosts` → `not_host`; фаза не `lobby`
   и не `results` → `wrong_phase`. Иначе:
   `phase = countdown`, `round = { goAt: now + countdownMs, endsAt: now + countdownMs + roundMs }`;
-  у всех игроков `clicks = 0`, `lastCountedAt = null`, `bucket = { tokens: burst, updatedAt: goAt }`;
-  `results = null`, `notice = null`; событие `phaseChanged`.
-- **click.** Неизвестный `playerId` → `not_joined`. Вне фазы `running` клик молча игнорируется.
-  В `running` ведро пополняется на `(now − updatedAt) × clicksPerSecond / 1000`, но не выше `burst`.
+  затем режим сбрасывает свой счёт — у кликера всем игрокам `clicks = 0`, `lastCountedAt = null`,
+  `bucket = { tokens: burst, updatedAt: goAt }` и `modeState.results = null`;
+  `notice = null`; событие `phaseChanged`.
+- **input.** Общая часть решает немного: неизвестный `playerId` → `not_joined`, вне фазы `running`
+  ввод молча игнорируется. Дальше ввод отдаётся режиму, и что он значит, знает только режим.
+  Кликер получает `{ type: 'click' }` и работает со своей строкой в `modeState.scores[publicId]`:
+  ведро пополняется на `(now − updatedAt) × clicksPerSecond / 1000`, но не выше `burst`.
   Если токенов ≥ 1 — токен списывается, `clicks += 1`, `lastCountedAt = now`,
   `updatedAt = max(updatedAt, now)`. Если токенов меньше одного, состояние не меняется вообще.
   Оба правила защищают от метки времени из прошлого: она не должна сдвигать точку отсчёта назад
   и дарить игроку лишний запас кликов.
-- **Результаты.** Сортировка: `clicks` по убыванию → `lastCountedAt` по возрастанию (`null` в конце) →
-  `publicId` по возрастанию как числа. `rank` — позиция начиная с 1. Победитель — первая строка,
-  если у неё `clicks > 0`; иначе победителя нет.
+- **Результаты — правило режима.** Кликер сортирует: `clicks` по убыванию → `lastCountedAt` по
+  возрастанию (`null` в конце) → `publicId` по возрастанию как числа. `rank` — позиция начиная с 1.
+  Победитель — первая строка, если у неё `clicks > 0`; иначе победителя нет. Готовые строки
+  складываются в `modeState.results`; общая часть комнаты про них ничего не знает.
 - **abortRound.** Только из `countdown` и `running`, иначе состояние возвращается как есть.
-  `phase = lobby`, `round = null`, `notice = 'round_aborted'`, у всех игроков `clicks = 0`
-  и `lastCountedAt = null`: показывать в лобби счёт прерванного раунда незачем.
+  `phase = lobby`, `round = null`, `notice = 'round_aborted'`; затем режим очищает свой счёт — у
+  кликера всем `clicks = 0` и `lastCountedAt = null`: показывать в лобби счёт прерванного раунда незачем.
 - **syncConnections.** Для каждого игрока `connectionIds = live[playerId] ?? []`. Если список пуст
   и `disconnectedAt === null` — `disconnectedAt = now`; если не пуст — `disconnectedAt = null`.
   Уже проставленное время отключения сохраняется.
@@ -232,15 +261,23 @@ export function syncConnections(state: RoomState, live: Record<string, string[]>
 
 ## 6. Протокол (packages/protocol)
 
-Все сообщения — JSON-объекты с полем `type`. Схемы на valibot, типы выводятся из схем.
-Лишние поля во входящих сообщениях — ошибка.
+Все сообщения — JSON-объекты с полем `type` и полем `v` — версией протокола. Схемы на valibot,
+типы выводятся из схем. Лишние поля во входящих сообщениях — ошибка.
+
+**Версия.** `v: 1` в каждом сообщении в обе стороны. Сервер отвечает `error: bad_version` на чужую
+версию, клиент показывает «обновите страницу». Одно число сейчас избавляет от миграции в тот день,
+когда снимки станут дельтами или двоичными, — а для живой симуляции они станут.
+
+**Что общее, а что принадлежит режиму.** Общая часть описывает комнату: кто в ней, подключён ли,
+какая фаза, когда начнётся и кончится раунд. Всё остальное лежит в слоте `mode`, который режим
+описывает своей схемой. Общая часть после этого не меняется при добавлении игр.
 
 Клиент → сервер:
 
 ```ts
-{ type: 'join'; playerId: Id; name: Name; hostKey?: Id }
-{ type: 'start' }
-{ type: 'click' }
+{ v: 1; type: 'join'; playerId: Id; name: Name; hostKey?: Id }
+{ v: 1; type: 'start' }
+{ v: 1; type: 'input'; input: { type: 'click' } }   // содержимое input описывает режим
 ```
 
 - `Id` — строка формата из §4.
@@ -251,20 +288,28 @@ export function syncConnections(state: RoomState, live: Record<string, string[]>
 Сервер → клиент:
 
 ```ts
-{ type: 'welcome'; you: string; isHost: boolean }
-{ type: 'snapshot'; serverNow: number; phase: Phase;
-  players: { id: string; name: string; clicks: number; connected: boolean }[];   // по возрастанию id как чисел
+{ v: 1; type: 'welcome'; you: string; isHost: boolean }
+{ v: 1; type: 'snapshot'; serverNow: number; mode: ModeId; phase: Phase;
+  players: { id: string; name: string; connected: boolean }[];   // по возрастанию id как чисел
   round: { goAt: number; endsAt: number } | null;
-  results: { id: string; name: string; clicks: number; rank: number }[] | null;
-  notice: 'round_aborted' | null }
-{ type: 'error'; code: ErrorCode | 'invalid_message' }
+  notice: 'round_aborted' | null;
+  // Слот режима: у кликера — счёт по publicId и итоги раунда.
+  data: { scores: Record<string, number>;
+          results: { id: string; name: string; clicks: number; rank: number }[] | null } }
+{ v: 1; type: 'private'; data: unknown }   // личная часть, своя у каждого соединения
+{ v: 1; type: 'error'; code: ErrorCode | 'invalid_message' | 'bad_version' }
 ```
 
 `id` в сообщениях — это `publicId`. `playerId` и `hostKey` сервер не отправляет никогда.
 
+**Личная часть.** `snapshot` уходит всем одной строкой — так и должно остаться, это горячий путь.
+Там, где игроку нужно видеть своё (роль в мафии, слово в «крокодиле», карты), режим возвращает
+личную часть, и сервер шлёт её каждому соединению отдельно и только при изменении. Кликеру она не
+нужна и не стоит ничего: режим просто не возвращает её.
+
 Пакет экспортирует:
 - `parseClientMessage(raw: string): ClientMessage | null` — `null` для строк длиннее 1024 байт,
-  некорректного JSON и всего, что не прошло схему;
+  некорректного JSON, чужой версии и всего, что не прошло схему;
 - `parseServerMessage(raw: string): ServerMessage | null` — для клиента; его предел больше,
   64 КБ: снимок на 50 игроков занимает около 3 КБ, но он на порядок крупнее сообщений клиента;
 - `toSnapshot(state: RoomState, now: number): SnapshotMessage`;
@@ -324,7 +369,7 @@ Durable Object раньше, чем кто-либо откроет сокет. �
   1. Бинарное сообщение или `parseClientMessage(raw) === null` — `error invalid_message` этому соединению.
   2. В командах `join` и `leave` всегда передаётся `connectionId` — это `conn.id` из partyserver.
      `join`: если у соединения уже есть другой `playerId`, сначала `leave` для старого.
-     `start` и `click`: `playerId` берётся из состояния соединения; если его нет — `error not_joined`.
+     `start` и `input`: `playerId` берётся из состояния соединения; если его нет — `error not_joined`.
   3. `apply(state, command, Date.now(), config)`.
   4. События: `welcome` — `conn.setState({ playerId, publicId })` и отправка `welcome` этому соединению;
      `rejected` — `error` этому соединению; `phaseChanged` — управление рассылкой (ниже).
@@ -341,6 +386,15 @@ Durable Object раньше, чем кто-либо откроет сокет. �
 - При переходе в `countdown` запускается `setInterval` на 100 мс, который шлёт снимок всем.
   Таймер держит объект бодрствующим до конца раунда. При переходе в `results` таймер останавливается,
   и сразу уходит снимок с результатами.
+- Общий снимок собирается один раз за тик и уходит одной строкой всем сразу — это горячий путь,
+  и собирать его на каждое соединение нельзя.
+- Личная часть — отдельным сообщением каждому соединению и только когда изменилась. Режим,
+  которому она не нужна, ничего не возвращает, и сервер ничего не шлёт.
+- **Тик симуляции.** Если у режима `tickMs !== null`, тот же таймер комнаты сначала двигает время
+  командой `tick`, и только потом рассылает снимок. У кликера `tickMs` пуст: время двигают приходящие
+  команды и будильник, а таймер занят одной рассылкой. Змейке, наоборот, нужно ходить, даже когда
+  никто не нажимает клавиши, — там шаг симуляции и станет главным двигателем раунда.
+  Частота рассылки при этом остаётся своей: симуляция может идти чаще, чем уходят снимки.
 
 ### Хранение
 
@@ -372,7 +426,7 @@ Durable Object раньше, чем кто-либо откроет сокет. �
 
 - Соединение: `new PartySocket({ host: location.host, party: 'room', room: roomId })`.
 - На каждое событие `open` отправляется `join` с `playerId`, `name` и `hostKey`, если он есть для этой комнаты.
-- `start` и `click` отправляются только при открытом соединении. То, что нажато без связи, не копится
+- `start` и `input` отправляются только при открытом соединении. То, что нажато без связи, не копится
   и не отправляется потом.
 - Входящие сообщения разбираются `parseServerMessage` и кладутся в стор.
 - Поправка часов: на каждый снимок считается `serverNow − Date.now()`. Поправка — максимум из последних
@@ -411,8 +465,18 @@ Durable Object раньше, чем кто-либо откроет сокет. �
 
 ### Ввод
 
-Кнопка слушает `pointerdown`, в CSS `touch-action: manipulation` и `user-select: none`.
-Каждое событие — один клик, несколько пальцев считаются.
+Ввод отделён от экрана: адаптер режима переводит события браузера в `input` этого режима, а арена
+показывает его орган управления. Иначе арена навсегда останется «кнопкой с надписью Клик», а
+следующей игре понадобятся стрелки на клавиатуре и свайпы.
+
+- **Кликер.** Кнопка слушает `pointerdown`, в CSS `touch-action: manipulation` и `user-select: none`.
+  Каждое событие — один клик, несколько пальцев считаются. Ввод: `{ type: 'click' }`.
+- **Клавиатура** (понадобится змейке и всему, что движется). Адаптер вешает слушателя на документ,
+  переводит стрелки и WASD в ввод режима, гасит прокрутку страницы у стрелок и пробела и не шлёт
+  повтор при удержании клавиши: сервер ждёт намерение, а не поток событий. На телефоне тот же ввод
+  даёт свайп по арене.
+- Общее правило: адаптер не знает правил игры и ничего не решает — он только переводит жест в
+  намерение. Решает сервер.
 
 ### Палитра (theme.ts)
 
@@ -436,7 +500,7 @@ export const theme = {
 | Ситуация | Поведение |
 |---|---|
 | Некорректный JSON, не прошло схему, больше 1024 байт | `error invalid_message` отправителю, соединение остаётся |
-| `start` или `click` до `join` | `error not_joined` |
+| `start` или `input` до `join` | `error not_joined` |
 | `start` не от хоста | `error not_host` |
 | `start` в `countdown` или `running` | `error wrong_phase` |
 | `join` в полную комнату | `error room_full` |
