@@ -102,6 +102,14 @@ export class Room extends Server<Env> {
   }
 
   override async onClose(connection: Connection<Session>): Promise<void> {
+    await this.#release(connection);
+  }
+
+  override async onError(connection: Connection<Session>): Promise<void> {
+    await this.#release(connection);
+  }
+
+  async #release(connection: Connection<Session>): Promise<void> {
     const session = connection.state;
     if (session === null) return;
     await this.#run(

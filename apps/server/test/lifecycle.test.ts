@@ -1,4 +1,5 @@
-import { abortAllDurableObjects } from 'cloudflare:test';
+import { abortAllDurableObjects, runInDurableObject } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { generateId } from '@clicker/protocol';
 import { describe, expect, it } from 'vitest';
 import { connect, isSnapshot, isWelcome, type Snapshot } from './support';
@@ -28,6 +29,34 @@ describe('room lifecycle', () => {
     // Игрок остаётся в списке: у него есть время вернуться.
     expect(snapshot.players).toHaveLength(2);
     staying.close();
+  });
+
+  it('releases a player when their socket errors, not just when it closes', async () => {
+    const roomId = generateId();
+    const client = await connect(roomId);
+    const playerId = generateId();
+
+    client.send({ type: 'join', playerId, name: 'Аня' });
+    await client.waitFor(isWelcome);
+
+    // Аварийно оборванные сокеты partyserver доставляет в onError, и onClose за
+    // ними может не прийти вовсе: бьём именно по этому пути напрямую на инстансе,
+    // раз настоящий обрыв транспорта нельзя воспроизвести детерминированно.
+    const stub = env.Room.get(env.Room.idFromName(roomId));
+    await runInDurableObject(stub, async (instance) => {
+      for (const connection of instance.getConnections<{ playerId: string; publicId: string }>()) {
+        await instance.onError(connection);
+      }
+    });
+
+    const snapshot = await client.waitFor(
+      (message): message is Snapshot =>
+        isSnapshot(message) && message.players.some((player) => !player.connected),
+    );
+
+    expect(snapshot.players).toEqual([{ id: '1', name: 'Аня', clicks: 0, connected: false }]);
+
+    client.close();
   });
 
   it('aborts the round when the object restarts mid-game', async () => {
