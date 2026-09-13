@@ -16,6 +16,17 @@ describe('room over websocket', () => {
     expect(response.status).toBe(404);
   });
 
+  it('refuses a malformed room id for a plain request too, without touching storage', async () => {
+    const response = await SELF.fetch(new Request('https://example.com/parties/room/not-a-room'));
+    expect(response.status).toBe(404);
+
+    // Обе проверки идут по одному и тому же формату из isId: плохой GET не должен
+    // успеть создать объект (и записать в него состояние) до отказа.
+    const stub = env.Room.get(env.Room.idFromName('not-a-room'));
+    const stored = await runInDurableObject(stub, (_instance, state) => state.storage.get('state'));
+    expect(stored).toBeUndefined();
+  });
+
   it('greets a player and shows them in the snapshot', async () => {
     const client = await connect(generateId());
     const playerId = generateId();
