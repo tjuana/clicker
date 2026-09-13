@@ -27,6 +27,7 @@ export class Room extends Server<Env> {
   #state: RoomState = createRoomState();
   #config: GameConfig = DEFAULT_CONFIG;
   #timer: ReturnType<typeof setInterval> | null = null;
+  #alarmAt: number | null | undefined = undefined;
 
   override async onStart(): Promise<void> {
     this.#config = {
@@ -120,6 +121,9 @@ export class Room extends Server<Env> {
   }
 
   override async onAlarm(): Promise<void> {
+    // Сработавший будильник runtime сам стирает: сверять с ним больше не с чем,
+    // и следующий вызов #scheduleAlarm должен записать срок заново.
+    this.#alarmAt = undefined;
     await this.#run({ type: 'tick' });
   }
 
@@ -192,6 +196,9 @@ export class Room extends Server<Env> {
 
   async #scheduleAlarm(): Promise<void> {
     const deadline = nextDeadline(this.#state, this.#config);
+    if (deadline === this.#alarmAt) return;
+    this.#alarmAt = deadline;
+
     if (deadline === null) {
       await this.ctx.storage.deleteAlarm();
       return;

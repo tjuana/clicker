@@ -151,4 +151,41 @@ describe('room over websocket', () => {
       mutableEnv.ROUND_MS = original.round;
     }
   });
+
+  it('does not rewrite the alarm while the round deadline stays the same', async () => {
+    const roomId = generateId();
+    const host = await connect(roomId);
+
+    host.send({ type: 'join', playerId: generateId(), name: 'Аня', hostKey: generateId() });
+    await host.waitFor(isWelcome);
+    host.send({ type: 'start' });
+    await host.waitFor(
+      (message): message is Snapshot => isSnapshot(message) && message.phase === 'running',
+    );
+
+    // Пять кликов подряд во время раунда: дедлайн (endsAt + lateGraceMs) не
+    // меняется, так что будильник не должен переписываться ни разу.
+    const stub = env.Room.get(env.Room.idFromName(roomId));
+    const setAlarmCalls = await runInDurableObject(stub, async (instance, state) => {
+      const original = state.storage.setAlarm.bind(state.storage);
+      let calls = 0;
+      state.storage.setAlarm = (...args: Parameters<typeof state.storage.setAlarm>) => {
+        calls += 1;
+        return original(...args);
+      };
+
+      const [connection] = [...instance.getConnections<{ playerId: string; publicId: string }>()];
+      if (connection === undefined) throw new Error('no connection found on the instance');
+
+      for (let i = 0; i < 5; i += 1) {
+        await instance.onMessage(connection, JSON.stringify({ type: 'click' }));
+      }
+
+      return calls;
+    });
+
+    expect(setAlarmCalls).toBe(0);
+
+    host.close();
+  });
 });
