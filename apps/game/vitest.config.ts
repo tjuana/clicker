@@ -11,4 +11,6 @@ export default defineConfig({
       },
     }),
   ],
+  // Сквозные тесты лежат в e2e/ и запускаются Playwright: внутрь workerd им нельзя.
+  test: { include: ['test/**/*.test.ts'] },
 });

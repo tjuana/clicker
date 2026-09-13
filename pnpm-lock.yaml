@@ -170,7 +170,7 @@ importers:
         specifier: 2.5.13
         version: 2.5.13
 
-  apps/server:
+  apps/game:
     dependencies:
       '@clicker/game':
         specifier: workspace:*
