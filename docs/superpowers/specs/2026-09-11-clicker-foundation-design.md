@@ -32,8 +32,9 @@
 ### Слои и зависимости
 
 ```
-apps/web           экраны, 3D-сцена, сеть     React 19, react-three-fiber, drei, zustand, partysocket
-apps/server        Worker и комната           partyserver, Durable Objects, Workers Static Assets
+apps/game          клиент и Worker в одном приложении:
+                   src/client — экраны, 3D-сцена, сеть   React 19.2, react-three-fiber, drei, zustand, partysocket
+                   src/worker — Worker и комната         partyserver, Durable Objects, Workers Static Assets
 packages/protocol  схемы сообщений и типы     valibot
 packages/game      состояние и правила        без зависимостей
 e2e                сквозные тесты             Playwright
@@ -42,7 +43,9 @@ e2e                сквозные тесты             Playwright
 - `packages/game` не импортирует ничего: ни Cloudflare, ни DOM, ни `Date.now()`, ни `Math.random()`.
   Время и конфиг приходят параметрами.
 - `packages/protocol` зависит только от `packages/game` (типы и функция снимка).
-- `apps/server` и `apps/web` зависят от обоих пакетов. Друг от друга приложения не зависят.
+- `apps/game` зависит от обоих пакетов. Клиент и Worker живут в одном приложении, потому что
+  плагин `@cloudflare/vite-plugin` собирает их вместе и деплоит одной командой; общего кода у них
+  нет, всё общее лежит в пакетах.
 
 ### Репозиторий
 
@@ -267,18 +270,17 @@ export function syncConnections(state: RoomState, live: Record<string, string[]>
 - `toSnapshot(state: RoomState, now: number): SnapshotMessage`;
 - `generateId(): string` — для `roomId`, `hostKey`, `playerId` на клиенте.
 
-## 7. Сервер (apps/server)
+## 7. Сервер (apps/game/src/worker)
 
 ### wrangler.jsonc
 
 ```jsonc
 {
   "name": "clicker",
-  "main": "src/worker.ts",
+  "main": "src/worker/worker.ts",
   "compatibility_date": "2026-09-11",
+  // Каталог собранной статики подставляет плагин Vite, руками его указывать не нужно.
   "assets": {
-    "directory": "../web/dist",
-    "binding": "ASSETS",
     "not_found_handling": "single-page-application",
     "run_worker_first": ["/parties/*"]
   },
@@ -355,7 +357,7 @@ Durable Object раньше, чем кто-либо откроет сокет. �
 трогаем: это запись в хранилище, а во время раунда срок постоянен — иначе каждый клик оборачивался бы
 записью на диск.
 
-## 8. Клиент (apps/web)
+## 8. Клиент (apps/game/src/client)
 
 ### Маршруты
 
@@ -460,11 +462,12 @@ export const theme = {
   - `nextDeadline`, `abortRound`, `syncConnections`, неизменность входного состояния.
 - **packages/protocol — Vitest.** Корректные сообщения; ник из пробелов и длиннее 20; лишние поля;
   сообщение длиннее 1024 байт; в снимке нет `playerId` и `hostKey`.
-- **apps/server — `@cloudflare/vitest-plugin`.** WebSocket к настоящему Worker: два игрока, хост
+- **Worker — `@cloudflare/vitest-plugin`.** WebSocket к настоящему Worker: два игрока, хост
   стартует, клики, результаты в снимке; `start` не от хоста; неверный `roomId` → 404.
   Длительности: отсчёт 50 мс, раунд 200 мс.
-- **e2e — Playwright** против `wrangler dev` со свежей сборкой web: два браузерных контекста
-  (десктоп и мобильный вьюпорт), создание комнаты, вход по ссылке, раунд, одинаковый победитель у обоих.
+- **e2e — Playwright** против dev-сервера Vite, который поднимает сам Playwright: два браузерных
+  контекста (десктоп и мобильный вьюпорт), создание комнаты, вход по ссылке, раунд, одинаковый
+  победитель у обоих. Отдельный `wrangler dev` не нужен: Worker работает внутри dev-сервера.
 
 ## 11. Инструменты, разработка, CI
 
@@ -474,10 +477,17 @@ export const theme = {
   `tsc --noEmit` в каждом, запуск через `pnpm -r typecheck`. Project references не нужны: пакеты
   отдают исходники на TypeScript напрямую, собирать и упорядочивать нечего.
 - Biome — линтер и форматтер для всего репозитория.
-- Локальная разработка: `wrangler dev` для apps/server и Vite для apps/web с прокси `/parties`
-  (включая WebSocket) на `wrangler dev`.
+- Локальная разработка: одна команда `vite dev`. Плагин `@cloudflare/vite-plugin` запускает Worker
+  прямо внутри dev-сервера, поэтому второй процесс и проксирование `/parties` не нужны. Сборка
+  `vite build` кладёт клиент в `dist/client`, Worker и сгенерированный конфиг — в `dist/<имя>`,
+  после чего `wrangler deploy` уезжает без единой дополнительной настройки.
+- React закреплён на 19.2: `@react-three/fiber` 9.7 требует строго ниже 19.3.
+- Браузеры Playwright должны совпадать с его версией: перед первым запуском и в CI нужен
+  `playwright install chromium`.
+- Сцена на three.js подключается лениво: она тянет около мегабайта, и держать её в основном бандле,
+  который нужен уже на экране входа, незачем.
 - CI в GitHub Actions:
-  - на любой push и на pull request: Biome, проверка типов, тесты пакетов и apps/server, сборка web, Playwright;
+  - на любой push и на pull request: Biome, проверка типов, тесты пакетов и Worker, сборка, установка браузера и Playwright;
   - на push в `main` после проверок: `wrangler deploy` с `CLOUDFLARE_API_TOKEN` и
     `CLOUDFLARE_ACCOUNT_ID` из секретов репозитория.
 
