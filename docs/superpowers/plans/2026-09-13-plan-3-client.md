@@ -202,7 +202,7 @@ export default defineConfig({
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Кликер</title>
+    <title>Clicker</title>
   </head>
   <body>
     <div id="root"></div>
@@ -277,7 +277,7 @@ createRoot(container).render(
 
 ```tsx
 export function App() {
-  return <main>Кликер</main>;
+  return <main>Clicker</main>;
 }
 ```
 
@@ -534,13 +534,20 @@ git commit -m "feat(app): connect to a room and keep client state"
 
 ---
 
-### Task 4: Экраны
+### Task 4: Меню, вход по имени и экраны
 
 **Files:**
-- Create: `apps/game/src/client/theme.ts`, `apps/game/src/client/strings.ts`, `apps/game/src/client/screens/*.tsx`
+- Create: `apps/game/src/client/theme.ts`, `apps/game/src/client/strings.ts`, `apps/game/src/client/clock.ts`, `apps/game/src/client/ui.tsx`, `apps/game/src/client/hud.tsx`, `apps/game/src/client/screens/{landing,join,lobby,arena,results}.tsx`
 - Modify: `apps/game/src/client/app.tsx`
 
-Экраны собираются на обычном React и inline-стилях из `theme.ts` — отдельная система стилей этому проекту не нужна.
+Интерфейс на обычном React и inline-стилях из `theme.ts`: отдельная система стилей этому проекту не нужна. Тексты — только на английском и только через `strings.ts`, чтобы язык менялся в одном месте.
+
+**Путь игрока.** Главная → «Create room» → адрес комнаты → **имя спрашиваем до входа в комнату** →
+лобби → отсчёт и раунд → результаты → «Play again». Имя запоминается, и во второй раз экран входа
+не показывается; сменить имя можно из лобби.
+
+**HUD** виден в отсчёте, раунде и результатах и всегда отвечает на четыре вопроса: какая фаза,
+сколько осталось, сколько у меня, кто ведёт. Он же показывает число игроков и состояние связи.
 
 - [ ] **Step 1: Создать `apps/game/src/client/theme.ts`**
 
@@ -561,44 +568,194 @@ export const theme = {
 
 ```ts
 export const strings = {
-  title: 'Кликер',
-  createRoom: 'Создать комнату',
-  nameLabel: 'Как тебя зовут',
-  enter: 'Войти',
-  copyInvite: 'Скопировать приглашение',
-  copyHostLink: 'Скопировать ссылку хоста',
-  start: 'Старт',
-  again: 'Ещё раунд',
-  click: 'Клик',
-  reconnecting: 'Переподключение…',
-  roundAborted: 'Раунд прерван, начните заново',
-  nobodyClicked: 'Никто не кликал',
-  wins: 'побеждает!',
+  title: 'Clicker',
+  tagline: 'Ten seconds. One button. Most clicks wins.',
+  createRoom: 'Create room',
+  nameLabel: 'Your name',
+  namePlaceholder: 'Anna',
+  enter: 'Enter',
+  changeName: 'Change name',
+  waiting: 'Waiting for the host to start',
+  players: 'Players',
+  copyInvite: 'Copy invite link',
+  copyHostLink: 'Copy host link',
+  copied: 'Copied',
+  start: 'Start',
+  again: 'Play again',
+  click: 'CLICK',
+  getReady: 'Get ready',
+  go: 'Go!',
+  finished: 'Finished',
+  you: 'You',
+  leader: 'Leader',
+  reconnecting: 'Reconnecting…',
+  roundAborted: 'The round was interrupted. Start a new one.',
+  nobodyClicked: 'Nobody clicked',
+  wins: 'wins!',
+  errors: {
+    not_host: 'Only the host can start a round',
+    not_joined: 'You are not in the room yet',
+    wrong_phase: 'Not now',
+    room_full: 'The room is full',
+    invalid_message: 'The server did not understand that',
+  },
 };
 ```
 
-- [ ] **Step 3: Создать экраны**
+- [ ] **Step 3: Создать часы `apps/game/src/client/clock.ts`**
 
-Пять файлов в `apps/game/src/client/screens/`: `landing.tsx` (кнопка «Создать комнату», ведёт на `/r/<roomId>`), `join.tsx` (поле ника, 1–20 символов, кнопка «Войти»), `lobby.tsx` (список игроков, кнопки копирования ссылок, «Старт» у хоста), `arena.tsx` (таймер по серверному времени, крупная кнопка на `onPointerDown`, `touch-action: manipulation`, свой счёт из `localClicks`), `results.tsx` (таблица мест и баннер победителя).
+Снимки приходят десять раз в секунду, а таймер должен идти плавно и по серверному времени.
+Отдельный тик на 100 мс держит только те компоненты, которым нужно время, — перерисовывать из-за
+него весь экран незачем.
 
-Кнопка клика активна строго между `goAt` и `endsAt` по серверному времени:
+```ts
+import { useEffect, useState } from 'react';
+import { serverNow } from './store';
+
+/** Server time, refreshed ten times a second. */
+export function useServerClock(): number {
+  const [now, setNow] = useState(serverNow);
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(serverNow()), 100);
+    return () => clearInterval(timer);
+  }, []);
+
+  return now;
+}
+
+/** Whole seconds left, never negative. */
+export function secondsLeft(until: number, now: number): number {
+  return Math.max(0, Math.ceil((until - now) / 1000));
+}
+```
+
+- [ ] **Step 4: Создать общие элементы `apps/game/src/client/ui.tsx`**
+
+Три штуки, которые повторяются на всех экранах: `Screen` (тёмный фон, центральная колонка шириной до
+860 пикселей, отступы), `Button` (крупная кнопка, `touch-action: manipulation`, состояние
+`disabled`), `CopyButton` (копирует строку в буфер и на две секунды меняет надпись на `Copied`).
+`CopyButton` обязан переживать отказ `navigator.clipboard`: в этом случае показывает саму ссылку,
+чтобы её можно было выделить руками.
+
+- [ ] **Step 5: Создать HUD `apps/game/src/client/hud.tsx`**
+
+Одна строка на широком экране, две — на узком. Слева фаза и таймер, в центре свой счёт, справа
+лидер и число игроков. Значения берутся из снимка, время — из `useServerClock`.
+
+```tsx
+import { strings } from './strings';
+import { secondsLeft, useServerClock } from './clock';
+import { useClient } from './store';
+import { theme } from './theme';
+
+export function Hud() {
+  const now = useServerClock();
+  const snapshot = useClient((state) => state.snapshot);
+  const you = useClient((state) => state.you);
+  const localClicks = useClient((state) => state.localClicks);
+  if (snapshot === null) return null;
+
+  const players = snapshot.players;
+  const leader = players.reduce<(typeof players)[number] | null>(
+    (best, player) => (best === null || player.clicks > best.clicks ? player : best),
+    null,
+  );
+
+  // The countdown counts to goAt, the round counts to endsAt.
+  const deadline =
+    snapshot.phase === 'countdown'
+      ? (snapshot.round?.goAt ?? now)
+      : (snapshot.round?.endsAt ?? now);
+  const label =
+    snapshot.phase === 'countdown'
+      ? strings.getReady
+      : snapshot.phase === 'running'
+        ? strings.go
+        : strings.finished;
+
+  return (
+    <div
+      data-testid="hud"
+      style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: 12,
+        justifyContent: 'space-between',
+        padding: '10px 14px',
+        background: theme.surface,
+        border: `1px solid ${theme.border}`,
+        borderRadius: 12,
+      }}
+    >
+      <span data-testid="hud-phase">
+        {label}
+        {snapshot.round !== null && snapshot.phase !== 'results' ? (
+          <strong data-testid="hud-timer" style={{ marginLeft: 8, color: theme.goldBright }}>
+            {secondsLeft(deadline, now)}
+          </strong>
+        ) : null}
+      </span>
+      <span data-testid="hud-you">
+        {strings.you}: <strong>{localClicks}</strong>
+      </span>
+      <span data-testid="hud-leader" style={{ color: theme.muted }}>
+        {leader === null ? '—' : `${strings.leader}: ${leader.name} ${leader.clicks}`} ·{' '}
+        {players.length}
+      </span>
+    </div>
+  );
+}
+```
+
+- [ ] **Step 6: Создать экраны в `apps/game/src/client/screens/`**
+
+- **`landing.tsx`** — название, строка `tagline`, одна кнопка `createRoom` с `data-testid="create-room"`.
+  По нажатию: `createRoom()` из `room-link.ts`, затем `history.pushState` на `/r/<roomId>`.
+- **`join.tsx`** — заголовок с номером комнаты, поле `data-testid="name-input"` (значение из
+  `savedName()`, `maxLength` из `MAX_NAME_LENGTH` протокола) и кнопка `data-testid="enter"`.
+  Кнопка неактивна, пока в поле после `trim` пусто. По нажатию: `saveName(name)` и вход в комнату.
+- **`lobby.tsx`** — список игроков `data-testid="players"` (у отключённых приглушённый цвет),
+  `CopyButton` с приглашением, у хоста ещё `CopyButton` со ссылкой хоста и кнопка
+  `data-testid="start"`. Не хосту вместо кнопки — строка `waiting`. Плюс ссылка `changeName`,
+  возвращающая на экран входа.
+- **`arena.tsx`** — `Hud`, сцена (Task 5) и кнопка `data-testid="click"` во всю ширину, высотой не
+  меньше 96 пикселей, по `onPointerDown`. Кнопка активна строго внутри раунда по серверному времени:
 
 ```tsx
 const live = snapshot.round !== null && now >= snapshot.round.goAt && now <= snapshot.round.endsAt;
 ```
 
-- [ ] **Step 4: Собрать `apps/game/src/client/app.tsx`**
+- **`results.tsx`** — `Hud`, сцена с подсвеченным победителем, баннер `data-testid="winner"`
+  (`«<name> wins!»` или `nobodyClicked`, если у первого места ноль кликов) и таблица мест
+  `data-testid="results"`. У хоста — кнопка `again` с тем же `data-testid="start"`, чтобы сквозной
+  тест не зависел от того, первый это раунд или второй.
 
-Выбор экрана: нет комнаты в адресе → Landing; нет ника → Join; иначе по фазе снимка → Lobby, Arena, Results. Поверх всего — плашка «Переподключение…», когда статус не `open`, и сообщение о прерванном раунде, когда `notice === 'round_aborted'`.
+- [ ] **Step 7: Собрать `apps/game/src/client/app.tsx`**
 
-- [ ] **Step 5: Проверить и закоммитить**
+Порядок выбора экрана: нет комнаты в адресе → `Landing`; имя не сохранено → `Join`; снимка ещё нет →
+`Lobby` со списком из одного себя; дальше по фазе — `lobby`, `arena` (`countdown` и `running`),
+`results`.
+
+Поверх всего два оповещения: плашка `reconnecting`, когда `status !== 'open'`, и `roundAborted`,
+когда `notice === 'round_aborted'`. Ошибка из `lastError` показывается текстом из `strings.errors`
+рядом с той кнопкой, которая её вызвала, и гаснет при следующем действии игрока.
+
+- [ ] **Step 8: Проверить глазами**
+
+Собрать (`pnpm --filter @clicker/app run build`), поднять `pnpm --filter @clicker/app dev`, открыть
+две вкладки в одной комнате и пройти путь целиком: создание, ввод имени, лобби, отсчёт, раунд,
+результаты. Отдельно посмотреть на узком экране (в браузере — режим телефона): HUD должен
+переноситься на две строки, кнопка клика оставаться во всю ширину, зум по двойному тапу не срабатывать.
+
+- [ ] **Step 9: Закоммитить**
 
 ```bash
 pnpm format
 pnpm --filter @clicker/app typecheck
 pnpm --filter @clicker/app run build
 git add apps/game
-git commit -m "feat(app): add the game screens"
+git commit -m "feat(app): add the menu, name entry, hud and screens"
 ```
 
 ---
@@ -761,7 +918,7 @@ export default defineConfig({
 
 - [ ] **Step 3: Написать `apps/game/e2e/round.spec.ts`**
 
-Сценарий: хост открывает главную и создаёт комнату; второй игрок заходит по её адресу; оба вводят ники и видят друг друга в лобби; хост запускает раунд; после отсчёта второй кликает пять раз; оба дожидаются результатов и видят одинаковую таблицу с победителем. Ждать фазу нужно по снимку, а не по таймеру: `await expect(page.getByTestId('phase')).toHaveText('running')`.
+Сценарий: хост открывает главную и создаёт комнату; второй игрок заходит по её адресу; оба вводят ники и видят друг друга в лобби; хост запускает раунд; после отсчёта второй кликает пять раз; оба дожидаются результатов и видят одинаковую таблицу с победителем. Ждать фазу нужно по снимку, а не по таймеру: `await expect(page.getByTestId('hud-phase')).toContainText('Go!')`.
 
 - [ ] **Step 4: Прогнать**
 
