@@ -1,7 +1,7 @@
 import { SELF } from 'cloudflare:test';
 import { generateId } from '@clicker/protocol';
 import { describe, expect, it } from 'vitest';
-import { connect, isError, isSnapshot, isWelcome } from './support';
+import { connect, isError, isSnapshot, isWelcome, type Snapshot } from './support';
 
 describe('room over websocket', () => {
   it('refuses a malformed room id before connecting', async () => {
@@ -42,5 +42,38 @@ describe('room over websocket', () => {
     expect(error.code).toBe('not_host');
 
     client.close();
+  });
+
+  it('plays a whole round and agrees on the winner in both clients', async () => {
+    const roomId = generateId();
+    const hostKey = generateId();
+    const host = await connect(roomId);
+    const guest = await connect(roomId);
+
+    host.send({ type: 'join', playerId: generateId(), name: 'Аня', hostKey });
+    guest.send({ type: 'join', playerId: generateId(), name: 'Боря' });
+    const hostWelcome = await host.waitFor(isWelcome);
+    expect(hostWelcome.isHost).toBe(true);
+    await guest.waitFor(isWelcome);
+
+    host.send({ type: 'start' });
+
+    // Отсчёт 50 мс, раунд 200 мс: значения заданы в vitest.config.ts.
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    for (let i = 0; i < 5; i += 1) {
+      guest.send({ type: 'click' });
+    }
+    host.send({ type: 'click' });
+
+    const hasResults = (message: Parameters<typeof isSnapshot>[0]): message is Snapshot =>
+      isSnapshot(message) && message.results !== null;
+    const results = await host.waitFor(hasResults);
+    const guestResults = await guest.waitFor(hasResults);
+
+    expect(results.results?.[0]).toMatchObject({ name: 'Боря', clicks: 5, rank: 1 });
+    expect(guestResults.results).toEqual(results.results);
+
+    host.close();
+    guest.close();
   });
 });

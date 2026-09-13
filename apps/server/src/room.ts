@@ -17,11 +17,14 @@ interface Session {
   publicId: string;
 }
 
+const SNAPSHOT_INTERVAL_MS = 100;
+
 export class Room extends Server<Env> {
   static options = { hibernate: true };
 
   #state: RoomState = createRoomState();
   #config: GameConfig = DEFAULT_CONFIG;
+  #timer: ReturnType<typeof setInterval> | null = null;
 
   override async onStart(): Promise<void> {
     this.#config = {
@@ -76,12 +79,18 @@ export class Room extends Server<Env> {
     await this.#run({ type: parsed.type, playerId: session.playerId }, connection);
   }
 
+  override async onAlarm(): Promise<void> {
+    await this.#run({ type: 'tick' });
+  }
+
   /** Единственный путь изменения состояния: правила, события, хранилище, будильник, рассылка. */
   async #run(command: Command, source?: Connection<Session>): Promise<void> {
     const applied = apply(this.#state, command, Date.now(), this.#config);
     this.#state = applied.state;
 
+    let phaseChanged = false;
     for (const event of applied.events) {
+      if (event.type === 'phaseChanged') phaseChanged = true;
       this.#handleEvent(event, source);
     }
 
@@ -89,7 +98,13 @@ export class Room extends Server<Env> {
       await this.#persist();
     }
     await this.#scheduleAlarm();
-    this.#broadcastSnapshot();
+    this.#syncSnapshotTimer();
+
+    // Во время раунда снимки шлёт таймер, вне раунда — каждое изменение.
+    // Смену фазы отправляем сразу: ждать до сотни миллисекунд тут нельзя.
+    if (phaseChanged || this.#timer === null) {
+      this.#broadcastSnapshot();
+    }
   }
 
   #handleEvent(event: GameEvent, source?: Connection<Session>): void {
@@ -100,6 +115,18 @@ export class Room extends Server<Env> {
     }
     if (event.type === 'rejected' && source !== undefined) {
       this.#send(source, { type: 'error', code: event.code });
+    }
+  }
+
+  #syncSnapshotTimer(): void {
+    const live = this.#state.phase === 'countdown' || this.#state.phase === 'running';
+    if (live && this.#timer === null) {
+      this.#timer = setInterval(() => this.#broadcastSnapshot(), SNAPSHOT_INTERVAL_MS);
+      return;
+    }
+    if (!live && this.#timer !== null) {
+      clearInterval(this.#timer);
+      this.#timer = null;
     }
   }
 
