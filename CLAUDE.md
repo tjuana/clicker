@@ -1,75 +1,75 @@
-# Clicker — правила работы над проектом
+# Clicker — how we work on this project
 
-Многопользовательская браузерная игра в реальном времени на Cloudflare Workers. Личный проект,
-бесплатный тариф, без корпоративных данных.
+A realtime multiplayer browser game on Cloudflare Workers. Personal project, free tier, no corporate
+data of any kind.
 
-Источник правды по замыслу — [спецификация](docs/superpowers/specs/2026-09-11-clicker-foundation-design.md).
-Ход работ — планы в [docs/superpowers/plans/](docs/superpowers/plans/). Описание проекта — [README.md](README.md).
+The design is the source of truth: [spec](docs/superpowers/specs/2026-09-11-clicker-foundation-design.md).
+Work in progress lives in [docs/superpowers/plans/](docs/superpowers/plans/). What the project is:
+[README.md](README.md).
 
-## Архитектура
+## Architecture
 
-Четыре слоя, зависимости только сверху вниз. Ни один слой не знает о том, что лежит выше.
+Four layers. Dependencies point downwards only — no layer knows anything about the ones above it.
 
 ```
-apps/game/src/client   экраны и 3D-сцена         знает про DOM и three.js
-apps/game/src/worker   комната на Durable Object  знает про Cloudflare и WebSocket
-packages/protocol      схемы сообщений            не знает ни про сервер, ни про браузер
-packages/game          правила игры               не знает вообще ни про что
+apps/game/src/client   screens and the 3D scene    knows about the DOM and three.js
+apps/game/src/worker   the room, a Durable Object  knows about Cloudflare and WebSockets
+packages/protocol      wire format                 knows about neither server nor browser
+packages/game          game rules                  knows about nothing at all
 ```
 
-Железные правила:
+Hard rules:
 
-- **`packages/game` — чистые функции.** Ни ввода-вывода, ни `Date.now()`, ни `Math.random()`, ни
-  глобальных объектов. Время и настройки приходят параметрами. Состояние не мутируется: `apply`
-  возвращает новое.
-- **Сервер — тонкий адаптер.** Он превращает сообщения в команды, отдаёт их правилам и рассылает
-  снимки. Никакой игровой логики в нём быть не должно.
-- **Клиент не знает правил.** Он отправляет намерения и рисует то, что прислал сервер. Сервер —
-  единственный источник правды о счёте и фазе.
-- **Секреты не пересекают границу.** `playerId` и `hostKey` наружу не уходят: клиентам видны только
-  публичные идентификаторы.
+- **`packages/game` is pure.** No I/O, no `Date.now()`, no `Math.random()`, no globals. Time and
+  config arrive as parameters. State is never mutated: `apply` returns a new one.
+- **The server is a thin adapter.** It turns messages into commands, hands them to the rules and
+  broadcasts snapshots. No game logic belongs there.
+- **The client knows no rules.** It sends intents and draws what the server sent. The server is the
+  only authority on score and phase.
+- **Secrets never cross the boundary.** `playerId` and `hostKey` stay server-side; clients only ever
+  see public ids.
 
-## Как писать код
+## Writing code
 
-- **Минимум кода.** Лучшее решение — то, где нечего удалить. Не добавляй абстракций «на будущее»:
-  интерфейс режима игры появится вместе со вторым режимом, не раньше.
-- **Структуры данных по задаче.** Поиск по ключу — объект или `Map`, а не перебор массива.
-  Проверка принадлежности — `Set`. Массив — только там, где важен порядок. Если структура заставляет
-  писать вложенные циклы, значит выбрана не та структура.
-- **Горячий путь считай.** Раунд — это до 15 кликов в секунду на игрока и рассылка снимков 10 раз в
-  секунду. На этом пути нельзя: писать в хранилище на каждое сообщение, собирать снимок отдельно для
-  каждого соединения, копировать коллекции без нужды.
-- **Оптимизируй по замеру, а не по ощущению.** Сначала понятный код, потом измерение, потом правка.
-  Каждое такое место комментируй: почему тут не «просто и понятно».
-- **Комментарии объясняют «почему».** Что делает код, видно из кода.
+- **Less code.** The best version is the one with nothing left to remove. Do not add abstractions for
+  an imagined future: the game-mode interface arrives with the second game mode, not before.
+- **Data structures fit the job.** Lookup by key is an object or a `Map`, never a scan over an array.
+  Membership is a `Set`. An array is for order. If a structure forces nested loops, it is the wrong
+  structure.
+- **Count the hot path.** A round is up to 15 clicks per second per player plus a snapshot broadcast
+  ten times a second. On that path: no storage write per message, no snapshot built separately for
+  each connection, no copying collections without reason.
+- **Optimise from a measurement, not a feeling.** Clear code first, then measure, then change. Comment
+  every such spot: say why it is not the obvious version.
+- **Comments explain why.** What the code does is visible in the code.
 
-## Тесты
+## Tests
 
-- Тесты пишутся до кода: красный, зелёный, уборка.
-- Проверяется поведение, а не устройство. Тест, который сломается от переименования поля, — плохой.
-- Правила — быстрыми юнит-тестами, сервер — интеграционными в настоящем рантайме Workers,
-  игра целиком — сквозным тестом в двух браузерах.
-- Нестабильный тест хуже отсутствующего: гонки не воспроизводим таймерами, а исключаем по построению.
+- Test first: red, green, clean up.
+- Assert behaviour, not structure. A test that breaks when a field is renamed is a bad test.
+- Rules get fast unit tests, the server gets integration tests in the real Workers runtime, the whole
+  game gets an end-to-end test in two browsers.
+- A flaky test is worse than no test: never reproduce a race with timers — remove the race instead.
 
-## Прежде чем сказать «готово»
+## Before claiming anything is done
 
 ```bash
-pnpm check      # линтер и форматтер
-pnpm typecheck  # типы
-pnpm test       # все тесты
+pnpm check      # linter and formatter
+pnpm typecheck  # types
+pnpm test       # every test
 ```
 
-Для интерфейса этого мало: сделай снимок экрана из настоящего браузера и посмотри на него. Первая
-версия 3D-сцены прошла все проверки и при этом выглядела сломанной.
+For anything visual that is not enough: take a screenshot from a real browser and look at it. The
+first version of the 3D scene passed every check and still looked broken.
 
-## Коммиты
+## Commits
 
-Conventional Commits, английский, по одному логическому изменению на коммит. **Без подписей Claude:**
-никаких `Co-Authored-By`, «Generated with…» и эмодзи-роботов.
+Conventional Commits, English, one logical change per commit. **No Claude attribution:** no
+`Co-Authored-By`, no "Generated with…", no robot emoji.
 
-## Документация
+## Documentation
 
-- Меняешь поведение — правь спецификацию в том же заходе.
-- Меняешь структуру или команды — правь README.
-- План можно править только по факту: если реальность разошлась с планом, побеждает реальность,
-  а расхождение фиксируется в плане отдельным коммитом.
+- Behaviour changed? Update the spec in the same pass.
+- Layout or commands changed? Update the README.
+- Plans are only edited against reality: when reality and the plan disagree, reality wins and the
+  divergence is recorded in the plan as its own commit.

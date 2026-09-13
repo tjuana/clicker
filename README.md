@@ -1,72 +1,74 @@
 # Clicker
 
-Многопользовательская игра-кликер в браузере. Хост открывает комнату и делится ссылкой, все жмут
-одну кнопку десять секунд, побеждает тот, кто накликал больше. Считает клики сервер, поэтому у всех
-игроков один и тот же счёт и один и тот же победитель.
+A multiplayer click race in the browser. The host opens a room and shares the link, everyone hammers
+one button for ten seconds, and whoever lands the most clicks wins. The server does the counting, so
+every player sees the same score and the same winner.
 
-Работает на бесплатном тарифе Cloudflare: Worker раздаёт клиент, а состояние комнаты живёт в
-Durable Object, который общается с игроками по WebSocket.
+It runs on Cloudflare's free tier: a Worker serves the client, and each room lives in a Durable
+Object that talks to players over WebSockets.
 
-## Как играть
+## How to play
 
-1. Открыть адрес игры и создать комнату.
-2. Отправить ссылку остальным — она же приглашение, угадать её нельзя.
-3. Хост жмёт «Старт»: три секунды отсчёта, затем десять секунд раунда.
-4. Побеждает тот, у кого больше кликов. При равенстве — кто набрал счёт раньше.
+1. Open the game and create a room.
+2. Send the link to everyone else — the link is the invitation, and it cannot be guessed.
+3. The host presses Start: three seconds of countdown, then a ten second round.
+4. Most clicks wins. On a tie, whoever reached that score first.
 
-## Архитектура
+## Architecture
 
-Четыре слоя, зависимости идут только вниз.
+Four layers, dependencies pointing downwards only.
 
 ```
-apps/game/src/client   экраны, 3D-сцена, соединение   React, react-three-fiber, zustand, partysocket
-apps/game/src/worker   комната                        partyserver, Durable Objects
-packages/protocol      схемы сообщений и снимки       valibot
-packages/game          правила игры                   чистый TypeScript, без зависимостей
+apps/game/src/client   screens, 3D scene, connection   React, react-three-fiber, zustand, partysocket
+apps/game/src/worker   the room                        partyserver, Durable Objects
+packages/protocol      wire format and snapshots       valibot
+packages/game          game rules                      plain TypeScript, no dependencies
 ```
 
-- **`packages/game`** — состояние комнаты и все правила: фазы раунда, подсчёт кликов с ограничением
-  частоты, ничьи, победитель. Чистые функции: время и настройки приходят параметрами, состояние не
-  мутируется. Поэтому правила проверяются обычными юнит-тестами за миллисекунды.
-- **`packages/protocol`** — что летает по проводу. Схемы валидируют всё входящее, а типы выводятся из
-  них же. Здесь же сборка снимка состояния: секретные `playerId` и `hostKey` в него не попадают.
-- **`apps/game/src/worker`** — тонкий адаптер. Принимает сообщения, отдаёт их правилам, рассылает
-  снимки десять раз в секунду, двигает фазы будильником Durable Object и хранит состояние, чтобы
-  перезапуск не потерял комнату.
-- **`apps/game/src/client`** — экраны и сцена. Правил не знает: отправляет намерения и рисует то, что
-  прислал сервер.
+- **`packages/game`** — room state and every rule: round phases, click counting with a rate limit,
+  tie-breaks, the winner. Pure functions: time and config arrive as parameters and state is never
+  mutated, so the rules are covered by ordinary unit tests that run in milliseconds.
+- **`packages/protocol`** — what travels over the wire. Schemas validate everything incoming and the
+  types are inferred from those same schemas. Snapshots are built here too: the secret `playerId` and
+  `hostKey` never make it in.
+- **`apps/game/src/worker`** — a thin adapter. It accepts messages, hands them to the rules,
+  broadcasts snapshots ten times a second, drives phase changes with a Durable Object alarm and
+  persists state so a restart cannot lose the room.
+- **`apps/game/src/client`** — screens and the scene. It knows no rules: it sends intents and draws
+  whatever the server sent.
 
-Клиент и Worker собираются в одно приложение плагином `@cloudflare/vite-plugin` и уезжают одним
-деплоем.
+The client and the Worker are built into one application by `@cloudflare/vite-plugin` and ship as a
+single deploy.
 
-### Комнаты и доступ
+### Rooms and access
 
-Общих секретов нет. Ссылка на комнату содержит случайный 128-битный идентификатор и сама по себе
-служит приглашением. Права хоста даёт отдельный ключ: он хранится в браузере создателя комнаты и
-никогда не попадает в адресную строку — на дейли экран показывают всем.
+There are no shared secrets. A room link carries a random 128-bit id and is itself the invitation.
+Host rights come from a separate key that lives in the creator's browser and never appears in the
+address bar — on a standup the screen is shared with everyone.
 
-## Команды
+## Commands
 
 ```bash
-pnpm install                              # установка (нужен Node 22 и corepack)
-pnpm --filter @clicker/app dev            # разработка: клиент и Worker в одном сервере
-pnpm test                                 # все тесты
-pnpm typecheck                            # проверка типов
-pnpm check                                # линтер и форматтер
-pnpm format                               # автоформатирование
-pnpm --filter @clicker/app run build      # сборка
-pnpm --filter @clicker/app run e2e        # сквозные тесты в браузере
-pnpm --filter @clicker/app run deploy     # сборка и публикация в Cloudflare
+pnpm install                              # setup (needs Node 22 and corepack)
+pnpm --filter @clicker/app dev            # develop: client and Worker in one server
+pnpm test                                 # every test
+pnpm typecheck                            # types
+pnpm check                                # linter and formatter
+pnpm format                               # apply formatting
+pnpm --filter @clicker/app run build      # build
+pnpm --filter @clicker/app run e2e        # end-to-end tests in a browser
+pnpm --filter @clicker/app run deploy     # build and publish to Cloudflare
 ```
 
-## Состояние работ
+## Status
 
-| Часть | Статус |
+| Part | State |
 |---|---|
-| Правила игры (`packages/game`) | готово, 60 тестов |
-| Протокол (`packages/protocol`) | готово, 31 тест |
-| Сервер комнаты (`apps/game/src/worker`) | готово, 15 интеграционных тестов в рантайме Workers |
-| Клиент, 3D-сцена, сквозные тесты, деплой | в работе |
+| Game rules (`packages/game`) | done, 60 tests |
+| Wire format (`packages/protocol`) | done, 31 tests |
+| Room server (`apps/game/src/worker`) | done, 15 integration tests in the Workers runtime |
+| Client, 3D scene, end-to-end tests, deploy | in progress |
 
-Замысел целиком описан в [спецификации](docs/superpowers/specs/2026-09-11-clicker-foundation-design.md),
-ход работ — в [планах](docs/superpowers/plans/). Правила работы над кодом — в [CLAUDE.md](CLAUDE.md).
+The full design is in the [spec](docs/superpowers/specs/2026-09-11-clicker-foundation-design.md),
+the work itself in the [plans](docs/superpowers/plans/), and the rules for working on the code in
+[CLAUDE.md](CLAUDE.md).
