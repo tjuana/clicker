@@ -18,7 +18,7 @@
 
 Пять находок, ради которых стоило собрать прототип:
 
-1. **pnpm 12 читает список разрешённых сборочных скриптов только из `package.json`.** Тот же `onlyBuiltDependencies` в `pnpm-workspace.yaml` молча игнорируется, `workerd` остаётся неразвёрнутым, и тесты не запускаются вообще. В репозитории сейчас список лежит именно в yaml — Task 1 это чинит.
+1. **В pnpm 12 разрешение сборочных скриптов называется `allowBuilds` и живёт в `pnpm-workspace.yaml`.** Старый `onlyBuiltDependencies` не работает нигде: в `package.json` pnpm ругается, что поле `pnpm` больше не читает, а в yaml он молча игнорируется с 11-й версии. Пока это не поправлено, `pnpm install` падает с `ERR_PNPM_IGNORED_BUILDS`, `workerd` не разворачивается и тесты сервера не запускаются. В репозитории сейчас лежит старый вариант — Task 1 это чинит.
 2. **Смену фазы нужно рассылать сразу.** Если полагаться только на таймер снимков, клиенты узнают о старте раунда с задержкой до 100 мс, а короткий отсчёт можно вообще не увидеть. В прототипе это поймал тест.
 3. **Мягкое выселение объекта (`evictDurableObject`) во время раунда не срабатывает:** объект занят таймером рассылки, и выселение ждёт его освобождения. Перезапуск посреди игры проверяется через `abortAllDurableObjects()`.
 4. **`SELF` и `env` из `cloudflare:test` помечены устаревшими** в пользу `exports` и `env` из `cloudflare:workers`, но у `exports.default` сейчас нет типа `default`, и `tsc` на нём падает. Пока берём `SELF` — он работает и типизирован.
@@ -55,25 +55,24 @@ apps/server/
 **Files:**
 - Modify: `pnpm-workspace.yaml`, `package.json`, `.gitignore`
 
-- [ ] **Step 1: Добавить приложения в воркспейс — `pnpm-workspace.yaml`**
+- [ ] **Step 1: Переписать `pnpm-workspace.yaml` целиком**
 
-Список разрешённых сборочных скриптов отсюда убираем: pnpm 12 его здесь не видит.
+Добавляем приложения и разрешаем сборочные скрипты. Ключ именно `allowBuilds`: прежний `onlyBuiltDependencies` в pnpm 12 не действует ни здесь, ни в `package.json`.
 
 ```yaml
 packages:
   - "packages/*"
   - "apps/*"
+
+# Разрешаем сборочные скрипты: без workerd не поднимется рантайм Workers в тестах.
+allowBuilds:
+  esbuild: true
+  workerd: true
 ```
 
-- [ ] **Step 2: Перенести разрешённые сборки в корневой `package.json`**
+- [ ] **Step 2: Убедиться, что в корневом `package.json` нет поля `pnpm`**
 
-Добавить поле `pnpm` между `engines` и `scripts`. Без него `workerd` не развернётся и тесты сервера не запустятся.
-
-```json
-  "pnpm": {
-    "onlyBuiltDependencies": ["esbuild", "workerd"]
-  },
-```
+Если оно там появится, pnpm при каждой установке будет печатать предупреждение, что это поле больше не читается. Настройки установки живут только в `pnpm-workspace.yaml`.
 
 - [ ] **Step 3: Добавить в `.gitignore` сгенерированные типы Worker**
 
@@ -86,15 +85,15 @@ worker-configuration.d.ts
 - [ ] **Step 4: Проверить, что воркспейс цел**
 
 Run: `pnpm install`
-Expected: `Scope: 3 of 4 workspace projects` не появится (приложений ещё нет), установка проходит без ошибки `ERR_PNPM_IGNORED_BUILDS`.
+Expected: установка проходит без предупреждений про поле `pnpm` и без ошибки `ERR_PNPM_IGNORED_BUILDS`.
 
 Run: `pnpm test`
-Expected: как и раньше, 45 тестов в game и 23 в protocol.
+Expected: как и раньше, 60 тестов в game и 31 в protocol.
 
 - [ ] **Step 5: Закоммитить**
 
 ```bash
-git add pnpm-workspace.yaml package.json .gitignore pnpm-lock.yaml
+git add pnpm-workspace.yaml .gitignore pnpm-lock.yaml
 git commit -m "chore: add apps to the workspace and allow workerd build scripts"
 ```
 
@@ -195,7 +194,7 @@ export default defineConfig({
 - [ ] **Step 5: Установить зависимости**
 
 Run: `pnpm install`
-Expected: `Scope: all 4 workspace projects`, ставятся partyserver, wrangler, плагин тестов. Ошибки `ERR_PNPM_IGNORED_BUILDS` быть не должно — если она появилась, значит поле `pnpm` из Task 1 не на месте.
+Expected: `Scope: all 4 workspace projects`, ставятся partyserver, wrangler, плагин тестов, у `workerd` отрабатывает postinstall. Ошибки `ERR_PNPM_IGNORED_BUILDS` быть не должно — если она появилась, значит `allowBuilds` из Task 1 не на месте.
 
 - [ ] **Step 6: Проверить генерацию типов окружения**
 
@@ -913,7 +912,7 @@ pnpm test
 Expected:
 - Biome: `No fixes applied.`;
 - проверка типов: три раза `tsc --noEmit`, перед серверной — вывод `wrangler types`, ошибок нет;
-- тесты: 45 в game, 23 в protocol, 6 в server.
+- тесты: 60 в game, 31 в protocol, 6 в server.
 
 - [ ] **Step 2: Поднять сервер локально и убедиться, что он стартует**
 
@@ -940,7 +939,7 @@ pnpm typecheck
 pnpm test
 ```
 
-Ожидается: линтер чист, проверка типов молчит, 74 теста суммарно (45 + 23 + 6), ноль падений.
+Ожидается: линтер чист, проверка типов молчит, 97 тестов суммарно (60 + 31 + 6), ноль падений.
 
 Сверить со спецификацией:
 - §4 «Комнаты и доступ» — проверка формата идентификатора комнаты до подключения; создание комнаты по требованию;
