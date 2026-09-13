@@ -57,6 +57,7 @@ export class Room extends Server<Env> {
     this.#state = syncConnections(state, live, Date.now());
     await this.#persist();
     await this.#scheduleAlarm();
+    this.#broadcastSnapshot();
   }
 
   override async onMessage(connection: Connection<Session>, message: WSMessage): Promise<void> {

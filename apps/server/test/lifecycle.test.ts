@@ -1,4 +1,9 @@
-import { abortAllDurableObjects, runInDurableObject } from 'cloudflare:test';
+import {
+  abortAllDurableObjects,
+  evictDurableObject,
+  runInDurableObject,
+  SELF,
+} from 'cloudflare:test';
 import { env } from 'cloudflare:workers';
 import { generateId } from '@clicker/protocol';
 import { describe, expect, it } from 'vitest';
@@ -83,5 +88,34 @@ describe('room lifecycle', () => {
     expect(snapshot.round).toBeNull();
 
     returning.close();
+  });
+
+  it('broadcasts the recovered state to an already-connected client after a restart', async () => {
+    const roomId = generateId();
+    const client = await connect(roomId);
+
+    client.send({ type: 'join', playerId: generateId(), name: 'Аня' });
+    await client.waitFor(isWelcome);
+    await client.waitFor(isSnapshot);
+    const before = client.received.length;
+
+    // Мягкое выселение (не abortAllDurableObjects): хранилище сохраняется, а
+    // хайбернейтящийся сокет клиента переживает пересоздание объекта.
+    const stub = env.Room.get(env.Room.idFromName(roomId));
+    await evictDurableObject(stub);
+
+    // Будим объект обычным HTTP-запросом, а не через сокет клиента: если бы клиент
+    // сам что-то отправил, снимок пришёл бы из onMessage, а не из onStart.
+    await SELF.fetch(new Request(`https://example.com/parties/room/${roomId}`));
+
+    const snapshot = await client.waitFor(
+      (message): message is Snapshot =>
+        isSnapshot(message) && client.received.indexOf(message) >= before,
+    );
+
+    expect(snapshot.phase).toBe('lobby');
+    expect(snapshot.players).toEqual([{ id: '1', name: 'Аня', clicks: 0, connected: true }]);
+
+    client.close();
   });
 });
