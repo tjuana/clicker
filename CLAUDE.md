@@ -67,6 +67,27 @@ first version of the 3D scene passed every check and still looked broken.
 Conventional Commits, English, one logical change per commit. **No Claude attribution:** no
 `Co-Authored-By`, no "Generated with…", no robot emoji.
 
+## The team
+
+Work is done by specialised agents, defined in [.claude/agents/](.claude/agents/). What makes them
+worth having is not the job titles — it is the boundaries: each one owns a zone and is forbidden
+from the others. That is what keeps the layers above from eroding.
+
+| Agent | Owns | Must not touch |
+|---|---|---|
+| `engine` | rules, wire format, the room server | anything in `src/client` |
+| `ui` | screens, HUD, input, texts | `packages/**`, `src/worker` |
+| `qa` | tests at every level | production code — it reports defects, it does not fix them |
+
+Three more roles — graphics, game design, devops — get their own agents when there is steady work
+for them: a real scene to build, a second mode to balance, a deploy that has become routine. An
+agent with nothing to own is overhead.
+
+Shared rituals live as skills; the one that matters most here is `verify-visually`, because a green
+suite says nothing about how something looks. Repeatable chores live as commands in
+[.claude/commands/](.claude/commands/) — `/checks` runs the whole verification and reports it
+honestly.
+
 ## Documentation
 
 - Behaviour changed? Update the spec in the same pass.
