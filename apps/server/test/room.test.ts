@@ -5,6 +5,9 @@ import { generateId } from '@clicker/protocol';
 import { describe, expect, it } from 'vitest';
 import { connect, isError, isSnapshot, isWelcome, type Snapshot } from './support';
 
+const isRunningSnapshot = (message: Parameters<typeof isSnapshot>[0]): message is Snapshot =>
+  isSnapshot(message) && message.phase === 'running';
+
 describe('room over websocket', () => {
   it('refuses a malformed room id before connecting', async () => {
     const response = await SELF.fetch(
@@ -71,8 +74,10 @@ describe('room over websocket', () => {
 
     host.send({ type: 'start' });
 
-    // Отсчёт 50 мс, раунд 200 мс: значения заданы в vitest.config.ts.
-    await new Promise((resolve) => setTimeout(resolve, 80));
+    // goAt отсчитывается от момента, когда сервер обработал start, а не от
+    // отправки сообщения: ждём фазу running по снимку, а не фиксированную паузу,
+    // иначе на медленном раннере клики попадут ещё в countdown и молча пропадут.
+    await host.waitFor(isRunningSnapshot);
     for (let i = 0; i < 5; i += 1) {
       guest.send({ type: 'click' });
     }
@@ -98,9 +103,7 @@ describe('room over websocket', () => {
     await host.waitFor(isWelcome);
     host.send({ type: 'start' });
 
-    await host.waitFor(
-      (message): message is Snapshot => isSnapshot(message) && message.phase === 'running',
-    );
+    await host.waitFor(isRunningSnapshot);
     for (let i = 0; i < 3; i += 1) {
       host.send({ type: 'click' });
     }
@@ -159,9 +162,7 @@ describe('room over websocket', () => {
     host.send({ type: 'join', playerId: generateId(), name: 'Аня', hostKey: generateId() });
     await host.waitFor(isWelcome);
     host.send({ type: 'start' });
-    await host.waitFor(
-      (message): message is Snapshot => isSnapshot(message) && message.phase === 'running',
-    );
+    await host.waitFor(isRunningSnapshot);
 
     // Пять кликов подряд во время раунда: дедлайн (endsAt + lateGraceMs) не
     // меняется, так что будильник не должен переписываться ни разу.
@@ -185,6 +186,50 @@ describe('room over websocket', () => {
     });
 
     expect(setAlarmCalls).toBe(0);
+
+    host.close();
+  });
+
+  it('rejects a malformed frame with invalid_message', async () => {
+    const client = await connect(generateId());
+    client.sendRaw('{');
+
+    const error = await client.waitFor(isError);
+    expect(error.code).toBe('invalid_message');
+
+    client.close();
+  });
+
+  it('rejects a click sent before joining with not_joined', async () => {
+    const client = await connect(generateId());
+    client.send({ type: 'click' });
+
+    const error = await client.waitFor(isError);
+    expect(error.code).toBe('not_joined');
+
+    client.close();
+  });
+
+  it('streams more than one snapshot during a running round', async () => {
+    const roomId = generateId();
+    const host = await connect(roomId);
+
+    host.send({ type: 'join', playerId: generateId(), name: 'Аня', hostKey: generateId() });
+    await host.waitFor(isWelcome);
+    host.send({ type: 'start' });
+    await host.waitFor(isRunningSnapshot);
+
+    // 10 Гц рассылка — сердце сервера: ждём, пока накопится хотя бы три снимка
+    // фазы running, вместо того чтобы гадать с фиксированной паузой.
+    const deadline = Date.now() + 2000;
+    let runningSnapshots: Snapshot[] = [];
+    do {
+      runningSnapshots = host.received.filter(isRunningSnapshot);
+      if (runningSnapshots.length >= 3) break;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    } while (Date.now() < deadline);
+
+    expect(runningSnapshots.length).toBeGreaterThanOrEqual(3);
 
     host.close();
   });

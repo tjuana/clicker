@@ -1,6 +1,6 @@
 import { SELF } from 'cloudflare:test';
 import { parseServerMessage, type ServerMessage } from '@clicker/protocol';
-import { expect } from 'vitest';
+import { afterEach, expect } from 'vitest';
 
 export type Snapshot = Extract<ServerMessage, { type: 'snapshot' }>;
 export type Welcome = Extract<ServerMessage, { type: 'welcome' }>;
@@ -27,6 +27,11 @@ export class Client {
     this.socket.send(JSON.stringify(message));
   }
 
+  /** Отправка сырой строки в обход JSON.stringify — для проверки битых кадров. */
+  sendRaw(raw: string): void {
+    this.socket.send(raw);
+  }
+
   close(): void {
     this.socket.close();
   }
@@ -47,6 +52,16 @@ export class Client {
   }
 }
 
+// Соединения, открытые текущим тестом: если тест упадёт на середине, они всё
+// равно закроются в afterEach и не будут держать Durable Object живым до
+// конца файла.
+const openClients = new Set<Client>();
+
+afterEach(() => {
+  for (const client of openClients) client.close();
+  openClients.clear();
+});
+
 export async function connect(roomId: string): Promise<Client> {
   const response = await SELF.fetch(
     new Request(`https://example.com/parties/room/${roomId}`, {
@@ -57,5 +72,7 @@ export async function connect(roomId: string): Promise<Client> {
   const socket = response.webSocket;
   if (!socket) throw new Error('no websocket in the response');
   socket.accept();
-  return new Client(socket);
+  const client = new Client(socket);
+  openClients.add(client);
+  return client;
 }
