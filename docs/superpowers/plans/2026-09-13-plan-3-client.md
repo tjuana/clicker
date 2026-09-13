@@ -307,6 +307,11 @@ git commit -m "feat(app): serve the client and the worker from one vite app"
 
 ### Task 3: Соединение, состояние и ссылки на комнату
 
+> **Выполнено, но частично устарело.** Код этой задачи уже в репозитории. Формат сообщений после неё
+> изменился: у каждого сообщения появилось поле версии `v`, а `{ type: 'click' }` стал
+> `{ type: 'input', input: { type: 'click' } }`. Приводит их в порядок план 4 — здесь снипеты
+> оставлены как есть, чтобы история задачи совпадала с тем, что было сделано.
+
 **Files:**
 - Create: `apps/game/src/client/room-link.ts`, `apps/game/src/client/store.ts`, `apps/game/src/client/net.ts`
 
@@ -657,8 +662,10 @@ export function Hud() {
   if (snapshot === null) return null;
 
   const players = snapshot.players;
+  // Scores live in the mode's slot: the generic part of a snapshot knows nothing about clicks.
+  const scoreOf = (id: string): number => snapshot.data.scores[id] ?? 0;
   const leader = players.reduce<(typeof players)[number] | null>(
-    (best, player) => (best === null || player.clicks > best.clicks ? player : best),
+    (best, player) => (best === null || scoreOf(player.id) > scoreOf(best.id) ? player : best),
     null,
   );
 
@@ -700,7 +707,7 @@ export function Hud() {
         {strings.you}: <strong>{localClicks}</strong>
       </span>
       <span data-testid="hud-leader" style={{ color: theme.muted }}>
-        {leader === null ? '—' : `${strings.leader}: ${leader.name} ${leader.clicks}`} ·{' '}
+        {leader === null ? '—' : `${strings.leader}: ${leader.name} ${scoreOf(leader.id)}`} ·{' '}
         {players.length}
       </span>
     </div>
@@ -863,7 +870,14 @@ const Race = lazy(() => import('../scene/race'));
   }}
 >
   <Suspense fallback={null}>
-    <Race racers={snapshot.players} you={you} />
+    {/* The scene knows nothing about the wire format: it gets ids and numbers. */}
+    <Race
+      racers={snapshot.players.map((player) => ({
+        id: player.id,
+        clicks: snapshot.data.scores[player.id] ?? 0,
+      }))}
+      you={you}
+    />
   </Suspense>
 </div>
 ```
