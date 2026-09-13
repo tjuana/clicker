@@ -52,8 +52,12 @@ export function connect(roomId: string, name: string): Connection {
   });
 
   return {
-    start: () => send({ type: 'start' }),
+    start: () => {
+      useClient.getState().clearError();
+      send({ type: 'start' });
+    },
     click: () => {
+      useClient.getState().clearError();
       if (send({ type: 'click' })) useClient.getState().countClick();
     },
     close: () => {

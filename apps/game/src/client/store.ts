@@ -11,13 +11,14 @@ interface ClientState {
   /** Разница между часами сервера и браузера, по максимуму последних значений. */
   offset: number;
   localClicks: number;
-  /** `goAt` текущего раунда: по нему видно, что начался новый раунд, даже если снимок пропущен. */
+  /** `goAt` of the current round: it shows a new round has started even if a snapshot was missed. */
   currentGoAt: number | null;
-  lastError: ServerErrorCode | 'invalid_message' | null;
+  lastError: ServerErrorCode | null;
   setStatus: (status: Status) => void;
   welcome: (you: string, isHost: boolean) => void;
   receive: (snapshot: SnapshotMessage) => void;
   fail: (code: ServerErrorCode | 'invalid_message') => void;
+  clearError: () => void;
   countClick: () => void;
 }
 
@@ -50,6 +51,7 @@ export const useClient = create<ClientState>((set) => ({
     });
   },
   fail: (code) => set({ lastError: code }),
+  clearError: () => set({ lastError: null }),
   countClick: () => set((state) => ({ localClicks: state.localClicks + 1 })),
 }));
 
