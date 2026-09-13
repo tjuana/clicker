@@ -24,6 +24,7 @@
 4. **Браузеры Playwright должны совпадать с его версией.** На машине лежали сборки 1193 и 1208, Playwright 1.63 потребовал 1243 и отказался стартовать, пока не выполнить `playwright install chromium`.
 5. **Клиентский бандл — 1,1 МБ (302 КБ сжатым)**, почти целиком three.js. Сцена подключается лениво, чтобы экран входа не тянул её за собой.
 6. **`THREE.Clock: This module has been deprecated`** — предупреждение из внутренностей react-three-fiber, не из нашего кода. Ничего не ломает, исправить нечем.
+7. **Первая версия сцены выглядела сломанной, и это нашлось только глазами.** Три ошибки, все учтены в коде ниже: высота столбика считалась относительно лидера, поэтому игрок, который в комнате один, всегда упирался в максимум и роста не видел; камере не задавали, куда смотреть, и кадр получался случайным — столбик уезжал за верхний край; полотно во всю ширину при высоте 240 пикселей давало соотношение сторон около 8:1 и сплющивало сцену в полоску. Отсюда правило: сцену проверять снимком экрана из настоящего браузера, а не только тестами.
 
 ## Как выполнять
 
@@ -623,36 +624,58 @@ interface Racer {
   clicks: number;
 }
 
-function Bar({ index, share, gold }: { index: number; share: number; gold: boolean }) {
+/**
+ * Высота считается от постоянного потолка, а не от лидера: иначе игрок,
+ * который в комнате один, всегда упёрт в максимум и роста не видит.
+ * Потолок подрастает, если кто-то его перебил.
+ */
+const BASE_CEILING = 40;
+const MAX_HEIGHT = 2.6;
+/** Столбик новичка должен быть виден, а не лежать лепёшкой на полу. */
+const MIN_HEIGHT = 0.18;
+
+function Bar({ x, share, gold }: { x: number; share: number; gold: boolean }) {
   const mesh = useRef<Mesh>(null);
 
   useFrame((_state, delta) => {
     if (mesh.current === null) return;
-    const target = 0.2 + share * 3;
+    const target = MIN_HEIGHT + share * MAX_HEIGHT;
     mesh.current.scale.y = MathUtils.damp(mesh.current.scale.y, target, 6, delta);
     mesh.current.position.y = mesh.current.scale.y / 2;
   });
 
   return (
-    <mesh ref={mesh} position={[index * 1.4 - 2, 0, 0]}>
-      <boxGeometry args={[1, 1, 1]} />
-      <meshStandardMaterial color={gold ? theme.goldBright : '#4a5170'} />
+    <mesh ref={mesh} position={[x, 0, 0]}>
+      <boxGeometry args={[0.7, 1, 0.7]} />
+      <meshStandardMaterial color={gold ? theme.goldBright : '#5b678f'} />
     </mesh>
   );
 }
 
 export default function Race({ racers, you }: { racers: Racer[]; you: string | null }) {
-  const best = Math.max(1, ...racers.map((racer) => racer.clicks));
+  const ceiling = Math.max(BASE_CEILING, ...racers.map((racer) => racer.clicks));
 
   return (
-    <Canvas camera={{ position: [0, 3, 8], fov: 45 }}>
-      <ambientLight intensity={0.6} />
-      <directionalLight position={[4, 6, 3]} intensity={1.2} />
+    <Canvas
+      camera={{ position: [0, 1.5, 5.5], fov: 40 }}
+      onCreated={({ camera }) => camera.lookAt(0, 0.75, 0)}
+    >
+      <ambientLight intensity={0.7} />
+      <directionalLight position={[4, 8, 5]} intensity={1.4} />
+
+      {/* Пол: без него столбики висят в пустоте и не с чем сравнить высоту.
+          Он заметно светлее панели и намеренно огромный — чтобы дальний край
+          уходил за кадр и не читался как случайная полоса поперёк сцены. */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]}>
+        <planeGeometry args={[40, 40]} />
+        <meshStandardMaterial color="#2b3350" />
+      </mesh>
+
       {racers.map((racer, index) => (
         <Bar
           key={racer.id}
-          index={index}
-          share={racer.clicks / best}
+          x={(index - (racers.length - 1) / 2) * 1.1}
+          share={racer.clicks / ceiling}
           gold={racer.id === you}
         />
       ))}
@@ -663,12 +686,30 @@ export default function Race({ racers, you }: { racers: Racer[]; you: string | n
 
 - [ ] **Step 2: Подключить сцену лениво**
 
-В аренe и результатах:
+В арене и результатах:
 
 ```tsx
 const Race = lazy(() => import('../scene/race'));
 ```
 и обернуть в `<Suspense fallback={null}>`. Три.js весит около мегабайта, и экрану входа он не нужен.
+
+Контейнер сцены обязан держать пропорции — иначе она сплющивается в полоску во всю ширину экрана:
+
+```tsx
+<div
+  style={{
+    aspectRatio: '3 / 2',
+    maxHeight: 420,
+    background: theme.surface,
+    borderRadius: 12,
+    overflow: 'hidden',
+  }}
+>
+  <Suspense fallback={null}>
+    <Race racers={snapshot.players} you={you} />
+  </Suspense>
+</div>
+```
 
 - [ ] **Step 3: Проверить размер сборки**
 
