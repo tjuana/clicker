@@ -83,8 +83,16 @@ Three more roles — graphics, game design, devops — get their own agents when
 for them: a real scene to build, a second mode to balance, a deploy that has become routine. An
 agent with nothing to own is overhead.
 
-Shared rituals live as skills; the one that matters most here is `verify-visually`, because a green
-suite says nothing about how something looks. Repeatable chores live as commands in
+Shared rituals live as skills in [.claude/skills/](.claude/skills/), so they travel with the
+repository and every agent has them:
+
+- **`verify-visually`** — a green suite says nothing about how something looks. Screenshot it and
+  look at the picture before calling visual work done.
+- **`prototype-before-planning`** — run the risky seam in a scratch project before writing a plan
+  about it. Every command in a plan should have been executed once already.
+
+A skill is written only after something has actually gone wrong that way; a procedure invented in
+advance teaches the wrong lesson. Repeatable chores live as commands in
 [.claude/commands/](.claude/commands/) — `/checks` runs the whole verification and reports it
 honestly.
 
