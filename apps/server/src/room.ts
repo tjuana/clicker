@@ -79,6 +79,15 @@ export class Room extends Server<Env> {
     await this.#run({ type: parsed.type, playerId: session.playerId }, connection);
   }
 
+  override async onClose(connection: Connection<Session>): Promise<void> {
+    const session = connection.state;
+    if (session === null) return;
+    await this.#run(
+      { type: 'leave', playerId: session.playerId, connectionId: connection.id },
+      connection,
+    );
+  }
+
   override async onAlarm(): Promise<void> {
     await this.#run({ type: 'tick' });
   }
