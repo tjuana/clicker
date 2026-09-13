@@ -16,10 +16,11 @@ export function connect(roomId: string, name: string): Connection {
     room: roomId,
   });
 
-  const send = (message: unknown): void => {
+  const send = (message: unknown): boolean => {
     // Копить нажатия во время обрыва нельзя: они долетят пачкой после конца раунда.
-    if (socket.readyState !== WebSocket.OPEN) return;
+    if (socket.readyState !== WebSocket.OPEN) return false;
     socket.send(JSON.stringify(message));
+    return true;
   };
 
   socket.addEventListener('open', () => {
@@ -47,8 +48,7 @@ export function connect(roomId: string, name: string): Connection {
   return {
     start: () => send({ type: 'start' }),
     click: () => {
-      useClient.getState().countClick();
-      send({ type: 'click' });
+      if (send({ type: 'click' })) useClient.getState().countClick();
     },
     close: () => socket.close(),
   };
