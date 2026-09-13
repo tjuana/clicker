@@ -1,4 +1,6 @@
-import { SELF } from 'cloudflare:test';
+import { runInDurableObject, SELF } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
+import type { RoomState } from '@clicker/game';
 import { generateId } from '@clicker/protocol';
 import { describe, expect, it } from 'vitest';
 import { connect, isError, isSnapshot, isWelcome, type Snapshot } from './support';
@@ -75,5 +77,38 @@ describe('room over websocket', () => {
 
     host.close();
     guest.close();
+  });
+
+  it('persists a finished round to durable storage, matching what clients see', async () => {
+    const roomId = generateId();
+    const host = await connect(roomId);
+
+    host.send({ type: 'join', playerId: generateId(), name: 'Аня', hostKey: generateId() });
+    await host.waitFor(isWelcome);
+    host.send({ type: 'start' });
+
+    await host.waitFor(
+      (message): message is Snapshot => isSnapshot(message) && message.phase === 'running',
+    );
+    for (let i = 0; i < 3; i += 1) {
+      host.send({ type: 'click' });
+    }
+
+    const hasResults = (message: Parameters<typeof isSnapshot>[0]): message is Snapshot =>
+      isSnapshot(message) && message.results !== null;
+    await host.waitFor(hasResults);
+
+    const stub = env.Room.get(env.Room.idFromName(roomId));
+    const stored = await runInDurableObject(stub, (_instance, state) =>
+      state.storage.get<RoomState>('state'),
+    );
+
+    // Инвариант, который защищает фикс: хранилище не должно отставать от снимков,
+    // даже когда именно клик (а не будильник) закрывает раунд — advance выполняется
+    // перед каждой командой, поэтому обычный клик способен сам закрыть раунд.
+    expect(stored?.phase).toBe('results');
+    expect(stored?.results?.length).toBeGreaterThan(0);
+
+    host.close();
   });
 });

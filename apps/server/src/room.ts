@@ -125,7 +125,9 @@ export class Room extends Server<Env> {
       this.#handleEvent(event, source);
     }
 
-    if (command.type !== 'click') {
+    // Клик тоже может закрыть раунд: advance выполняется перед каждой командой.
+    // Не сохраняем только клики, которые всего лишь увеличили счёт.
+    if (phaseChanged || command.type !== 'click') {
       await this.#persist();
     }
     await this.#scheduleAlarm();
