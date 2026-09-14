@@ -1,4 +1,4 @@
-import { parseServerMessage } from '@clicker/protocol';
+import { PROTOCOL_VERSION, parseServerMessage } from '@clicker/protocol';
 import PartySocket from 'partysocket';
 import { hostKeyFor, playerId } from './room-link';
 import { useClient } from './store';
@@ -29,6 +29,7 @@ export function connect(roomId: string, name: string): Connection {
     useClient.getState().setStatus('open');
     const hostKey = hostKeyFor(roomId);
     send({
+      v: PROTOCOL_VERSION,
       type: 'join',
       playerId: playerId(),
       name,
@@ -54,11 +55,13 @@ export function connect(roomId: string, name: string): Connection {
   return {
     start: () => {
       useClient.getState().clearError();
-      send({ type: 'start' });
+      send({ v: PROTOCOL_VERSION, type: 'start' });
     },
     click: () => {
       useClient.getState().clearError();
-      if (send({ type: 'click' })) useClient.getState().countClick();
+      if (send({ v: PROTOCOL_VERSION, type: 'input', input: { type: 'click' } })) {
+        useClient.getState().countClick();
+      }
     },
     close: () => {
       closedByUs = true;
