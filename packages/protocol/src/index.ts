@@ -1,19 +1,25 @@
 export {
   type ClientMessage,
-  clickSchema,
+  clickerInputSchema,
   clientMessageSchema,
+  inputSchema,
   type JoinMessage,
   joinSchema,
   MAX_MESSAGE_BYTES,
   MAX_NAME_LENGTH,
+  type ParsedClientMessage,
+  PROTOCOL_VERSION,
   parseClientMessage,
   startSchema,
 } from './client';
 export { generateId, ID_PATTERN, isId } from './ids';
 export {
+  clickerDataSchema,
   errorSchema,
   MAX_SERVER_MESSAGE_BYTES,
+  type PrivateMessage,
   parseServerMessage,
+  privateSchema,
   type ServerErrorCode,
   type ServerMessage,
   type SnapshotMessage,
