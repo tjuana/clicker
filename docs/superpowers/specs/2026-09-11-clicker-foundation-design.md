@@ -308,8 +308,11 @@ export function syncConnections(state: RoomState, live: Record<string, string[]>
 нужна и не стоит ничего: режим просто не возвращает её.
 
 Пакет экспортирует:
-- `parseClientMessage(raw: string): ClientMessage | null` — `null` для строк длиннее 1024 байт,
-  некорректного JSON, чужой версии и всего, что не прошло схему;
+- `parseClientMessage(raw: string): ParsedClientMessage` — либо `{ ok: true, message }`, либо
+  `{ ok: false, reason }`. `reason` равен `'invalid_message'` для строк длиннее 1024 байт,
+  некорректного JSON и всего, что не прошло схему, и `'bad_version'` для сообщения с чужим `v`.
+  Одним `null` тут не обойтись: сервер обязан отличить чужую версию от мусора, иначе он не сможет
+  ответить `bad_version` — а игроку в этом случае достаточно перезагрузить вкладку;
 - `parseServerMessage(raw: string): ServerMessage | null` — для клиента; его предел больше,
   64 КБ: снимок на 50 игроков занимает около 3 КБ, но он на порядок крупнее сообщений клиента;
 - `toSnapshot(state: RoomState, now: number): SnapshotMessage`;
