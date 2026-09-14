@@ -37,11 +37,13 @@ describe('room over websocket', () => {
     client.send({ type: 'join', playerId, name: 'Аня' });
 
     const welcome = await client.waitFor(isWelcome);
-    expect(welcome).toEqual({ type: 'welcome', you: '1', isHost: false });
+    expect(welcome).toEqual({ v: 1, type: 'welcome', you: '1', isHost: false });
 
     const snapshot = await client.waitFor(isSnapshot);
     expect(snapshot.phase).toBe('lobby');
-    expect(snapshot.players).toEqual([{ id: '1', name: 'Аня', clicks: 0, connected: true }]);
+    expect(snapshot.players).toEqual([{ id: '1', name: 'Аня', connected: true }]);
+    // The score lives in the mode's slot now: the room's player list knows nothing about clicks.
+    expect(snapshot.data.scores).toEqual({ '1': 0 });
     expect(JSON.stringify(snapshot)).not.toContain(playerId);
 
     client.close();
@@ -79,17 +81,17 @@ describe('room over websocket', () => {
     // otherwise on a slow runner clicks would still land during countdown and silently vanish.
     await host.waitFor(isRunningSnapshot);
     for (let i = 0; i < 5; i += 1) {
-      guest.send({ type: 'click' });
+      guest.send({ type: 'input', input: { type: 'click' } });
     }
-    host.send({ type: 'click' });
+    host.send({ type: 'input', input: { type: 'click' } });
 
     const hasResults = (message: Parameters<typeof isSnapshot>[0]): message is Snapshot =>
-      isSnapshot(message) && message.results !== null;
+      isSnapshot(message) && message.data.results !== null;
     const results = await host.waitFor(hasResults);
     const guestResults = await guest.waitFor(hasResults);
 
-    expect(results.results?.[0]).toMatchObject({ name: 'Боря', clicks: 5, rank: 1 });
-    expect(guestResults.results).toEqual(results.results);
+    expect(results.data.results?.[0]).toMatchObject({ name: 'Боря', clicks: 5, rank: 1 });
+    expect(guestResults.data.results).toEqual(results.data.results);
 
     host.close();
     guest.close();
@@ -105,11 +107,11 @@ describe('room over websocket', () => {
 
     await host.waitFor(isRunningSnapshot);
     for (let i = 0; i < 3; i += 1) {
-      host.send({ type: 'click' });
+      host.send({ type: 'input', input: { type: 'click' } });
     }
 
     const hasResults = (message: Parameters<typeof isSnapshot>[0]): message is Snapshot =>
-      isSnapshot(message) && message.results !== null;
+      isSnapshot(message) && message.data.results !== null;
     await host.waitFor(hasResults);
 
     const stub = env.Room.get(env.Room.idFromName(roomId));
@@ -118,10 +120,10 @@ describe('room over websocket', () => {
     );
 
     // The invariant this fix protects: storage must not lag behind snapshots,
-    // even when it's a click (not the alarm) that closes the round — advance runs
+    // even when it's an input (not the alarm) that closes the round — advance runs
     // before every command, so an ordinary click can close the round by itself.
     expect(stored?.phase).toBe('results');
-    expect(stored?.results?.length).toBeGreaterThan(0);
+    expect(stored?.modeState.results?.length).toBeGreaterThan(0);
 
     host.close();
   });
@@ -179,7 +181,11 @@ describe('room over websocket', () => {
       if (connection === undefined) throw new Error('no connection found on the instance');
 
       for (let i = 0; i < 5; i += 1) {
-        await instance.onMessage(connection, JSON.stringify({ type: 'click' }));
+        // Straight onto the instance, so this frame bypasses the helper and carries its own version.
+        await instance.onMessage(
+          connection,
+          JSON.stringify({ v: 1, type: 'input', input: { type: 'click' } }),
+        );
       }
 
       return calls;
@@ -202,7 +208,7 @@ describe('room over websocket', () => {
 
   it('rejects a click sent before joining with not_joined', async () => {
     const client = await connect(generateId());
-    client.send({ type: 'click' });
+    client.send({ type: 'input', input: { type: 'click' } });
 
     const error = await client.waitFor(isError);
     expect(error.code).toBe('not_joined');

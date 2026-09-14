@@ -10,7 +10,12 @@ import {
   type RoomState,
   syncConnections,
 } from '@clicker/game';
-import { parseClientMessage, type ServerMessage, toSnapshot } from '@clicker/protocol';
+import {
+  PROTOCOL_VERSION,
+  parseClientMessage,
+  type ServerMessage,
+  toSnapshot,
+} from '@clicker/protocol';
 import { type Connection, Server, type WSMessage } from 'partyserver';
 
 /** What we remember about a connection: survives the object going to sleep. */
@@ -63,19 +68,20 @@ export class Room extends Server<Env> {
 
   override async onMessage(connection: Connection<Session>, message: WSMessage): Promise<void> {
     if (typeof message !== 'string') {
-      this.#send(connection, { type: 'error', code: 'invalid_message' });
+      this.#send(connection, { v: PROTOCOL_VERSION, type: 'error', code: 'invalid_message' });
       return;
     }
 
     const parsed = parseClientMessage(message);
-    if (parsed === null) {
-      this.#send(connection, { type: 'error', code: 'invalid_message' });
+    if (!parsed.ok) {
+      this.#send(connection, { v: PROTOCOL_VERSION, type: 'error', code: parsed.reason });
       return;
     }
+    const incoming = parsed.message;
 
-    if (parsed.type === 'join') {
+    if (incoming.type === 'join') {
       const previous = connection.state;
-      if (previous !== null && previous.playerId !== parsed.playerId) {
+      if (previous !== null && previous.playerId !== incoming.playerId) {
         await this.#run(
           { type: 'leave', playerId: previous.playerId, connectionId: connection.id },
           connection,
@@ -84,10 +90,10 @@ export class Room extends Server<Env> {
       await this.#run(
         {
           type: 'join',
-          playerId: parsed.playerId,
+          playerId: incoming.playerId,
           connectionId: connection.id,
-          name: parsed.name,
-          ...(parsed.hostKey === undefined ? {} : { hostKey: parsed.hostKey }),
+          name: incoming.name,
+          ...(incoming.hostKey === undefined ? {} : { hostKey: incoming.hostKey }),
         },
         connection,
       );
@@ -96,11 +102,18 @@ export class Room extends Server<Env> {
 
     const session = connection.state;
     if (session === null) {
-      this.#send(connection, { type: 'error', code: 'not_joined' });
+      this.#send(connection, { v: PROTOCOL_VERSION, type: 'error', code: 'not_joined' });
       return;
     }
 
-    await this.#run({ type: parsed.type, playerId: session.playerId }, connection);
+    if (incoming.type === 'input') {
+      await this.#run(
+        { type: 'input', playerId: session.playerId, input: incoming.input },
+        connection,
+      );
+      return;
+    }
+    await this.#run({ type: 'start', playerId: session.playerId }, connection);
   }
 
   override async onClose(connection: Connection<Session>): Promise<void> {
@@ -138,9 +151,9 @@ export class Room extends Server<Env> {
       this.#handleEvent(event, source);
     }
 
-    // A click can also close the round: advance runs before every command.
-    // We skip persisting only for clicks that merely bumped the score.
-    if (phaseChanged || command.type !== 'click') {
+    // An input can also close the round: advance runs before every command.
+    // We skip persisting only for inputs that merely bumped the score.
+    if (phaseChanged || command.type !== 'input') {
       await this.#persist();
     }
     await this.#scheduleAlarm();
@@ -156,11 +169,16 @@ export class Room extends Server<Env> {
   #handleEvent(event: GameEvent, source?: Connection<Session>): void {
     if (event.type === 'welcome' && source !== undefined) {
       source.setState({ playerId: event.playerId, publicId: event.publicId });
-      this.#send(source, { type: 'welcome', you: event.publicId, isHost: event.isHost });
+      this.#send(source, {
+        v: PROTOCOL_VERSION,
+        type: 'welcome',
+        you: event.publicId,
+        isHost: event.isHost,
+      });
       return;
     }
     if (event.type === 'rejected' && source !== undefined) {
-      this.#send(source, { type: 'error', code: event.code });
+      this.#send(source, { v: PROTOCOL_VERSION, type: 'error', code: event.code });
     }
   }
 

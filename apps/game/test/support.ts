@@ -1,5 +1,5 @@
 import { SELF } from 'cloudflare:test';
-import { parseServerMessage, type ServerMessage } from '@clicker/protocol';
+import { PROTOCOL_VERSION, parseServerMessage, type ServerMessage } from '@clicker/protocol';
 import { afterEach, expect } from 'vitest';
 
 export type Snapshot = Extract<ServerMessage, { type: 'snapshot' }>;
@@ -23,8 +23,9 @@ export class Client {
     });
   }
 
-  send(message: unknown): void {
-    this.socket.send(JSON.stringify(message));
+  /** Stamps the protocol version, so no test has to repeat it. */
+  send(message: Record<string, unknown>): void {
+    this.socket.send(JSON.stringify({ v: PROTOCOL_VERSION, ...message }));
   }
 
   /** Sends a raw string, bypassing JSON.stringify — for testing malformed frames. */
