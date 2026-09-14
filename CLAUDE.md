@@ -42,6 +42,10 @@ Hard rules:
 - **Optimise from a measurement, not a feeling.** Clear code first, then measure, then change. Comment
   every such spot: say why it is not the obvious version.
 - **Comments explain why.** What the code does is visible in the code.
+- **No invisible characters in source.** A test that checks a control character or a bidi override
+  writes it as an escape — `'\u0000'`, `'\u202e'` — never as the raw character. One raw NUL makes git
+  treat the entire file as binary: no diff, no line-level review ever again, and an editor may drop
+  the character without saying so. This cost us a file once.
 
 ## Tests
 
