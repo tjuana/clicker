@@ -1,6 +1,6 @@
 import { comparePublicIds, type RoomState, toModeData } from '@clicker/game';
 import * as v from 'valibot';
-import { MAX_MESSAGE_BYTES, PROTOCOL_VERSION } from './client';
+import { PROTOCOL_VERSION } from './client';
 
 /** A snapshot is far bigger than anything a client sends, so its limit is separate. */
 export const MAX_SERVER_MESSAGE_BYTES = 64 * 1024;
@@ -117,6 +117,3 @@ export function toSnapshot(state: RoomState, now: number): SnapshotMessage {
     data: toModeData(state.modeState),
   };
 }
-
-/** Kept next to the other limits so the client and the server agree on them. */
-export { MAX_MESSAGE_BYTES };
