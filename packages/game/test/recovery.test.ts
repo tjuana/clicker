@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { apply } from '../src/apply';
-import { abortRound, syncConnections } from '../src/recovery';
-import { createRoomState, type RoomState } from '../src/state';
+import { apply } from '../src/room/apply';
+import { abortRound, syncConnections } from '../src/room/recovery';
+import { createRoomState, type RoomState } from '../src/room/state';
 import { config, deepFreeze } from './support';
 
 const CONFIG = config({ countdownMs: 3000, roundMs: 10000 });
@@ -48,12 +48,17 @@ describe('abortRound', () => {
   });
 
   it('clears the scores of the aborted round', () => {
-    const clicked = apply(running(), { type: 'click', playerId: 'secret-1' }, 5000, CONFIG).state;
-    expect(clicked.players['secret-1']).toMatchObject({ clicks: 1, lastCountedAt: 5000 });
+    const clicked = apply(
+      running(),
+      { type: 'input', playerId: 'secret-1', input: { type: 'click' } },
+      5000,
+      CONFIG,
+    ).state;
+    expect(clicked.modeState.scores['1']).toMatchObject({ clicks: 1, lastCountedAt: 5000 });
 
     const aborted = abortRound(deepFreeze(clicked));
 
-    expect(aborted.players['secret-1']).toMatchObject({ clicks: 0, lastCountedAt: null });
+    expect(aborted.modeState.scores['1']).toMatchObject({ clicks: 0, lastCountedAt: null });
   });
 
   it('leaves a room that is not in a round untouched', () => {
@@ -61,7 +66,7 @@ describe('abortRound', () => {
     const results = deepFreeze<RoomState>({
       ...createRoomState(),
       phase: 'results',
-      results: [{ publicId: '1', name: 'Аня', clicks: 7, rank: 1 }],
+      modeState: { scores: {}, results: [{ publicId: '1', name: 'Аня', clicks: 7, rank: 1 }] },
     });
 
     expect(abortRound(lobby)).toBe(lobby);

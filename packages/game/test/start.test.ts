@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { apply } from '../src/apply';
-import { createRoomState, type RoomState } from '../src/state';
+import type { ClickerScore } from '../src/modes/clicker/state';
+import { apply } from '../src/room/apply';
+import { createRoomState, type RoomState } from '../src/room/state';
 import { config, deepFreeze } from './support';
 
 const CONFIG = config({ countdownMs: 3000, roundMs: 10000 });
@@ -36,31 +37,35 @@ describe('start', () => {
   });
 
   it('resets scores and refills the buckets from the go moment', () => {
+    const base = lobby();
     const played: RoomState = {
-      ...lobby(),
+      ...base,
       phase: 'results',
-      results: [],
+      modeState: { ...base.modeState, results: [] },
     };
     const scored = deepFreeze<RoomState>({
       ...played,
-      players: {
-        ...played.players,
-        'secret-1': {
-          ...(played.players['secret-1'] as NonNullable<(typeof played.players)['secret-1']>),
-          clicks: 42,
-          lastCountedAt: 900,
+      modeState: {
+        ...played.modeState,
+        scores: {
+          ...played.modeState.scores,
+          '1': {
+            ...(played.modeState.scores['1'] as ClickerScore),
+            clicks: 42,
+            lastCountedAt: 900,
+          },
         },
       },
     });
 
     const result = apply(scored, { type: 'start', playerId: 'secret-1' }, 1000, CONFIG);
 
-    expect(result.state.players['secret-1']).toMatchObject({
+    expect(result.state.modeState.scores['1']).toMatchObject({
       clicks: 0,
       lastCountedAt: null,
       bucket: { tokens: CONFIG.burst, updatedAt: 4000 },
     });
-    expect(result.state.results).toBeNull();
+    expect(result.state.modeState.results).toBeNull();
   });
 
   it('refuses a player who is not the host', () => {

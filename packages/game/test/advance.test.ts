@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { advance } from '../src/advance';
-import { apply } from '../src/apply';
-import type { RoomState } from '../src/state';
+import { emptyScore } from '../src/modes/clicker/state';
+import { advance } from '../src/room/advance';
+import { apply } from '../src/room/apply';
+import type { RoomState } from '../src/room/state';
 import { config, deepFreeze, player, room } from './support';
 
 const CONFIG = config({
@@ -20,6 +21,7 @@ function countdown(): RoomState {
     players: { 'secret-1': player({ publicId: '1', name: 'Аня' }) },
     nextSeq: 2,
     round: { goAt: 4000, endsAt: 14000 },
+    modeState: { scores: { '1': emptyScore(0, CONFIG.burst) }, results: null },
   });
 }
 
@@ -54,7 +56,9 @@ describe('advance', () => {
 
     expect(result.state.phase).toBe('results');
     expect(result.state.round).toBeNull();
-    expect(result.state.results).toEqual([{ publicId: '1', name: 'Аня', clicks: 0, rank: 1 }]);
+    expect(result.state.modeState.results).toEqual([
+      { publicId: '1', name: 'Аня', clicks: 0, rank: 1 },
+    ]);
     expect(result.phases).toEqual(['results']);
   });
 
@@ -100,7 +104,7 @@ describe('apply', () => {
   it('reports the phases it walked through before handling the command', () => {
     const result = apply(
       deepFreeze(countdown()),
-      { type: 'click', playerId: 'nobody' },
+      { type: 'input', playerId: 'nobody', input: { type: 'click' } },
       4000,
       CONFIG,
     );

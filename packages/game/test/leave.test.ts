@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { apply } from '../src/apply';
-import { nextDeadline } from '../src/deadline';
-import { createRoomState } from '../src/state';
+import { apply } from '../src/room/apply';
+import { nextDeadline } from '../src/room/deadline';
+import { createRoomState } from '../src/room/state';
 import { deepFreeze } from './support';
 
 function withPlayer() {

@@ -1,5 +1,6 @@
 import { apply, createRoomState, type RoomState } from '@clicker/game';
 import { describe, expect, it } from 'vitest';
+import { PROTOCOL_VERSION } from '../src/client';
 import { MAX_SERVER_MESSAGE_BYTES, parseServerMessage, toSnapshot } from '../src/server';
 
 /** Host "secret-1" and player "secret-2", round already played out. */
@@ -15,7 +16,11 @@ function playedRoom(): RoomState {
     0,
   );
   const started = apply(guest.state, { type: 'start', playerId: 'secret-1' }, 1000);
-  const clicked = apply(started.state, { type: 'click', playerId: 'secret-2' }, 5000);
+  const clicked = apply(
+    started.state,
+    { type: 'input', playerId: 'secret-2', input: { type: 'click' } },
+    5000,
+  );
   return apply(clicked.state, { type: 'tick' }, 999_999).state;
 }
 
@@ -71,7 +76,7 @@ describe('toSnapshot', () => {
 
     expect(snapshot.phase).toBe('results');
     expect(snapshot.round).toBeNull();
-    expect(snapshot.results).toEqual([
+    expect(snapshot.data.results).toEqual([
       { id: '2', name: 'Боря', clicks: 1, rank: 1 },
       { id: '1', name: 'Аня', clicks: 0, rank: 2 },
     ]);
@@ -89,7 +94,7 @@ describe('toSnapshot', () => {
 
     expect(snapshot.phase).toBe('countdown');
     expect(snapshot.round).toEqual({ goAt: 4000, endsAt: 14000 });
-    expect(snapshot.results).toBeNull();
+    expect(snapshot.data.results).toBeNull();
     expect(snapshot.notice).toBeNull();
   });
 
@@ -102,21 +107,29 @@ describe('toSnapshot', () => {
 
 describe('parseServerMessage', () => {
   it('accepts welcome and error', () => {
-    expect(parseServerMessage(JSON.stringify({ type: 'welcome', you: '1', isHost: true }))).toEqual(
-      {
-        type: 'welcome',
-        you: '1',
-        isHost: true,
-      },
-    );
-    expect(parseServerMessage(JSON.stringify({ type: 'error', code: 'not_host' }))).toEqual({
+    expect(
+      parseServerMessage(
+        JSON.stringify({ v: PROTOCOL_VERSION, type: 'welcome', you: '1', isHost: true }),
+      ),
+    ).toEqual({
+      v: PROTOCOL_VERSION,
+      type: 'welcome',
+      you: '1',
+      isHost: true,
+    });
+    expect(
+      parseServerMessage(JSON.stringify({ v: PROTOCOL_VERSION, type: 'error', code: 'not_host' })),
+    ).toEqual({
+      v: PROTOCOL_VERSION,
       type: 'error',
       code: 'not_host',
     });
   });
 
   it('rejects an unknown error code', () => {
-    expect(parseServerMessage(JSON.stringify({ type: 'error', code: 'nope' }))).toBeNull();
+    expect(
+      parseServerMessage(JSON.stringify({ v: PROTOCOL_VERSION, type: 'error', code: 'nope' })),
+    ).toBeNull();
   });
 
   it('rejects a message over the server byte limit', () => {
