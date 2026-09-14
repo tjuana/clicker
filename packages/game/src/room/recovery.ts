@@ -1,24 +1,25 @@
+import * as mode from '../modes/clicker';
 import type { Player, RoomState } from './state';
 
 /**
- * The round was aborted: the server restarted and the clicks held in memory are lost.
- * Outside a round there's nothing to abort: the state is returned as is.
+ * The round is over before it ended: the server restarted and the in-memory clicks are gone.
+ * Only from countdown or running — anywhere else the state comes back untouched.
  */
 export function abortRound(state: RoomState): RoomState {
   if (state.phase !== 'countdown' && state.phase !== 'running') return state;
 
-  // There's no point showing the aborted round's score in the lobby.
-  const players: Record<string, Player> = {};
-  for (const [playerId, player] of Object.entries(state.players)) {
-    players[playerId] = { ...player, clicks: 0, lastCountedAt: null };
-  }
-
-  return { ...state, phase: 'lobby', round: null, notice: 'round_aborted', players };
+  return {
+    ...state,
+    phase: 'lobby',
+    round: null,
+    notice: 'round_aborted',
+    modeState: mode.clearScores(state.modeState),
+  };
 }
 
 /**
- * Recomputes connections after the server wakes up or restarts.
- * `live` is the ids of each playerId's currently live connections.
+ * Recounts the connections after the server wakes up or restarts.
+ * `live` holds the ids of the connections each playerId has right now.
  */
 export function syncConnections(
   state: RoomState,

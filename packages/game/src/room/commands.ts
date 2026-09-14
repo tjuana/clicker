@@ -1,26 +1,26 @@
+import type { ClickerInput } from '../modes/clicker/state';
 import type { Phase } from './state';
 
 export interface JoinCommand {
   type: 'join';
   playerId: string;
-  /** id of the connection the command arrived on. */
   connectionId: string;
   name: string;
   hostKey?: string;
 }
 
-export interface LeaveCommand {
-  type: 'leave';
+/** The mode decides what an input means; the room only routes it. */
+export interface InputCommand {
+  type: 'input';
   playerId: string;
-  /** id of the connection that closed. */
-  connectionId: string;
+  input: ClickerInput;
 }
 
 export type Command =
   | JoinCommand
-  | LeaveCommand
+  | { type: 'leave'; playerId: string; connectionId: string }
   | { type: 'start'; playerId: string }
-  | { type: 'click'; playerId: string }
+  | InputCommand
   | { type: 'tick' };
 
 export type ErrorCode = 'not_joined' | 'not_host' | 'wrong_phase' | 'room_full';

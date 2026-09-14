@@ -1,16 +1,23 @@
+import * as mode from '../modes/clicker';
 import type { GameConfig } from './config';
-import { computeResults } from './results';
 import type { Phase, RoomState } from './state';
 
 export interface AdvanceResult {
   state: RoomState;
-  /** Phases that were entered, in order. */
+  /** Phases entered, in order. */
   phases: Phase[];
 }
 
+/** publicId → name, the only thing the mode needs from the room to build results. */
+function names(state: RoomState): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const player of Object.values(state.players)) result[player.publicId] = player.name;
+  return result;
+}
+
 /**
- * Advances the state through time. Called before handling any command,
- * so the rules never depend on whether the alarm fired on time.
+ * Moves the state through time. Runs before every command, so the rules do not
+ * depend on the alarm being punctual.
  */
 export function advance(state: RoomState, now: number, config: GameConfig): AdvanceResult {
   let next = state;
@@ -27,7 +34,12 @@ export function advance(state: RoomState, now: number, config: GameConfig): Adva
       next.round !== null &&
       now >= next.round.endsAt + config.lateGraceMs
     ) {
-      next = { ...next, phase: 'results', round: null, results: computeResults(next.players) };
+      next = {
+        ...next,
+        phase: 'results',
+        round: null,
+        modeState: mode.finish(next.modeState, names(next)),
+      };
       phases.push('results');
       continue;
     }
@@ -37,7 +49,7 @@ export function advance(state: RoomState, now: number, config: GameConfig): Adva
   return { state: removeExpired(next, now, config), phases };
 }
 
-/** Disconnected players are only removed outside a round: during a round their score is still needed. */
+/** Disconnected players are dropped outside a round only: their score matters while it runs. */
 function removeExpired(state: RoomState, now: number, config: GameConfig): RoomState {
   if (state.phase !== 'lobby' && state.phase !== 'results') return state;
 
@@ -53,11 +65,17 @@ function removeExpired(state: RoomState, now: number, config: GameConfig): RoomS
   if (expired.length === 0) return state;
 
   const players = { ...state.players };
-  for (const playerId of expired) delete players[playerId];
+  const publicIds: string[] = [];
+  for (const playerId of expired) {
+    const player = players[playerId];
+    if (player !== undefined) publicIds.push(player.publicId);
+    delete players[playerId];
+  }
 
   return {
     ...state,
     players,
     hosts: state.hosts.filter((playerId) => !expired.includes(playerId)),
+    modeState: mode.removePlayers(state.modeState, publicIds),
   };
 }

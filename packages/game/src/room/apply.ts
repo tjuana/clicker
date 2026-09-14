@@ -1,5 +1,6 @@
+import * as mode from '../modes/clicker';
 import { advance } from './advance';
-import type { Command, ErrorCode, GameEvent, JoinCommand, LeaveCommand } from './commands';
+import type { Command, ErrorCode, GameEvent, InputCommand, JoinCommand } from './commands';
 import { DEFAULT_CONFIG, type GameConfig } from './config';
 import type { Player, RoomState } from './state';
 
@@ -9,8 +10,8 @@ export interface ApplyResult {
 }
 
 /**
- * The single point where room state changes.
- * The input state is never mutated; time comes in as a parameter.
+ * The only place the room state changes.
+ * The input state is never mutated and time always arrives as a parameter.
  */
 export function apply(
   state: RoomState,
@@ -34,11 +35,11 @@ function handle(state: RoomState, command: Command, now: number, config: GameCon
     case 'join':
       return join(state, command, now, config);
     case 'leave':
-      return leave(state, command, now);
+      return leave(state, command.playerId, command.connectionId, now);
     case 'start':
       return start(state, command.playerId, now, config);
-    case 'click':
-      return click(state, command.playerId, now, config);
+    case 'input':
+      return input(state, command, now, config);
   }
 }
 
@@ -58,13 +59,13 @@ function join(
 ): ApplyResult {
   const existing = state.players[command.playerId];
   let nextSeq = state.nextSeq;
+  let modeState = state.modeState;
   let player: Player;
 
   if (existing !== undefined) {
     player = {
       ...existing,
       name: command.name,
-      // A repeated join from the same connection doesn't add anything.
       connectionIds: existing.connectionIds.includes(command.connectionId)
         ? existing.connectionIds
         : [...existing.connectionIds, command.connectionId],
@@ -74,16 +75,15 @@ function join(
     if (Object.keys(state.players).length >= config.maxPlayers) {
       return reject(state, command.playerId, 'room_full');
     }
+    const publicId = String(state.nextSeq);
     player = {
-      publicId: String(state.nextSeq),
+      publicId,
       name: command.name,
       connectionIds: [command.connectionId],
       disconnectedAt: null,
-      clicks: 0,
-      lastCountedAt: null,
-      bucket: { tokens: config.burst, updatedAt: now },
     };
     nextSeq = state.nextSeq + 1;
+    modeState = mode.addPlayer(state.modeState, publicId, now, config);
   }
 
   let hostKey = state.hostKey;
@@ -96,7 +96,7 @@ function join(
   }
 
   return {
-    state: { ...withPlayer(state, command.playerId, player), nextSeq, hostKey, hosts },
+    state: { ...withPlayer(state, command.playerId, player), nextSeq, hostKey, hosts, modeState },
     events: [
       {
         type: 'welcome',
@@ -108,18 +108,18 @@ function join(
   };
 }
 
-function leave(state: RoomState, command: LeaveCommand, now: number): ApplyResult {
-  const player = state.players[command.playerId];
+function leave(state: RoomState, playerId: string, connectionId: string, now: number): ApplyResult {
+  const player = state.players[playerId];
   if (player === undefined) return { state, events: [] };
-  // The connection isn't in the list: a stray leave doesn't touch live connections.
-  if (!player.connectionIds.includes(command.connectionId)) return { state, events: [] };
 
-  const connectionIds = player.connectionIds.filter((id) => id !== command.connectionId);
+  const connectionIds = player.connectionIds.filter((id) => id !== connectionId);
+  // The id was not there: a repeated leave must not move the eviction deadline.
+  if (connectionIds.length === player.connectionIds.length) return { state, events: [] };
+
   return {
-    state: withPlayer(state, command.playerId, {
+    state: withPlayer(state, playerId, {
       ...player,
       connectionIds,
-      // A timestamp that's already set doesn't get updated: the removal deadline never shifts.
       disconnectedAt:
         connectionIds.length === 0 && player.disconnectedAt === null ? now : player.disconnectedAt,
     }),
@@ -135,53 +135,34 @@ function start(state: RoomState, playerId: string, now: number, config: GameConf
 
   const goAt = now + config.countdownMs;
   const endsAt = goAt + config.roundMs;
-  const players: Record<string, Player> = {};
-  for (const [id, player] of Object.entries(state.players)) {
-    players[id] = {
-      ...player,
-      clicks: 0,
-      lastCountedAt: null,
-      bucket: { tokens: config.burst, updatedAt: goAt },
-    };
-  }
 
   return {
     state: {
       ...state,
       phase: 'countdown',
       round: { goAt, endsAt },
-      players,
-      results: null,
       notice: null,
+      modeState: mode.startRound(state.modeState, goAt, config),
     },
     events: [{ type: 'phaseChanged', phase: 'countdown' }],
   };
 }
 
-function click(state: RoomState, playerId: string, now: number, config: GameConfig): ApplyResult {
-  const player = state.players[playerId];
-  if (player === undefined) return reject(state, playerId, 'not_joined');
-  // A click outside a round isn't an error: the client may not have learned it ended yet.
+function input(
+  state: RoomState,
+  command: InputCommand,
+  now: number,
+  config: GameConfig,
+): ApplyResult {
+  const player = state.players[command.playerId];
+  if (player === undefined) return reject(state, command.playerId, 'not_joined');
+  // Input outside a round is not an error: the client may not know it ended yet.
   if (state.phase !== 'running') return { state, events: [] };
 
-  const elapsed = Math.max(0, now - player.bucket.updatedAt);
-  const tokens = Math.min(
-    config.burst,
-    player.bucket.tokens + (elapsed * config.clicksPerSecond) / 1000,
-  );
+  const modeState = mode.applyInput(state.modeState, player.publicId, command.input, now, config);
+  // The mode returns the same reference when nothing changed — a refused click, for instance.
+  // Keep that identity: callers rely on it to skip broadcasting a snapshot that is not new.
+  if (modeState === state.modeState) return { state, events: [] };
 
-  // Refill is linear: recomputing from the earlier anchor later gives the same result,
-  // so a rejection changes nothing and can't move the anchor.
-  if (tokens < 1) return { state, events: [] };
-
-  return {
-    state: withPlayer(state, playerId, {
-      ...player,
-      clicks: player.clicks + 1,
-      lastCountedAt: now,
-      // A timestamp from the past never winds the anchor backwards.
-      bucket: { tokens: tokens - 1, updatedAt: Math.max(player.bucket.updatedAt, now) },
-    }),
-    events: [],
-  };
+  return { state: { ...state, modeState }, events: [] };
 }

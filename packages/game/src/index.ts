@@ -1,8 +1,21 @@
-export { type ApplyResult, apply } from './apply';
-export type { Command, ErrorCode, GameEvent, JoinCommand, LeaveCommand } from './commands';
-export { DEFAULT_CONFIG, type GameConfig } from './config';
-export { nextDeadline } from './deadline';
-export { abortRound, syncConnections } from './recovery';
-export { comparePublicIds } from './results';
-export type { Bucket, Notice, Phase, Player, ResultRow, RoomState, Round } from './state';
-export { createRoomState } from './state';
+export {
+  type ClickerInput,
+  type ClickerScore,
+  type ClickerState,
+  comparePublicIds,
+  type ResultRow,
+  toData as toModeData,
+} from './modes/clicker';
+export { type ApplyResult, apply } from './room/apply';
+export type {
+  Command,
+  ErrorCode,
+  GameEvent,
+  InputCommand,
+  JoinCommand,
+} from './room/commands';
+export { DEFAULT_CONFIG, type GameConfig } from './room/config';
+export { nextDeadline } from './room/deadline';
+export { abortRound, syncConnections } from './room/recovery';
+export type { ModeId, Notice, Phase, Player, RoomState, Round } from './room/state';
+export { createRoomState } from './room/state';
