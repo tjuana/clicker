@@ -49,11 +49,14 @@ The clicker is the first mode, not the only one. A second mode — a reaction te
 directory under `packages/game/src/modes/`, its own input and data schemas, and its own arena on the
 client. It does not need to touch the room, the message envelope or the lobby.
 
-What makes that hold: the room carries a `mode` field and a `modeState` slot it never looks inside;
-input travels as a generic `input` command the mode interprets; a `private` message can reach a single
-connection, for a role or a hand nobody else may see; `tickMs` advances modes that have to keep moving
-while nobody presses anything; and a protocol version lets the server tell an old tab to reload
-instead of silently misreading it.
+What makes that hold: the room carries a `mode` field and a `modeState` slot it never looks inside,
+input travels as a generic `input` command that only the mode interprets, and a protocol version lets
+the server tell an old tab to reload instead of letting it misread a snapshot in silence.
+
+Two more seams are declared and deliberately not wired yet: a `private` message type, for a role or a
+hand only one connection may see, and a `tickMs` step for modes that must keep moving while nobody
+presses anything. Nothing sends a private message and nothing advances a tick today — the clicker
+needs neither, and the first mode that does will implement them.
 
 The mode *interface* is deliberately missing. It gets written when a second mode exists and can be
 derived from two implementations instead of guessed from one.
