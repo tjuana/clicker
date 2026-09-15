@@ -3,12 +3,12 @@ import { Hud } from '../hud';
 import { useClient } from '../store';
 import { strings } from '../strings';
 import { theme } from '../theme';
-import { Button, ErrorNote, Screen } from '../ui';
+import { Button, ErrorNote, LinkButton, Screen } from '../ui';
 
 /** three.js is about a megabyte: the entry screens must not carry it. */
 const Race = lazy(() => import('../scene/race'));
 
-export function Results({ onStart }: { onStart: () => void }) {
+export function Results({ onStart, onLeave }: { onStart: () => void; onLeave: () => void }) {
   const snapshot = useClient((state) => state.snapshot);
   const you = useClient((state) => state.you);
   const isHost = useClient((state) => state.isHost);
@@ -81,6 +81,9 @@ export function Results({ onStart }: { onStart: () => void }) {
         </Button>
       ) : null}
       <ErrorNote code={error} />
+      <LinkButton testId="leave" onClick={onLeave}>
+        {strings.leave}
+      </LinkButton>
     </Screen>
   );
 }

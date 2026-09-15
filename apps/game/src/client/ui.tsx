@@ -83,6 +83,37 @@ export function Button({
   );
 }
 
+/** A quiet, text-only action: for things that must be reachable but never compete with the game. */
+export function LinkButton({
+  children,
+  onClick,
+  testId,
+}: {
+  children: ReactNode;
+  onClick: () => void;
+  testId?: string;
+}) {
+  return (
+    <button
+      type="button"
+      data-testid={testId}
+      onClick={onClick}
+      style={{
+        alignSelf: 'flex-start',
+        background: 'none',
+        border: 'none',
+        color: theme.muted,
+        textDecoration: 'underline',
+        cursor: 'pointer',
+        padding: 0,
+        font: 'inherit',
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
 const COPIED_FOR_MS = 2000;
 
 /** Copies `value`; a browser that refuses clipboard access gets the link as selectable text instead. */

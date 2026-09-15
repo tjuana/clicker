@@ -41,7 +41,7 @@ function Notices() {
 }
 
 /** Owns the connection for one room and picks a screen from the phase. */
-function Room({ roomId }: { roomId: string }) {
+function Room({ roomId, onLeave }: { roomId: string; onLeave: () => void }) {
   const [name, setName] = useState(savedName);
   const [showJoin, setShowJoin] = useState(() => savedName() === '');
   const connectionRef = useRef<Connection | null>(null);
@@ -86,11 +86,12 @@ function Room({ roomId }: { roomId: string }) {
           snapshot={snapshot}
           onStart={start}
           onChangeName={changeName}
+          onLeave={onLeave}
         />
       ) : snapshot.phase === 'countdown' || snapshot.phase === 'running' ? (
         <Arena onClick={click} />
       ) : (
-        <Results onStart={start} />
+        <Results onStart={start} onLeave={onLeave} />
       )}
     </>
   );
@@ -105,5 +106,16 @@ export function App() {
     return () => window.removeEventListener('popstate', onPop);
   }, []);
 
-  return roomId === null ? <Landing onCreate={setRoomId} /> : <Room key={roomId} roomId={roomId} />;
+  // Leaving is just going back to the landing address: unmounting Room closes the socket
+  // in its own effect cleanup, so there is nothing else to tear down here.
+  const leave = useCallback(() => {
+    window.history.pushState(null, '', '/');
+    setRoomId(null);
+  }, []);
+
+  return roomId === null ? (
+    <Landing onCreate={setRoomId} />
+  ) : (
+    <Room key={roomId} roomId={roomId} onLeave={leave} />
+  );
 }

@@ -9,6 +9,7 @@ export const strings = {
   namePlaceholder: 'Anna',
   enter: 'Enter',
   changeName: 'Change name',
+  leave: 'Leave room',
   waiting: 'Waiting for the host to start',
   players: 'Players',
   copyInvite: 'Copy invite link',

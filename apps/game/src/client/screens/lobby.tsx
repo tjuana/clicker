@@ -3,7 +3,7 @@ import { hostKeyFor, hostLink, inviteLink } from '../room-link';
 import { useClient } from '../store';
 import { strings } from '../strings';
 import { theme } from '../theme';
-import { Button, CopyButton, ErrorNote, Screen } from '../ui';
+import { Button, CopyButton, ErrorNote, LinkButton, Screen } from '../ui';
 
 export function Lobby({
   roomId,
@@ -13,6 +13,7 @@ export function Lobby({
   snapshot,
   onStart,
   onChangeName,
+  onLeave,
 }: {
   roomId: string;
   name: string;
@@ -22,6 +23,7 @@ export function Lobby({
   snapshot: SnapshotMessage | null;
   onStart: () => void;
   onChangeName: () => void;
+  onLeave: () => void;
 }) {
   const error = useClient((state) => state.lastError);
   const players = snapshot?.players ?? [{ id: you ?? '', name, connected: true }];
@@ -67,22 +69,14 @@ export function Lobby({
         <p style={{ color: theme.muted, margin: 0 }}>{strings.waiting}</p>
       )}
       <ErrorNote code={error} />
-      <button
-        type="button"
-        onClick={onChangeName}
-        style={{
-          alignSelf: 'flex-start',
-          background: 'none',
-          border: 'none',
-          color: theme.muted,
-          textDecoration: 'underline',
-          cursor: 'pointer',
-          padding: 0,
-          font: 'inherit',
-        }}
-      >
-        {strings.changeName}
-      </button>
+      <div style={{ display: 'flex', gap: 20 }}>
+        <LinkButton testId="change-name" onClick={onChangeName}>
+          {strings.changeName}
+        </LinkButton>
+        <LinkButton testId="leave" onClick={onLeave}>
+          {strings.leave}
+        </LinkButton>
+      </div>
     </Screen>
   );
 }
