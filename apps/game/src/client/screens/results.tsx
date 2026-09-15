@@ -1,11 +1,16 @@
+import { lazy, Suspense } from 'react';
 import { Hud } from '../hud';
 import { useClient } from '../store';
 import { strings } from '../strings';
 import { theme } from '../theme';
 import { Button, ErrorNote, Screen } from '../ui';
 
+/** three.js is about a megabyte: the entry screens must not carry it. */
+const Race = lazy(() => import('../scene/race'));
+
 export function Results({ onStart }: { onStart: () => void }) {
   const snapshot = useClient((state) => state.snapshot);
+  const you = useClient((state) => state.you);
   const isHost = useClient((state) => state.isHost);
   const error = useClient((state) => state.lastError);
   if (snapshot === null) return null;
@@ -19,7 +24,7 @@ export function Results({ onStart }: { onStart: () => void }) {
   return (
     <Screen>
       <Hud />
-      {/* The 3d scene lands here in a follow-up task; the box keeps its place and proportions. */}
+      {/* The finishing positions stay on screen: the table says who won, the track shows by how much. */}
       <div
         style={{
           aspectRatio: '3 / 2',
@@ -28,7 +33,17 @@ export function Results({ onStart }: { onStart: () => void }) {
           borderRadius: 12,
           overflow: 'hidden',
         }}
-      />
+      >
+        <Suspense fallback={null}>
+          <Race
+            racers={snapshot.players.map((player) => ({
+              id: player.id,
+              clicks: snapshot.data.scores[player.id] ?? 0,
+            }))}
+            you={you}
+          />
+        </Suspense>
+      </div>
       <div data-testid="winner" style={{ fontSize: 22, fontWeight: 700, color: theme.goldBright }}>
         {winners.length === 0
           ? null
