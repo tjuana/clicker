@@ -19,10 +19,24 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 22
-      # pnpm поднимаем через corepack: версия закреплена в packageManager,
-      # и не нужно стороннее действие, которое тянет устаревший рантайм Node 20.
+      # pnpm comes from corepack: the version is pinned in packageManager, so this needs no
+      # third-party action — and those still drag in an outdated Node 20 runtime.
       - run: corepack enable && pnpm --version
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
       - run: pnpm typecheck
       - run: pnpm test
+      - run: pnpm --filter @clicker/app run build
+      # The browser build must match the Playwright version, and --with-deps pulls the
+      # system libraries a headless Chromium needs on a bare runner.
+      - run: pnpm --filter @clicker/app exec playwright install --with-deps chromium
+      - run: pnpm --filter @clicker/app run e2e
+      # A failed round is almost impossible to diagnose from a log alone: keep the trace.
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            apps/game/playwright-report/
+            apps/game/test-results/
+          retention-days: 7
