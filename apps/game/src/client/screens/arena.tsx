@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { useServerClock } from '../clock';
 import { Hud } from '../hud';
+import { Standings } from '../standings';
 import { useClient } from '../store';
 import { strings } from '../strings';
 import { theme } from '../theme';
@@ -43,6 +44,7 @@ export function Arena({ onClick }: { onClick: () => void }) {
           />
         </Suspense>
       </div>
+      <Standings />
       <Button
         testId="click"
         disabled={!live}
