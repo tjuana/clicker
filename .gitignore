@@ -5,3 +5,6 @@ dist/
 *.tsbuildinfo
 .DS_Store
 worker-configuration.d.ts
+test-results/
+playwright-report/
+.playwright/
