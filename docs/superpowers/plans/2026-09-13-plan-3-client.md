@@ -779,106 +779,185 @@ git commit -m "feat(app): add the menu, name entry, hud and screens"
 
 ---
 
-### Task 5: Сцена на three.js
+### Task 5: Сцена гонки на three.js
 
-> **Заменяется (2026-09-14).** Ниже описаны столбики: высота растёт со счётом. Вживую это выглядело
-> плохо, и решение принято другое — **честная гонка**: игроки едут по дорожке, положение = число
-> кликов, камера держит лидера. Столбик не читается как гонка ни при каком освещении, а движение
-> читается сразу.
+> **Выполнено и проверено (2026-09-15), коммит `1ef26d7`.** Метафора выбрана другая, чем была
+> изначально: не столбики, растущие со счётом, а **честная гонка** — игроки едут по дорожке,
+> положение = число кликов, камера держит в кадре всё поле.
 >
-> Код ниже пока оставлен как есть: он не выбрасывается, пока новая сцена не проверена снимком
-> экрана из настоящего браузера. Переписать эту задачу по проверенному — отдельный шаг, и порядок
-> здесь обратный обычному намеренно: сперва сцена работает и выглядит правильно, потом её текст
-> попадает в план. Ровно этой перестановки не хватило в прошлый раз, когда план про столбики был
-> написан «из головы» и прошёл все проверки, будучи сломанным на вид.
+> Порядок здесь обратный обычному намеренно: сцена сперва заработала и была снята с экрана, и только
+> потом её код попал в план. В прошлый раз задача была написана «из головы» — получились столбики,
+> которые прошли все проверки и выглядели сломанными. Ниже дословный код из репозитория.
 
 **Files:**
 - Create: `apps/game/src/client/scene/race.tsx`
 - Modify: `apps/game/src/client/screens/arena.tsx`, `apps/game/src/client/screens/results.tsx`
 
-- [ ] **Step 1: Создать `apps/game/src/client/scene/race.tsx`**
+- [x] **Step 1: Создать `apps/game/src/client/scene/race.tsx`**
 
-Каждому игроку — столбик, высота догоняет цель каждый кадр через `damp`, без `setState`. Так снимки, приходящие десять раз в секунду, превращаются в плавное движение.
+Положение бегуна догоняет цель каждый кадр через `damp`, без `setState`: так снимки, приходящие
+десять раз в секунду, превращаются в плавное движение.
 
 ```tsx
-import { Canvas, useFrame } from '@react-three/fiber';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { useRef } from 'react';
-import { MathUtils, type Mesh } from 'three';
+import { type Group, MathUtils } from 'three';
 import { theme } from '../theme';
 
-interface Racer {
+export interface Racer {
   id: string;
   clicks: number;
 }
 
 /**
- * Высота считается от постоянного потолка, а не от лидера: иначе игрок,
- * который в комнате один, всегда упёрт в максимум и роста не видит.
- * Потолок подрастает, если кто-то его перебил.
+ * One click is always this far. A fixed scale, not one relative to the leader:
+ * with a relative scale a player alone in a room sits pinned at the front and never
+ * sees themselves move.
  */
-const BASE_CEILING = 40;
-const MAX_HEIGHT = 2.6;
-/** Столбик новичка должен быть виден, а не лежать лепёшкой на полу. */
-const MIN_HEIGHT = 0.18;
+const UNIT = 0.14;
+/** Distance between lanes across the track. */
+const LANE = 1.15;
+/** Marks every metre; without them a racer over a flat floor looks motionless. */
+const MARKS = 48;
+const MARK_SPACING = 1;
 
-function Bar({ x, share, gold }: { x: number; share: number; gold: boolean }) {
-  const mesh = useRef<Mesh>(null);
+/** Smoothing: snapshots land ten times a second, the eye wants sixty. */
+const damp = (current: number, target: number, delta: number, rate = 7): number =>
+  MathUtils.damp(current, target, rate, delta);
+
+/** Named apart from the `Racer` data type on purpose: one is a shape on the track, the other a row of numbers. */
+function Runner({ x, z, gold }: { x: number; z: number; gold: boolean }) {
+  const group = useRef<Group>(null);
 
   useFrame((_state, delta) => {
-    if (mesh.current === null) return;
-    const target = MIN_HEIGHT + share * MAX_HEIGHT;
-    mesh.current.scale.y = MathUtils.damp(mesh.current.scale.y, target, 6, delta);
-    mesh.current.position.y = mesh.current.scale.y / 2;
+    if (group.current === null) return;
+    group.current.position.x = damp(group.current.position.x, x, delta);
   });
 
   return (
-    <mesh ref={mesh} position={[x, 0, 0]}>
-      <boxGeometry args={[0.7, 1, 0.7]} />
-      <meshStandardMaterial color={gold ? theme.goldBright : '#5b678f'} />
-    </mesh>
+    <group ref={group} position={[0, 0, z]}>
+      {/* A body and a nose: enough of a shape to tell which way it is facing. */}
+      <mesh position={[0, 0.3, 0]} castShadow>
+        <boxGeometry args={[0.72, 0.42, 0.56]} />
+        <meshStandardMaterial
+          color={gold ? theme.goldBright : '#4d5a85'}
+          metalness={0.1}
+          roughness={0.55}
+        />
+      </mesh>
+      <mesh position={[0.46, 0.24, 0]} rotation={[0, 0, Math.PI / 4]}>
+        <boxGeometry args={[0.26, 0.26, 0.5]} />
+        <meshStandardMaterial
+          color={gold ? theme.gold : '#3f4a6d'}
+          metalness={0.1}
+          roughness={0.6}
+        />
+      </mesh>
+    </group>
+  );
+}
+
+/**
+ * The camera frames the whole field, not the leader: following the leader alone pushes
+ * everyone behind them out of the left edge, and the gap between players is the one thing
+ * a race has to show.
+ */
+function Rig({ firstX, lastX }: { firstX: number; lastX: number }) {
+  const { camera } = useThree();
+
+  useFrame((_state, delta) => {
+    const focus = (firstX + lastX) / 2;
+    const spread = firstX - lastX;
+    // Pull back as the field stretches, but never closer than a readable minimum.
+    const distance = MathUtils.clamp(6 + spread * 0.45, 6, 16);
+
+    // Mostly behind the field and only a little to the side: from side-on the track
+    // crosses the frame as a diagonal band instead of receding down the lane.
+    camera.position.x = damp(camera.position.x, focus - distance * 0.85, delta, 4);
+    camera.position.y = damp(camera.position.y, 1.8 + distance * 0.1, delta, 4);
+    camera.position.z = damp(camera.position.z, distance * 0.55, delta, 4);
+    camera.lookAt(focus + 1.2, 0.4, 0);
+  });
+
+  return null;
+}
+
+function Track({ lanes }: { lanes: number }) {
+  const width = Math.max(6, lanes * LANE + 3);
+
+  return (
+    <group>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+        <planeGeometry args={[400, width]} />
+        <meshStandardMaterial color="#1b2136" roughness={0.95} />
+      </mesh>
+
+      {/* The start line, and then a mark every metre to make speed legible. */}
+      <mesh position={[0, 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[0.12, width]} />
+        <meshBasicMaterial color={theme.gold} />
+      </mesh>
+      {/* Keyed by the distance each mark stands for, which is what actually identifies it. */}
+      {Array.from({ length: MARKS }, (_, index) => (index + 1) * MARK_SPACING).map((distance) => (
+        <mesh key={distance} position={[distance, 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <planeGeometry args={[0.04, width]} />
+          <meshBasicMaterial color="#2c3450" />
+        </mesh>
+      ))}
+    </group>
   );
 }
 
 export default function Race({ racers, you }: { racers: Racer[]; you: string | null }) {
-  const ceiling = Math.max(BASE_CEILING, ...racers.map((racer) => racer.clicks));
+  const clicks = racers.map((racer) => racer.clicks);
+  const firstX = (clicks.length === 0 ? 0 : Math.max(...clicks)) * UNIT;
+  const lastX = (clicks.length === 0 ? 0 : Math.min(...clicks)) * UNIT;
 
   return (
     <Canvas
-      camera={{ position: [0, 1.5, 5.5], fov: 40 }}
-      onCreated={({ camera }) => camera.lookAt(0, 0.75, 0)}
+      dpr={[1, 2]}
+      shadows
+      camera={{ position: [-4.2, 2.1, 6.4], fov: 42 }}
+      style={{ width: '100%', height: '100%' }}
     >
-      <ambientLight intensity={0.7} />
-      <directionalLight position={[4, 8, 5]} intensity={1.4} />
+      <color attach="background" args={[theme.surface]} />
+      <fog attach="fog" args={[theme.surface, 16, 34]} />
 
-      {/* Пол: без него столбики висят в пустоте и не с чем сравнить высоту.
-          Он заметно светлее панели и намеренно огромный — чтобы дальний край
-          уходил за кадр и не читался как случайная полоса поперёк сцены. */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]}>
-        <planeGeometry args={[40, 40]} />
-        <meshStandardMaterial color="#2b3350" />
-      </mesh>
+      <ambientLight intensity={0.55} />
+      <directionalLight position={[6, 9, 6]} intensity={1.5} castShadow />
 
+      <Track lanes={racers.length} />
       {racers.map((racer, index) => (
-        <Bar
+        <Runner
           key={racer.id}
-          x={(index - (racers.length - 1) / 2) * 1.1}
-          share={racer.clicks / ceiling}
+          x={racer.clicks * UNIT}
+          z={(index - (racers.length - 1) / 2) * LANE}
           gold={racer.id === you}
         />
       ))}
+
+      <Rig firstX={firstX} lastX={lastX} />
     </Canvas>
   );
 }
 ```
 
-- [ ] **Step 2: Подключить сцену лениво**
+- [x] **Step 2: Подключить сцену лениво**
 
-В арене и результатах:
+В `arena.tsx` и `results.tsx` — рядом с импортами:
 
 ```tsx
+import { lazy, Suspense } from 'react';
+
+/** three.js is about a megabyte: the entry screens must not carry it. */
 const Race = lazy(() => import('../scene/race'));
 ```
-и обернуть в `<Suspense fallback={null}>`. Три.js весит около мегабайта, и экрану входа он не нужен.
+
+и в теле компонента ещё одна строка, без которой подсветка «своего» работать не будет:
+
+```tsx
+  const you = useClient((state) => state.you);
+```
 
 Контейнер сцены обязан держать пропорции — иначе она сплющивается в полоску во всю ширину экрана:
 
@@ -905,18 +984,58 @@ const Race = lazy(() => import('../scene/race'));
 </div>
 ```
 
-- [ ] **Step 3: Проверить размер сборки**
+- [x] **Step 3: Проверить размер сборки**
 
 Run: `pnpm --filter @clicker/app run build`
-Expected: сцена уезжает в отдельный кусок, а начальный бандл заметно меньше мегабайта.
+Фактический результат:
 
-- [ ] **Step 4: Закоммитить**
+```
+dist/client/assets/index-DM0_z0xy.js  224.32 kB │ gzip:  71.13 kB
+dist/client/assets/race-gis0Yue6.js   894.80 kB │ gzip: 236.44 kB
+```
+
+Сцена уезжает отдельным чанком, вход остаётся 224 КБ — в этом и весь смысл ленивой загрузки.
+
+- [x] **Step 4: Проверить глазами**
+
+Пройти раунд целиком в двух контекстах настоящего браузера (десктоп 1280×860 и Pixel 7) и посмотреть
+на снимки. Зелёная сборка о внешнем виде не говорит ничего.
+
+- [x] **Step 5: Закоммитить**
 
 ```bash
 pnpm format
-git add apps/game
-git commit -m "feat(app): draw the race in a lazily loaded 3d scene"
+git add apps/game/src/client
+git commit -m "feat(app): draw the round as a race on a lane, framed to keep the field in view"
 ```
+
+## Что выяснилось на этой задаче
+
+1. **Масштаб фиксированный, а не относительно лидера.** При относительном игрок, который в комнате
+   один, всегда упёрт в максимум и роста не видит — этим и были плохи столбики.
+2. **Движение не читается без разметки.** Бегун над однотонной плоскостью выглядит неподвижным;
+   поперечные отметки через метр и линия старта дают глазу за что зацепиться.
+3. **Камера ведёт поле, а не лидера.** Первая версия следила за лидером, и отстающий уезжал за левый
+   край кадра — пропадало ровно то, ради чего гонка и нужна.
+4. **Подписи имён в 3D не делаем.** `drei/Text` тянет шрифт с внешнего CDN: лишняя сетевая
+   зависимость на Cloudflare. Имя лидера и так в HUD.
+5. **Ключ для отметок — расстояние, а не индекс массива.** Biome справедливо ругается на `key={index}`;
+   правильный ответ здесь не подавить правило, а взять настоящий идентификатор.
+6. **three.js сыплет предупреждениями из своих внутренностей** — `PCFSoftShadowMap has been removed`
+   и `THREE.Clock deprecated`. Это react-three-fiber, не наш код, и исправить их нечем.
+
+### Про съёмку экранов
+
+Инструмент съёмки оказался источником трёх ложных диагнозов подряд, и это стоит помнить:
+
+- **Опрос страницы локаторами Playwright во время раунда залипает на минуты.** Сама страница при этом
+  держит 60 кадров в секунду — проверено счётчиком `requestAnimationFrame` внутри страницы. Все
+  ожидания в сценарии должны быть на стороне node, а не через `waitForTimeout`/локаторы.
+- **Две вкладки одного контекста — это один игрок.** У них общий `localStorage`, а значит общий
+  `playerId`: гость молча входит под хостом. Нужны два разных контекста браузера.
+- **Нажатия по отключённой кнопке пропадают бесследно.** `dispatchEvent` на `disabled` элементе не
+  делает ничего, и раунд заканчивается со счётом 0:0 без единой ошибки. Сценарий обязан сообщать,
+  что кнопка была отключена, иначе это читается как «игра не считает клики».
 
 ---
 
@@ -1053,4 +1172,4 @@ pnpm --filter @clicker/app run e2e
 
 ## Что дальше
 
-Основа закрыта: правила, протокол, сервер, клиент, тесты на всех уровнях и деплой. Дальше проект растёт вширь — второй игровой режим, нормальная 3D-сцена вместо столбиков, звук, история победителей. Границы слоёв под это уже готовы: правила не знают про транспорт, транспорт не знает про рендер.
+Основа закрыта: правила, протокол, сервер, клиент, тесты на всех уровнях и деплой. Дальше проект растёт вширь — второй игровой режим, звук, история победителей, доводка сцены гонки. Границы слоёв под это уже готовы: правила не знают про транспорт, транспорт не знает про рендер.
