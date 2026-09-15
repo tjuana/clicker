@@ -41,6 +41,9 @@ export function Hud() {
         background: theme.surface,
         border: `1px solid ${theme.border}`,
         borderRadius: 12,
+        // The score and the timer change ten times a second: proportional digits make
+        // the whole row twitch as they do.
+        fontVariantNumeric: 'tabular-nums',
       }}
     >
       <span data-testid="hud-phase">
@@ -55,8 +58,11 @@ export function Hud() {
         {strings.you}: <strong>{localClicks}</strong>
       </span>
       <span data-testid="hud-leader" style={{ color: theme.muted }}>
-        {leader === null ? '—' : `${strings.leader}: ${leader.name} ${scoreOf(leader.id)}`} ·{' '}
-        {players.length}
+        {leader === null ? '—' : `${strings.leader}: ${leader.name} ${scoreOf(leader.id)}`}
+      </span>
+      {/* Its own item: appended to the leader it read as part of their score. */}
+      <span data-testid="hud-players" style={{ color: theme.muted }}>
+        {strings.players}: {players.length}
       </span>
     </div>
   );

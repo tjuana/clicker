@@ -4,6 +4,25 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Clicker</title>
+    <style>
+      /* The shell paints the page before React mounts, so the colours are repeated from
+         theme.ts on purpose: without them the first frame is a white flash. */
+      :root {
+        color-scheme: dark;
+        font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+      }
+      body {
+        margin: 0;
+        background: #0b0d14;
+        color: #ece8df;
+      }
+      /* Form controls do not inherit the font: without this the buttons and the name
+         field keep the browser's own face while everything around them changes. */
+      button,
+      input {
+        font: inherit;
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>

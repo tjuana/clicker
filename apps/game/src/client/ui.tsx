@@ -19,8 +19,17 @@ export function Screen({ children }: { children: ReactNode }) {
         padding: '24px 16px',
       }}
     >
+      {/* `margin: auto` centres the column vertically and, unlike `align-items: center`,
+          never clips the top of content taller than the viewport. */}
       <div
-        style={{ width: '100%', maxWidth: 860, display: 'flex', flexDirection: 'column', gap: 16 }}
+        style={{
+          width: '100%',
+          maxWidth: 860,
+          margin: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 16,
+        }}
       >
         {children}
       </div>
