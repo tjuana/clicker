@@ -1,13 +1,24 @@
-import { type Browser, expect, type Page, test } from '@playwright/test';
+import { chromium, expect, type Page, test } from '@playwright/test';
 
 /**
- * A page in its own browser context. Never a second tab: tabs share localStorage, so the
- * second player would inherit the first one's saved name and playerId and join as the very
- * same player.
+ * A player gets a browser of their own, not a second tab and not even a second context.
+ *
+ * Tabs are out because they share localStorage: the second player would inherit the first
+ * one's saved name and playerId and join as the very same player. Two contexts in one browser
+ * looked fine but were not: with two pages alive, driver calls against one of them crawl, and
+ * a ten-second round stretched past fifteen minutes — alternating between projects run to run.
  */
-async function openPlayer(browser: Browser): Promise<Page> {
-  const context = await browser.newContext();
+async function openPlayer(baseURL: string | undefined): Promise<Page> {
+  const browser = await chromium.launch();
+  // A hand-made context gets none of the config's `use`, so the base address is passed in
+  // from the fixture rather than written down a second time.
+  const context = await browser.newContext({ baseURL });
   return context.newPage();
+}
+
+/** Closes the whole browser behind a page, since each player now owns one. */
+async function closePlayer(page: Page): Promise<void> {
+  await page.context().browser()?.close();
 }
 
 /** The name screen only exists once there is a room to join. */
@@ -16,14 +27,14 @@ async function enterName(page: Page, name: string): Promise<void> {
   await page.getByTestId('enter').click();
 }
 
-test('two players race a round and agree on the winner', async ({ browser }) => {
-  const host = await openPlayer(browser);
+test('two players race a round and agree on the winner', async ({ baseURL }) => {
+  const host = await openPlayer(baseURL);
   await host.goto('/');
   await host.getByTestId('create-room').click();
   await enterName(host, 'Anna');
   await expect(host.getByTestId('start')).toBeVisible();
 
-  const guest = await openPlayer(browser);
+  const guest = await openPlayer(baseURL);
   await guest.goto(host.url());
   await enterName(guest, 'Boris');
 
@@ -53,8 +64,8 @@ test('two players race a round and agree on the winner', async ({ browser }) => 
   await expect(guest.getByTestId('winner')).toContainText('Boris');
   await expect(host.getByTestId('results')).toContainText('Anna');
 
-  await host.context().close();
-  await guest.context().close();
+  await closePlayer(host);
+  await closePlayer(guest);
 });
 
 test('a player can leave the room and come back to the start', async ({ page }) => {

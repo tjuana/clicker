@@ -8,17 +8,19 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: './e2e',
   timeout: 90_000,
+  // A hard cap on the whole run. The per-test timeout above has been observed not to fire,
+  // and a suite that hangs for a quarter of an hour in CI is worse than one that fails.
+  globalTimeout: 5 * 60_000,
   expect: { timeout: 25_000 },
-  // One worker: two players in one round already use two browser contexts, and parallel
-  // rounds would fight over the dev server for no gain.
+  // One worker: a round already runs two browsers, and parallel rounds would fight over the
+  // dev server for no gain.
   workers: 1,
   reporter: [['list']],
   use: {
     baseURL: 'http://localhost:5173',
     trace: 'retain-on-failure',
-    // Two players mean two pages, and only one of them can be in the foreground. Chromium
-    // throttles timers in a backgrounded page to about once a minute, which freezes the other
-    // player's countdown and stretches a ten-second round into a quarter of an hour.
+    // Kept as hygiene for a test that runs two players at once, not as a cure: background
+    // timer throttling was measured and ruled out as the cause of the stalls below.
     launchOptions: {
       args: [
         '--disable-background-timer-throttling',
