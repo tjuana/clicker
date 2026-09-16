@@ -166,6 +166,42 @@ export function CopyButton({
   );
 }
 
+/**
+ * A link meant to be read and sent, with copying as a convenience rather than the only way out.
+ * A bare copy button hides what you are about to share and leaves nothing to fall back on.
+ */
+export function ShareLink({
+  value,
+  label,
+  testId,
+}: {
+  value: string;
+  label: string;
+  testId?: string;
+}) {
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+      <input
+        readOnly
+        value={value}
+        aria-label={label}
+        onFocus={(event) => event.currentTarget.select()}
+        style={{
+          flex: '1 1 260px',
+          minWidth: 0,
+          padding: 12,
+          borderRadius: 10,
+          border: `1px solid ${theme.border}`,
+          background: theme.surface,
+          color: theme.text,
+          font: 'inherit',
+        }}
+      />
+      <CopyButton value={value} label={strings.copy} testId={testId} />
+    </div>
+  );
+}
+
 export function ErrorNote({ code }: { code: ServerErrorCode | null }) {
   if (code === null) return null;
   return <p style={{ color: theme.danger, margin: 0 }}>{strings.errors[code]}</p>;

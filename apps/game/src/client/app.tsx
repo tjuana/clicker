@@ -71,7 +71,7 @@ function Room({ roomId, onLeave }: { roomId: string; onLeave: () => void }) {
   const start = useCallback(() => connectionRef.current?.start(), []);
   const click = useCallback(() => connectionRef.current?.click(), []);
 
-  if (showJoin) return <Join roomId={roomId} onEnter={enter} />;
+  if (showJoin) return <Join onEnter={enter} />;
 
   return (
     <>

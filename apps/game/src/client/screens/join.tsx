@@ -6,16 +6,15 @@ import { strings } from '../strings';
 import { theme } from '../theme';
 import { Button, ErrorNote, Screen } from '../ui';
 
-export function Join({ roomId, onEnter }: { roomId: string; onEnter: (name: string) => void }) {
+export function Join({ onEnter }: { onEnter: (name: string) => void }) {
   const [name, setName] = useState(savedName);
   const error = useClient((state) => state.lastError);
   const trimmed = name.trim();
 
   return (
     <Screen>
-      <h1 style={{ fontSize: 28, margin: 0 }}>
-        {strings.room} <code style={{ color: theme.muted }}>{roomId}</code>
-      </h1>
+      {/* The room id is a 22-character token: useless to a human and far too loud for a heading. */}
+      <h1 style={{ fontSize: 28, margin: 0 }}>{strings.joinTitle}</h1>
       <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         <span style={{ color: theme.muted }}>{strings.nameLabel}</span>
         <input

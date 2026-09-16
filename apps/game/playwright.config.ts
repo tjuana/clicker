@@ -13,7 +13,20 @@ export default defineConfig({
   // rounds would fight over the dev server for no gain.
   workers: 1,
   reporter: [['list']],
-  use: { baseURL: 'http://localhost:5173', trace: 'retain-on-failure' },
+  use: {
+    baseURL: 'http://localhost:5173',
+    trace: 'retain-on-failure',
+    // Two players mean two pages, and only one of them can be in the foreground. Chromium
+    // throttles timers in a backgrounded page to about once a minute, which freezes the other
+    // player's countdown and stretches a ten-second round into a quarter of an hour.
+    launchOptions: {
+      args: [
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding',
+      ],
+    },
+  },
   projects: [
     { name: 'desktop', use: { ...devices['Desktop Chrome'] } },
     { name: 'mobile', use: { ...devices['Pixel 7'] } },
