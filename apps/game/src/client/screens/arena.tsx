@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { useServerClock } from '../clock';
 import { Hud } from '../hud';
 import { Standings } from '../standings';
@@ -14,10 +14,31 @@ export function Arena({ onClick }: { onClick: () => void }) {
   const now = useServerClock();
   const snapshot = useClient((state) => state.snapshot);
   const you = useClient((state) => state.you);
-  if (snapshot === null) return null;
 
-  const live =
-    snapshot.round !== null && now >= snapshot.round.goAt && now <= snapshot.round.endsAt;
+  // Worked out before the early return below: the keyboard effect is a hook, so it has to run
+  // on every render — including the one where no snapshot has arrived yet.
+  const round = snapshot?.round ?? null;
+  const live = round !== null && now >= round.goAt && now <= round.endsAt;
+
+  // The button is for thumbs; a keyboard is faster and people will reach for it. The protocol
+  // already carries a generic input, so this costs nothing on the server.
+  useEffect(() => {
+    if (!live) return;
+
+    const onKey = (event: KeyboardEvent): void => {
+      // One press, one click: a held key repeats by itself and would hand out free score.
+      if (event.repeat || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.code !== 'Space' && event.key !== 'Enter') return;
+      // Space scrolls the page unless told otherwise.
+      event.preventDefault();
+      onClick();
+    };
+
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [live, onClick]);
+
+  if (snapshot === null) return null;
 
   return (
     <Screen>
@@ -55,6 +76,7 @@ export function Arena({ onClick }: { onClick: () => void }) {
       >
         {strings.click}
       </Button>
+      <p style={{ color: theme.muted, margin: 0, textAlign: 'center' }}>{strings.keyboardHint}</p>
     </Screen>
   );
 }

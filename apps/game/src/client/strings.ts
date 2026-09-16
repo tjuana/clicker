@@ -29,6 +29,7 @@ export const strings = {
   start: 'Start',
   again: 'Play again',
   click: 'CLICK',
+  keyboardHint: 'or press Space',
   getReady: 'Get ready',
   go: 'Go!',
   finished: 'Finished',
