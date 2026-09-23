@@ -25,6 +25,10 @@ export function Standings() {
         listStyle: 'none',
         margin: 0,
         padding: '10px 14px',
+        // Capped and scrolled: with twenty players an uncapped list pushed the CLICK button
+        // below the fold, and a button you cannot see is a game you cannot play.
+        maxHeight: 200,
+        overflowY: 'auto',
         background: theme.surface,
         border: `1px solid ${theme.border}`,
         borderRadius: 12,
