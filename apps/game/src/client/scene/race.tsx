@@ -14,8 +14,16 @@ export interface Racer {
  * sees themselves move.
  */
 const UNIT = 0.14;
+/**
+ * The pack rides a few shared lanes, never one lane per player. Twenty lanes are a stadium:
+ * either it does not fit the frame, or it fits from so far away that nobody can be told apart
+ * and a detailed model would be a couple of pixels wide.
+ */
+const LANES = 4;
 /** Distance between lanes across the track. */
 const LANE = 1.15;
+/** A slight stagger inside a lane, so players on the same score do not sit inside each other. */
+const STAGGER = 0.24;
 /** Marks every metre; without them a racer over a flat floor looks motionless. */
 const MARKS = 48;
 const MARK_SPACING = 1;
@@ -81,8 +89,9 @@ function Rig({ firstX, lastX }: { firstX: number; lastX: number }) {
   return null;
 }
 
-function Track({ lanes }: { lanes: number }) {
-  const width = Math.max(6, lanes * LANE + 3);
+function Track() {
+  // Fixed: the track no longer widens with the number of players.
+  const width = LANES * LANE + 3;
 
   return (
     <group>
@@ -125,15 +134,21 @@ export default function Race({ racers, you }: { racers: Racer[]; you: string | n
       <ambientLight intensity={0.55} />
       <directionalLight position={[6, 9, 6]} intensity={1.5} castShadow />
 
-      <Track lanes={racers.length} />
-      {racers.map((racer, index) => (
-        <Runner
-          key={racer.id}
-          x={racer.clicks * UNIT}
-          z={(index - (racers.length - 1) / 2) * LANE}
-          gold={racer.id === you}
-        />
-      ))}
+      <Track />
+      {racers.map((racer, index) => {
+        const lane = index % LANES;
+        const row = Math.floor(index / LANES);
+        return (
+          <Runner
+            key={racer.id}
+            x={racer.clicks * UNIT}
+            // Lane from the index, then a small stagger by row: the pack keeps the same width
+            // whether four people are racing or forty.
+            z={(lane - (LANES - 1) / 2) * LANE + ((row % 3) - 1) * STAGGER}
+            gold={racer.id === you}
+          />
+        );
+      })}
 
       <Rig firstX={firstX} lastX={lastX} />
     </Canvas>
