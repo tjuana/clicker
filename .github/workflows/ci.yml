@@ -16,12 +16,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      # Corepack first, and that order is the whole point: setup-node reads `packageManager`
+      # from package.json and tries to run pnpm itself. Enabled afterwards, every run died on
+      # "Unable to locate executable file: pnpm" before a single check had a chance to run.
+      - run: corepack enable
       - uses: actions/setup-node@v5
         with:
           node-version: 22
-      # pnpm comes from corepack: the version is pinned in packageManager, so this needs no
-      # third-party action — and those still drag in an outdated Node 20 runtime.
-      - run: corepack enable && pnpm --version
+      - run: pnpm --version
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
       - run: pnpm typecheck
