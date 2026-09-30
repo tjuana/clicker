@@ -36,7 +36,7 @@ Hard rules:
 - **Data structures fit the job.** Lookup by key is an object or a `Map`, never a scan over an array.
   Membership is a `Set`. An array is for order. If a structure forces nested loops, it is the wrong
   structure.
-- **Count the hot path.** A round is up to 15 clicks per second per player plus a snapshot broadcast
+- **Count the hot path.** A round is up to 30 clicks per second per player plus a snapshot broadcast
   ten times a second. On that path: no storage write per message, no snapshot built separately for
   each connection, no copying collections without reason.
 - **Optimise from a measurement, not a feeling.** Clear code first, then measure, then change. Comment
