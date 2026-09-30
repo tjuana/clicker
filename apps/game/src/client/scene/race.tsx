@@ -158,7 +158,7 @@ function Track() {
       {Array.from({ length: MARKS }, (_, index) => (index + 1) * MARK_SPACING).map((distance) => (
         <mesh key={distance} position={[distance, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]}>
           <planeGeometry args={[0.06, width]} />
-          <meshBasicMaterial color="#4a5470" />
+          <meshBasicMaterial color="#6d7a99" />
         </mesh>
       ))}
     </group>
@@ -187,8 +187,12 @@ export default function Race({ racers, you }: { racers: Racer[]; you: string | n
       {/* Dusk, not night: dropped to 0.5 the road turned into an indistinct dark mass and the
           liveries went muddy — the one thing the warm key light was supposed to prevent. */}
       <ambientLight intensity={0.72} />
-      <hemisphereLight args={['#6a5b8a', '#2a2f42', 0.6]} />
-      <directionalLight position={[8, 12, 6]} intensity={1.6} color="#ffd9a8" castShadow />
+      {/* The ground term does the work the key light cannot: the near half of the road faces
+          away from it and was lit by nothing else. */}
+      <hemisphereLight args={['#8778ab', '#3d4460', 0.85]} />
+      {/* Moved closer to overhead: from off to one side it lit the far half of the track and
+          left the near half in its own shadow. Still warm, still angled enough to cast. */}
+      <directionalLight position={[5, 16, 4]} intensity={2} color="#ffd9a8" castShadow />
 
       <Track />
       {racers.map((racer, index) => {
