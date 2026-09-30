@@ -70,15 +70,37 @@ function Runner({ x, z, colour, gold }: { x: number; z: number; colour: string; 
 
   return (
     <group ref={group} position={[0, 0, z]}>
-      {/* A body and a nose: enough of a shape to tell which way it is facing. */}
-      <mesh position={[0, 0.3, 0]} castShadow>
-        <boxGeometry args={[0.72, 0.42, 0.56]} />
+      {/* Built from primitives rather than a bought model: at twenty players a racer is the
+          size of a fingernail, and what makes it read as a car at that size is the silhouette —
+          low chassis, cabin set back, wheels — not the detail on its panels. */}
+      <mesh position={[0, 0.2, 0]} castShadow>
+        <boxGeometry args={[0.86, 0.2, 0.46]} />
         <meshStandardMaterial color={colour} metalness={0.05} roughness={0.35} />
       </mesh>
-      <mesh position={[0.46, 0.24, 0]} rotation={[0, 0, Math.PI / 4]} castShadow>
-        <boxGeometry args={[0.26, 0.26, 0.5]} />
+      <mesh position={[-0.08, 0.37, 0]} castShadow>
+        <boxGeometry args={[0.38, 0.19, 0.4]} />
+        <meshStandardMaterial color={colour} metalness={0.05} roughness={0.4} />
+      </mesh>
+      {/* A wedge of a nose, so which way it faces is never in doubt. */}
+      <mesh position={[0.45, 0.17, 0]} castShadow>
+        <boxGeometry args={[0.18, 0.13, 0.4]} />
         <meshStandardMaterial color={colour} metalness={0.05} roughness={0.45} />
       </mesh>
+      {[
+        [0.27, 0.25],
+        [0.27, -0.25],
+        [-0.27, 0.25],
+        [-0.27, -0.25],
+      ].map(([wx, wz]) => (
+        <mesh
+          key={`${wx}:${wz}`}
+          position={[wx ?? 0, 0.11, wz ?? 0]}
+          rotation={[Math.PI / 2, 0, 0]}
+        >
+          <cylinderGeometry args={[0.11, 0.11, 0.08, 10]} />
+          <meshStandardMaterial color="#1c2030" roughness={0.75} />
+        </mesh>
+      ))}
       {/* Your own racer wears a ring on the ground: colour alone is not enough to find
           yourself in a pack of twenty when the figure is a few pixels wide. */}
       {gold ? (
