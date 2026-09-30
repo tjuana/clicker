@@ -98,9 +98,16 @@ function Runner({ x, z, colour, gold }: { x: number; z: number; colour: string; 
  */
 function Rig({ firstX, lastX }: { firstX: number; lastX: number }) {
   const { camera } = useThree();
+  const focusRef = useRef<number | null>(null);
 
   useFrame((_state, delta) => {
-    const focus = (firstX + lastX) / 2;
+    // Damped at the runners' own rate. The camera used to aim straight at the raw snapshot
+    // position — which arrives in steps ten times a second — while the cars lagged behind
+    // their own damping. Smooth position, jumping aim: that mismatch is what shook.
+    const wanted = (firstX + lastX) / 2;
+    focusRef.current = focusRef.current === null ? wanted : damp(focusRef.current, wanted, delta);
+    const focus = focusRef.current;
+
     const spread = firstX - lastX;
     // Pull back as the field stretches, but never closer than a readable minimum.
     const distance = MathUtils.clamp(6 + spread * 0.45, 6, 16);
