@@ -24,6 +24,21 @@ const LANES = 4;
 const LANE = 1.15;
 /** A slight stagger inside a lane, so players on the same score do not sit inside each other. */
 const STAGGER = 0.24;
+
+/**
+ * A colour per racer, assigned by position in the list so it is stable for a whole round.
+ * In a pack of twenty a figure is small, and colour tells people apart long before shape does.
+ */
+const LIVERY = [
+  '#e5533d',
+  '#3da5e5',
+  '#54c06a',
+  '#c264d9',
+  '#e58f2e',
+  '#2fc2b8',
+  '#e5c93d',
+  '#7a7ce0',
+];
 /** Marks every metre; without them a racer over a flat floor looks motionless. */
 const MARKS = 48;
 const MARK_SPACING = 1;
@@ -33,7 +48,7 @@ const damp = (current: number, target: number, delta: number, rate = 7): number 
   MathUtils.damp(current, target, rate, delta);
 
 /** Named apart from the `Racer` data type on purpose: one is a shape on the track, the other a row of numbers. */
-function Runner({ x, z, gold }: { x: number; z: number; gold: boolean }) {
+function Runner({ x, z, colour, gold }: { x: number; z: number; colour: string; gold: boolean }) {
   const group = useRef<Group>(null);
 
   useFrame((_state, delta) => {
@@ -46,20 +61,20 @@ function Runner({ x, z, gold }: { x: number; z: number; gold: boolean }) {
       {/* A body and a nose: enough of a shape to tell which way it is facing. */}
       <mesh position={[0, 0.3, 0]} castShadow>
         <boxGeometry args={[0.72, 0.42, 0.56]} />
-        <meshStandardMaterial
-          color={gold ? theme.goldBright : '#4d5a85'}
-          metalness={0.1}
-          roughness={0.55}
-        />
+        <meshStandardMaterial color={colour} metalness={0.05} roughness={0.35} />
       </mesh>
-      <mesh position={[0.46, 0.24, 0]} rotation={[0, 0, Math.PI / 4]}>
+      <mesh position={[0.46, 0.24, 0]} rotation={[0, 0, Math.PI / 4]} castShadow>
         <boxGeometry args={[0.26, 0.26, 0.5]} />
-        <meshStandardMaterial
-          color={gold ? theme.gold : '#3f4a6d'}
-          metalness={0.1}
-          roughness={0.6}
-        />
+        <meshStandardMaterial color={colour} metalness={0.05} roughness={0.45} />
       </mesh>
+      {/* Your own racer wears a ring on the ground: colour alone is not enough to find
+          yourself in a pack of twenty when the figure is a few pixels wide. */}
+      {gold ? (
+        <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[0.52, 0.66, 24]} />
+          <meshBasicMaterial color={theme.goldBright} transparent opacity={0.9} />
+        </mesh>
+      ) : null}
     </group>
   );
 }
@@ -97,19 +112,32 @@ function Track() {
     <group>
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[400, width]} />
-        <meshStandardMaterial color="#1b2136" roughness={0.95} />
+        <meshStandardMaterial color="#3c4a63" roughness={0.9} />
       </mesh>
 
+      {/* Kerbs down both sides: the track had no edges at all, so it read as a floor
+          rather than a road, and nothing marked where the racing surface ended. */}
+      {[-1, 1].map((side) => (
+        <mesh
+          key={side}
+          position={[100, 0.02, (side * width) / 2 - side * 0.25]}
+          rotation={[-Math.PI / 2, 0, 0]}
+        >
+          <planeGeometry args={[400, 0.5]} />
+          <meshStandardMaterial color="#e5533d" roughness={0.8} />
+        </mesh>
+      ))}
+
       {/* The start line, and then a mark every metre to make speed legible. */}
-      <mesh position={[0, 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[0.12, width]} />
-        <meshBasicMaterial color={theme.gold} />
+      <mesh position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[0.16, width]} />
+        <meshBasicMaterial color="#f4f1ea" />
       </mesh>
       {/* Keyed by the distance each mark stands for, which is what actually identifies it. */}
       {Array.from({ length: MARKS }, (_, index) => (index + 1) * MARK_SPACING).map((distance) => (
-        <mesh key={distance} position={[distance, 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-          <planeGeometry args={[0.04, width]} />
-          <meshBasicMaterial color="#2c3450" />
+        <mesh key={distance} position={[distance, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <planeGeometry args={[0.06, width]} />
+          <meshBasicMaterial color="#5d6c88" />
         </mesh>
       ))}
     </group>
@@ -128,11 +156,15 @@ export default function Race({ racers, you }: { racers: Racer[]; you: string | n
       camera={{ position: [-4.2, 2.1, 6.4], fov: 42 }}
       style={{ width: '100%', height: '100%' }}
     >
-      <color attach="background" args={[theme.surface]} />
-      <fog attach="fog" args={[theme.surface, 16, 34]} />
+      {/* Daylight, not the dark panel colour the canvas used to blend into: an arcade race
+          reads as a lit world, and toy colours need light to look like toys. The UI around
+          it stays dark on purpose, so the scene reads as a window rather than a page. */}
+      <color attach="background" args={['#8fc3e8']} />
+      <fog attach="fog" args={['#8fc3e8', 22, 46]} />
 
-      <ambientLight intensity={0.55} />
-      <directionalLight position={[6, 9, 6]} intensity={1.5} castShadow />
+      <ambientLight intensity={0.85} />
+      <hemisphereLight args={['#cfe6f7', '#3c4a63', 0.7]} />
+      <directionalLight position={[8, 12, 6]} intensity={1.9} castShadow />
 
       <Track />
       {racers.map((racer, index) => {
@@ -145,6 +177,7 @@ export default function Race({ racers, you }: { racers: Racer[]; you: string | n
             // Lane from the index, then a small stagger by row: the pack keeps the same width
             // whether four people are racing or forty.
             z={(lane - (LANES - 1) / 2) * LANE + ((row % 3) - 1) * STAGGER}
+            colour={LIVERY[index % LIVERY.length] ?? '#4d5a85'}
             gold={racer.id === you}
           />
         );
