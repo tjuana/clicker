@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect } from 'react';
-import { useServerClock } from '../clock';
+import { secondsLeft, useServerClock } from '../clock';
 import { Hud } from '../hud';
 import { Standings } from '../standings';
 import { useClient } from '../store';
@@ -77,6 +77,39 @@ export function Arena({ onClick }: { onClick: () => void }) {
         {strings.click}
       </Button>
       <p style={{ color: theme.muted, margin: 0, textAlign: 'center' }}>{strings.keyboardHint}</p>
+
+      {/* Across the whole screen, because three seconds of countdown is the one moment everyone
+          is looking for the same thing. Never interactive: the instant it goes, the button
+          underneath has to be live. */}
+      {snapshot.phase === 'countdown' && round !== null ? (
+        <div
+          data-testid="countdown"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 2,
+            pointerEvents: 'none',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+            background: 'rgba(11, 13, 20, 0.82)',
+          }}
+        >
+          <span style={{ color: theme.muted, fontSize: 24 }}>{strings.getReady}</span>
+          <strong
+            style={{
+              fontSize: 'min(40vw, 220px)',
+              lineHeight: 1,
+              color: theme.goldBright,
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          >
+            {secondsLeft(round.goAt, now)}
+          </strong>
+        </div>
+      ) : null}
     </Screen>
   );
 }
