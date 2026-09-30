@@ -30,14 +30,26 @@ const STAGGER = 0.24;
  * In a pack of twenty a figure is small, and colour tells people apart long before shape does.
  */
 const LIVERY = [
-  '#e5533d',
-  '#3da5e5',
-  '#54c06a',
-  '#c264d9',
-  '#e58f2e',
-  '#2fc2b8',
-  '#e5c93d',
-  '#7a7ce0',
+  '#e5443d',
+  '#f07a2e',
+  '#efd034',
+  '#b6d334',
+  '#5cc23f',
+  '#2fb36a',
+  '#26bfa5',
+  '#2bb8d6',
+  '#5ad0f0',
+  '#3d95e5',
+  '#4f6ee0',
+  '#6f5be0',
+  '#9a5be0',
+  '#c455d9',
+  '#e055a8',
+  '#e85f79',
+  '#8fd6c2',
+  '#d6d6d6',
+  '#7f8fb5',
+  '#b5b02f',
 ];
 /** Marks every metre; without them a racer over a flat floor looks motionless. */
 const MARKS = 48;
@@ -112,7 +124,7 @@ function Track() {
     <group>
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[400, width]} />
-        <meshStandardMaterial color="#3c4a63" roughness={0.9} />
+        <meshStandardMaterial color="#343c56" roughness={0.9} />
       </mesh>
 
       {/* Kerbs down both sides: the track had no edges at all, so it read as a floor
@@ -124,20 +136,22 @@ function Track() {
           rotation={[-Math.PI / 2, 0, 0]}
         >
           <planeGeometry args={[400, 0.5]} />
-          <meshStandardMaterial color="#e5533d" roughness={0.8} />
+          {/* Terracotta, not the red it started as: a player's own car is red too, and at the
+              edge of the track the two merged into one shape. */}
+          <meshStandardMaterial color="#96634f" roughness={0.8} />
         </mesh>
       ))}
 
       {/* The start line, and then a mark every metre to make speed legible. */}
       <mesh position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <planeGeometry args={[0.16, width]} />
-        <meshBasicMaterial color="#f4f1ea" />
+        <meshBasicMaterial color="#efe6d8" />
       </mesh>
       {/* Keyed by the distance each mark stands for, which is what actually identifies it. */}
       {Array.from({ length: MARKS }, (_, index) => (index + 1) * MARK_SPACING).map((distance) => (
         <mesh key={distance} position={[distance, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]}>
           <planeGeometry args={[0.06, width]} />
-          <meshBasicMaterial color="#5d6c88" />
+          <meshBasicMaterial color="#4a5470" />
         </mesh>
       ))}
     </group>
@@ -156,15 +170,18 @@ export default function Race({ racers, you }: { racers: Racer[]; you: string | n
       camera={{ position: [-4.2, 2.1, 6.4], fov: 42 }}
       style={{ width: '100%', height: '100%' }}
     >
-      {/* Daylight, not the dark panel colour the canvas used to blend into: an arcade race
-          reads as a lit world, and toy colours need light to look like toys. The UI around
-          it stays dark on purpose, so the scene reads as a window rather than a page. */}
-      <color attach="background" args={['#8fc3e8']} />
-      <fog attach="fog" args={['#8fc3e8', 22, 46]} />
+      {/* Dusk rather than noon. A daylight sky inside this near-black page read as a bright
+          patch cut into it; an evening one keeps the arcade colours but belongs to the same
+          room as the dark panels around it. The key light stays warm so the cars still look
+          like painted toys instead of grey blocks. */}
+      <color attach="background" args={['#2b2540']} />
+      <fog attach="fog" args={['#2b2540', 22, 46]} />
 
-      <ambientLight intensity={0.85} />
-      <hemisphereLight args={['#cfe6f7', '#3c4a63', 0.7]} />
-      <directionalLight position={[8, 12, 6]} intensity={1.9} castShadow />
+      {/* Dusk, not night: dropped to 0.5 the road turned into an indistinct dark mass and the
+          liveries went muddy — the one thing the warm key light was supposed to prevent. */}
+      <ambientLight intensity={0.72} />
+      <hemisphereLight args={['#6a5b8a', '#2a2f42', 0.6]} />
+      <directionalLight position={[8, 12, 6]} intensity={1.6} color="#ffd9a8" castShadow />
 
       <Track />
       {racers.map((racer, index) => {
