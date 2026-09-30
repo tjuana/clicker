@@ -5,7 +5,11 @@ export interface GameConfig {
   roundMs: number;
   /** How long clicks are still accepted after the round ends: slack for network delay. */
   lateGraceMs: number;
-  /** Token bucket refill rate. */
+  /**
+   * Token bucket refill rate. Set well above what hands can do: the bucket is there to stop a
+   * script writing itself ten thousand clicks, not to cap a fast player. A ceiling a human can
+   * reach turns close rounds into draws — a real team round ended tied on exactly that.
+   */
   clicksPerSecond: number;
   /** Token bucket capacity. */
   burst: number;
@@ -25,8 +29,9 @@ export const DEFAULT_CONFIG: GameConfig = {
   countdownMs: 3000,
   roundMs: 10000,
   lateGraceMs: 250,
-  clicksPerSecond: 15,
-  burst: 15,
+  // Two hands manage about twenty a second; thirty is safely past anything human.
+  clicksPerSecond: 30,
+  burst: 30,
   reconnectGraceMs: 30000,
   maxPlayers: 50,
   tickMs: null,
