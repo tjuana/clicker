@@ -54,6 +54,19 @@ Hard rules:
 - Rules get fast unit tests, the server gets integration tests in the real Workers runtime, the whole
   game gets an end-to-end test in two browsers.
 - A flaky test is worse than no test: never reproduce a race with timers — remove the race instead.
+- **A test that passed the first time it ran has not been shown to work.** Break the thing it guards
+  and watch it go red. Two tests written here passed against the very defect they were written to
+  catch: one was looking at the wrong collection, the other at code that was never called.
+- **Asymptotics are asserted, not argued.** Anything on the hot path gets a growth test from
+  [complexity.ts](packages/game/test/complexity.ts): operations are counted, never milliseconds,
+  because counting is deterministic and a CI runner's clock is not. Across a tenfold input, linear
+  work multiplies by ten and quadratic work by a hundred — a gap no threshold has to be precise
+  about. Two instruments: one counts how much of a record a function touches, the other the length
+  of every array scan, which the first cannot see when the array is built inside the function.
+- **The rules' purity is checked, not promised.** [purity.test.ts](packages/game/test/purity.test.ts)
+  reads the source for ambient time, randomness and foreign imports, then runs a whole round with
+  the globals replaced by traps. `packages/game` typechecks with an empty `types` list, so a stray
+  `process.env` in `src` is a compile error.
 
 ## Before claiming anything is done
 
