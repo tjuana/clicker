@@ -1,7 +1,29 @@
+import { useGLTF } from '@react-three/drei';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { useRef } from 'react';
-import { type Group, MathUtils } from 'three';
+import { useMemo, useRef } from 'react';
+import {
+  Box3,
+  type Group,
+  MathUtils,
+  Mesh,
+  type MeshStandardMaterial,
+  type PerspectiveCamera,
+  Vector3,
+} from 'three';
 import { theme } from '../theme';
+import { distanceToFit, gridFor, slotFor } from './layout';
+
+/**
+ * A rally hatchback from Kenney's Car Kit — CC0, so no attribution is owed.
+ * Its texture is *not* embedded: the file references `Textures/colormap.png` next to itself,
+ * and without that second file the car arrives in flat grey.
+ */
+const CAR = '/models/rally.glb';
+useGLTF.preload(CAR);
+
+/** The model is ~2.85 long and points down +Z; the track runs along +X at a tenth the size. */
+const CAR_SCALE = 0.33;
+const CAR_TURN = Math.PI / 2;
 
 export interface Racer {
   id: string;
@@ -14,16 +36,8 @@ export interface Racer {
  * sees themselves move.
  */
 const UNIT = 0.14;
-/**
- * The pack rides a few shared lanes, never one lane per player. Twenty lanes are a stadium:
- * either it does not fit the frame, or it fits from so far away that nobody can be told apart
- * and a detailed model would be a couple of pixels wide.
- */
-const LANES = 4;
-/** Distance between lanes across the track. */
-const LANE = 1.15;
-/** A slight stagger inside a lane, so players on the same score do not sit inside each other. */
-const STAGGER = 0.24;
+/* Lane spacing, row stagger and camera distance all live in ./layout — they are arithmetic,
+   not rendering, and they are derived from the car's measured size rather than typed in. */
 
 /**
  * A colour per racer, assigned by position in the list so it is stable for a whole round.
@@ -62,6 +76,36 @@ const damp = (current: number, target: number, delta: number, rate = 7): number 
 /** Named apart from the `Racer` data type on purpose: one is a shape on the track, the other a row of numbers. */
 function Runner({ x, z, colour, gold }: { x: number; z: number; colour: string; gold: boolean }) {
   const group = useRef<Group>(null);
+  const { scene } = useGLTF(CAR);
+
+  /**
+   * A clone per racer, each with its own materials. The kit ships one material shared by every
+   * mesh, so tinting it in place would repaint the entire field at once. Only the mesh named
+   * `body` takes the livery; wheels and glass keep what the model came with.
+   */
+  const car = useMemo(() => {
+    const copy = scene.clone(true);
+    copy.traverse((child) => {
+      if (!(child instanceof Mesh)) return;
+
+      if (child.name !== 'body') {
+        // Wheels and glass keep the shared material they arrived with. Cloning one per mesh
+        // per car gave a hundred unique materials and cost more than half the frame rate.
+        child.castShadow = false;
+        return;
+      }
+
+      const material = (child.material as MeshStandardMaterial).clone();
+      // The atlas paints the body green, and `color` multiplies rather than replaces — every
+      // livery came out a shade of that green. Drop the map on the body alone, so the colour
+      // is the colour; the rest of the car keeps its baked detail.
+      material.map = null;
+      material.color.set(colour);
+      child.material = material;
+      child.castShadow = true;
+    });
+    return copy;
+  }, [scene, colour]);
 
   useFrame((_state, delta) => {
     if (group.current === null) return;
@@ -70,37 +114,7 @@ function Runner({ x, z, colour, gold }: { x: number; z: number; colour: string; 
 
   return (
     <group ref={group} position={[0, 0, z]}>
-      {/* Built from primitives rather than a bought model: at twenty players a racer is the
-          size of a fingernail, and what makes it read as a car at that size is the silhouette —
-          low chassis, cabin set back, wheels — not the detail on its panels. */}
-      <mesh position={[0, 0.2, 0]} castShadow>
-        <boxGeometry args={[0.86, 0.2, 0.46]} />
-        <meshStandardMaterial color={colour} metalness={0.05} roughness={0.35} />
-      </mesh>
-      <mesh position={[-0.08, 0.37, 0]} castShadow>
-        <boxGeometry args={[0.38, 0.19, 0.4]} />
-        <meshStandardMaterial color={colour} metalness={0.05} roughness={0.4} />
-      </mesh>
-      {/* A wedge of a nose, so which way it faces is never in doubt. */}
-      <mesh position={[0.45, 0.17, 0]} castShadow>
-        <boxGeometry args={[0.18, 0.13, 0.4]} />
-        <meshStandardMaterial color={colour} metalness={0.05} roughness={0.45} />
-      </mesh>
-      {[
-        [0.27, 0.25],
-        [0.27, -0.25],
-        [-0.27, 0.25],
-        [-0.27, -0.25],
-      ].map(([wx, wz]) => (
-        <mesh
-          key={`${wx}:${wz}`}
-          position={[wx ?? 0, 0.11, wz ?? 0]}
-          rotation={[Math.PI / 2, 0, 0]}
-        >
-          <cylinderGeometry args={[0.11, 0.11, 0.08, 10]} />
-          <meshStandardMaterial color="#1c2030" roughness={0.75} />
-        </mesh>
-      ))}
+      <primitive object={car} scale={CAR_SCALE} rotation={[0, CAR_TURN, 0]} />
       {/* Your own racer wears a ring on the ground: colour alone is not enough to find
           yourself in a pack of twenty when the figure is a few pixels wide. */}
       {gold ? (
@@ -118,8 +132,16 @@ function Runner({ x, z, colour, gold }: { x: number; z: number; colour: string; 
  * everyone behind them out of the left edge, and the gap between players is the one thing
  * a race has to show.
  */
-function Rig({ firstX, lastX }: { firstX: number; lastX: number }) {
-  const { camera } = useThree();
+function Rig({
+  firstX,
+  lastX,
+  field,
+}: {
+  firstX: number;
+  lastX: number;
+  field: { width: number; length: number };
+}) {
+  const { camera, size } = useThree();
   const focusRef = useRef<number | null>(null);
 
   useFrame((_state, delta) => {
@@ -130,9 +152,12 @@ function Rig({ firstX, lastX }: { firstX: number; lastX: number }) {
     focusRef.current = focusRef.current === null ? wanted : damp(focusRef.current, wanted, delta);
     const focus = focusRef.current;
 
-    const spread = firstX - lastX;
-    // Pull back as the field stretches, but never closer than a readable minimum.
-    const distance = MathUtils.clamp(6 + spread * 0.45, 6, 16);
+    // Asked of the frustum rather than guessed at: the lens is right there on the camera.
+    const lens = camera as PerspectiveCamera;
+    const distance = distanceToFit(field, {
+      fovDeg: lens.fov,
+      aspect: size.width / Math.max(1, size.height),
+    });
 
     // Mostly behind the field and only a little to the side: from side-on the track
     // crosses the frame as a diagonal band instead of receding down the lane.
@@ -145,9 +170,8 @@ function Rig({ firstX, lastX }: { firstX: number; lastX: number }) {
   return null;
 }
 
-function Track() {
-  // Fixed: the track no longer widens with the number of players.
-  const width = LANES * LANE + 3;
+function Track({ laneWidth }: { laneWidth: number }) {
+  const width = laneWidth + 3;
 
   return (
     <group>
@@ -188,6 +212,22 @@ function Track() {
 }
 
 export default function Race({ racers, you }: { racers: Racer[]; you: string | null }) {
+  const { scene } = useGLTF(CAR);
+
+  /**
+   * Taken from the model itself, once. Every distance in the layout follows from these two
+   * numbers, so swapping the `.glb` re-spaces the field automatically. Hand-typed sizes are
+   * what broke it before: the hatchback became a formula car and the cars started overlapping
+   * again, because the constants still described a car that was no longer there.
+   */
+  const car = useMemo(() => {
+    const size = new Box3().setFromObject(scene).getSize(new Vector3());
+    return { length: size.z * CAR_SCALE, width: size.x * CAR_SCALE };
+  }, [scene]);
+
+  const grid = useMemo(() => gridFor(racers.length, car), [racers.length, car]);
+  const rows = Math.ceil(Math.max(1, racers.length) / grid.lanes);
+
   const clicks = racers.map((racer) => racer.clicks);
   const firstX = (clicks.length === 0 ? 0 : Math.max(...clicks)) * UNIT;
   const lastX = (clicks.length === 0 ? 0 : Math.min(...clicks)) * UNIT;
@@ -216,24 +256,25 @@ export default function Race({ racers, you }: { racers: Racer[]; you: string | n
           left the near half in its own shadow. Still warm, still angled enough to cast. */}
       <directionalLight position={[5, 16, 4]} intensity={2} color="#ffd9a8" castShadow />
 
-      <Track />
+      <Track laneWidth={grid.width} />
       {racers.map((racer, index) => {
-        const lane = index % LANES;
-        const row = Math.floor(index / LANES);
+        const slot = slotFor(index, grid);
         return (
           <Runner
             key={racer.id}
-            x={racer.clicks * UNIT}
-            // Lane from the index, then a small stagger by row: the pack keeps the same width
-            // whether four people are racing or forty.
-            z={(lane - (LANES - 1) / 2) * LANE + ((row % 3) - 1) * STAGGER}
+            x={racer.clicks * UNIT - slot.back}
+            z={slot.z}
             colour={LIVERY[index % LIVERY.length] ?? '#4d5a85'}
             gold={racer.id === you}
           />
         );
       })}
 
-      <Rig firstX={firstX} lastX={lastX} />
+      <Rig
+        firstX={firstX}
+        lastX={lastX}
+        field={{ width: grid.width, length: firstX - lastX + rows * grid.rowGap }}
+      />
     </Canvas>
   );
 }
