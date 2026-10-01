@@ -53,16 +53,20 @@ export function advance(state: RoomState, now: number, config: GameConfig): Adva
 function removeExpired(state: RoomState, now: number, config: GameConfig): RoomState {
   if (state.phase !== 'lobby' && state.phase !== 'results') return state;
 
-  const expired = Object.entries(state.players)
-    .filter(
-      ([, player]) =>
-        player.connectionIds.length === 0 &&
-        player.disconnectedAt !== null &&
-        player.disconnectedAt + config.reconnectGraceMs <= now,
-    )
-    .map(([playerId]) => playerId);
+  // A Set, because the hosts are filtered against it below: an array there would be a scan
+  // per host, and in a room everyone has left both lists grow together.
+  const expired = new Set<string>();
+  for (const [playerId, player] of Object.entries(state.players)) {
+    if (
+      player.connectionIds.length === 0 &&
+      player.disconnectedAt !== null &&
+      player.disconnectedAt + config.reconnectGraceMs <= now
+    ) {
+      expired.add(playerId);
+    }
+  }
 
-  if (expired.length === 0) return state;
+  if (expired.size === 0) return state;
 
   const players = { ...state.players };
   const publicIds: string[] = [];
@@ -75,7 +79,7 @@ function removeExpired(state: RoomState, now: number, config: GameConfig): RoomS
   return {
     ...state,
     players,
-    hosts: state.hosts.filter((playerId) => !expired.includes(playerId)),
+    hosts: state.hosts.filter((playerId) => !expired.has(playerId)),
     modeState: mode.removePlayers(state.modeState, publicIds),
   };
 }
