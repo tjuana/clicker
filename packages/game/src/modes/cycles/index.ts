@@ -1,9 +1,9 @@
 import type { CyclesConfig } from './config';
-import { sideFor } from './field';
+import { openestDirection, sideFor } from './field';
 import type { Spot } from './spawn';
 import type { Bike, CyclesInput, CyclesResultRow, CyclesState } from './state';
 import { place, type Work } from './step';
-import { emptyTrail, forEachCell } from './trail';
+import { emptyTrail } from './trail';
 
 export { CYCLES_CONFIG, type CyclesConfig } from './config';
 export {
@@ -15,6 +15,7 @@ export {
   type Turn,
 } from './state';
 export { type CyclesEvent, step, type TickChanges } from './step';
+export { forEachCell } from './trail';
 
 /** A bike waiting in the lobby: no position until a round places it. */
 function newBike(slot: number, publicId: string, bot: boolean, config: CyclesConfig): Bike {
@@ -49,7 +50,13 @@ export function addPlayer(
   bot: boolean,
   config: CyclesConfig,
 ): CyclesState {
-  if (state.index[publicId] !== undefined) return state;
+  const position = state.index[publicId];
+  const existing = position === undefined ? undefined : state.bikes[position];
+  if (position !== undefined && existing !== undefined) {
+    // Coming back after leaving: the same slot, and the usual wait before riding again.
+    if (!existing.left) return state;
+    return withBike(state, position, { ...existing, left: false, respawnIn: config.respawnTicks });
+  }
   const bike = newBike(state.bikes.length + 1, publicId, bot, config);
   return {
     ...state,
@@ -60,14 +67,20 @@ export function addPlayer(
 
 /**
  * Outside a round only. Slots are renumbered so they stay 1…n and fit the field, and the field
- * is cleared because its cells name the old slots; the next round rebuilds it anyway.
+ * is cleared because its cells name the old slots, and the trails with it so the two agree; the
+ * next round rebuilds all of it anyway.
  */
 export function removePlayers(state: CyclesState, publicIds: string[]): CyclesState {
   if (publicIds.length === 0) return state;
   const leaving = new Set(publicIds);
   const bikes = state.bikes
     .filter((bike) => !leaving.has(bike.publicId))
-    .map((bike, position) => ({ ...bike, slot: position + 1, alive: false }));
+    .map((bike, position) => ({
+      ...bike,
+      slot: position + 1,
+      alive: false,
+      trail: emptyTrail(bike.trail.cells.length),
+    }));
   const index: Record<string, number> = {};
   bikes.forEach((bike, position) => {
     index[bike.publicId] = position;
@@ -76,20 +89,22 @@ export function removePlayers(state: CyclesState, publicIds: string[]): CyclesSt
 }
 
 /**
- * Start positions on an even lattice: √n columns by √n rows, each bike in the middle of its own
- * block, rows alternating east and west so neighbours ride apart. O(n). Placing every bike with
- * the respawn search instead would cost a full pass over the field per bike — O(n × cells), and
- * cells grow with n, so the start of a round would be quadratic in the players.
+ * Start positions on an even lattice: √n columns by as many rows as the head count needs, each
+ * bike in the middle of its own block. Dividing the rows by the column count instead leaves a
+ * lone row crowded into the top of the field.
+ *
+ * A bike faces its longest open run on the field as placed so far, ties to the lowest direction,
+ * so nobody starts pointed at a wall or at a neighbour a few cells away. That is four short runs
+ * per bike, O(n × side) for the round. Placing every bike with the respawn search instead would
+ * cost a full pass over the field per bike — O(n × cells), and cells grow with n.
  */
-function startSpot(position: number, count: number, side: number): Spot {
+function startSpot(position: number, count: number, work: Work): Spot {
+  const { field, side } = work;
   const columns = Math.ceil(Math.sqrt(count));
-  const column = position % columns;
-  const row = Math.floor(position / columns);
-  return {
-    x: Math.floor(((2 * column + 1) * side) / (2 * columns)),
-    y: Math.floor(((2 * row + 1) * side) / (2 * columns)),
-    dir: row % 2 === 0 ? 0 : 2,
-  };
+  const rows = Math.ceil(count / columns);
+  const x = Math.floor(((2 * (position % columns) + 1) * side) / (2 * columns));
+  const y = Math.floor(((2 * Math.floor(position / columns) + 1) * side) / (2 * rows));
+  return { x, y, dir: openestDirection(field, side, x, y) };
 }
 
 /** Sizes the field for whoever is here and spreads the bikes evenly over it. */
@@ -100,11 +115,12 @@ export function startRound(state: CyclesState, config: CyclesConfig): CyclesStat
     field: new Uint16Array(side * side),
     side,
     bikes: staying.map((bike, position) => newBike(position + 1, bike.publicId, bike.bot, config)),
-    changes: { added: [], freed: [], events: [] },
+    touched: new Set(),
+    events: [],
     config,
   };
   work.bikes.forEach((bike, position) => {
-    place(work, bike, startSpot(position, work.bikes.length, side));
+    place(work, bike, startSpot(position, work.bikes.length, work));
   });
   const index: Record<string, number> = {};
   work.bikes.forEach((bike, position) => {
@@ -142,27 +158,16 @@ export function applyInput(
 }
 
 /**
- * A player who left mid-round. Its bike is taken off the field with no one to blame, and it
- * keeps its slot until the round ends: renumbering now would rewrite every cell it ever owned.
+ * A player who left mid-round, marked and nothing more. The tick takes the bike off the field, so
+ * that its cells, its death and its end go out with every other change of the tick instead of
+ * vanishing from a state no client was told about. It keeps its slot until the round ends:
+ * renumbering now would rewrite every cell it ever owned.
  */
 export function leave(state: CyclesState, publicId: string): CyclesState {
   const position = state.index[publicId];
   const bike = position === undefined ? undefined : state.bikes[position];
   if (position === undefined || bike === undefined || bike.left) return state;
-  const field = state.field.slice();
-  forEachCell(bike.trail, (cell) => {
-    field[cell] = 0;
-  });
-  return {
-    ...withBike(state, position, {
-      ...bike,
-      alive: false,
-      left: true,
-      trail: emptyTrail(bike.trail.cells.length),
-      longest: Math.max(bike.longest, bike.life),
-    }),
-    field,
-  };
+  return withBike(state, position, { ...bike, left: true });
 }
 
 /**

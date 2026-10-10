@@ -161,8 +161,48 @@ describe('parseClientMessage', () => {
   });
 
   it('rejects a message with a mismatched protocol version', () => {
-    const raw = encode({ v: 2, type: 'start' });
+    const raw = encode({ v: PROTOCOL_VERSION + 1, type: 'start' });
 
     expect(parseClientMessage(raw)).toEqual({ ok: false, reason: 'bad_version' });
+  });
+
+  // Version 1 had no bot flag in the snapshot: a tab still running that client must be told to
+  // reload, because it would otherwise reject every new snapshot and sit on a blank screen.
+  it('turns away the clients of version 1', () => {
+    const raw = encode({ v: 1, type: 'start' });
+
+    expect(parseClientMessage(raw)).toEqual({ ok: false, reason: 'bad_version' });
+  });
+
+  it.each([
+    { type: 'setMode', mode: 'cycles' },
+    { type: 'setMode', mode: 'clicker' },
+    { type: 'addBot' },
+    { type: 'removeBot' },
+    { type: 'resync' },
+    { type: 'input', input: { type: 'turn', side: 'left' } },
+    { type: 'input', input: { type: 'turn', side: 'right' } },
+    { type: 'input', input: { type: 'boost' } },
+  ])('accepts $type', (message) => {
+    const sent = { v: PROTOCOL_VERSION, ...message };
+
+    expect(parseClientMessage(encode(sent))).toEqual({ ok: true, message: sent });
+  });
+
+  it.each([
+    [
+      'a turn to a side that does not exist',
+      { type: 'input', input: { type: 'turn', side: 'up' } },
+    ],
+    ['a mode that does not exist', { type: 'setMode', mode: 'chess' }],
+    ['a setMode without a mode', { type: 'setMode' }],
+    ['an extra field in a boost', { type: 'input', input: { type: 'boost', power: 9 } }],
+    ['an extra field in addBot', { type: 'addBot', count: 5 }],
+    ['an extra field in resync', { type: 'resync', since: 3 }],
+  ])('rejects %s', (_label, message) => {
+    expect(parseClientMessage(encode({ v: PROTOCOL_VERSION, ...message }))).toEqual({
+      ok: false,
+      reason: 'invalid_message',
+    });
   });
 });

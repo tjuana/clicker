@@ -97,10 +97,14 @@ apps/game/src/client             сцена, HUD, лидерборд, музык
   даёт расстояние до ближайшего препятствия за O(клеток); берём клетку с максимумом, равенство
   разбивает ГПСЧ. Направление — в ту сторону, где до препятствия дальше. Хвост начинается с длины 0
   и дорастает до своего L.
-- **Старт раунда — решёткой, а не поиском.** √n колонок на √n рядов, каждый байк в середине своего
-  блока, ряды едут попеременно на восток и на запад. Поиск самой свободной точки для каждого байка
+- **Старт раунда — решёткой, а не поиском.** √n колонок и столько рядов, сколько нужно под всех, каждый
+  байк в середине своего блока и лицом туда, где по полю на этот момент дальше всего до препятствия
+  (при равенстве — меньший индекс направления). Поиск самой свободной точки для каждого байка
   стоил бы O(n × клеток), а клеток тем больше, чем больше игроков, — квадрат (план 6, находка 4).
 - После смерти хвост возвращается к базовой длине: удлинения за убийства живут одну жизнь.
+- Ушедший из раунда игрок только помечается. Байк снимает следующий тик — как смерть без виновника,
+  поэтому его клетки и событие уходят в `changes`, как и всё остальное. Вернувшийся занимает прежний
+  слот и ждёт обычное время возрождения.
 - Таблица мест: убийства по убыванию, затем смерти по возрастанию, затем самая долгая жизнь.
 
 ### Раунд
@@ -145,8 +149,10 @@ interface Mode<State, Input> {
 - `RoomState.mode` выбирается при создании комнаты и не меняется. `modeState` становится
   объединением состояний режимов. `room/*` перестаёт импортировать кликер напрямую.
 - Новая команда комнаты — `addBot` / `removeBot`, доступна только хосту и только в лобби.
-- `TickChanges` — новые клетки, освобождённые клетки и события тика. Комната пересылает их в
-  `delta`, не заглядывая внутрь.
+- `TickChanges` — клетки, которые тик записал, каждая со значением после тика (0 — пусто; список
+  «добавлено/освобождено» терял порядок, когда клетку занимали и освобождали за один тик), головы
+  живых байков (слот, клетка, направление) и события тика. Комната пересылает их в `delta`, не
+  заглядывая внутрь.
 - `tick` с живым режимом вызывает `step` столько раз, сколько тиков задолжал накопитель (раздел 7).
 - Ввод байков — `{ type: 'turn', side: 'left' | 'right' }` и `{ type: 'boost' }`. Token bucket
   настраивается для режима: 10 действий в секунду, запас 4.
@@ -154,7 +160,7 @@ interface Mode<State, Input> {
 
 ## 6. Протокол
 
-Новые типы сообщений. Старые не ломаются, поэтому `v` остаётся `1`.
+Новые типы сообщений. Старые не ломаются, поэтому `v` остаётся `1`. *(Superseded: the protocol moved to version 2 — see "Decisions made while building plan 7".)*
 
 - **`full`** — всё состояние раунда: сторона поля, байки (слот, публичный id, голова, направление,
   хвост списком клеток, резина, рывок), счёт. Шлётся при входе, переподключении и по запросу
@@ -254,3 +260,53 @@ A/D или ←/→ — поворот, пробел — рывок. `event.repea
 - **Bloom на слабых ноутбуках.** Включаем по замеру.
 - Объём: спецификация разворачивается в несколько планов — правила и боты; комната, тик и
   протокол; клиент и оформление.
+
+## Decisions made while building plan 7
+
+Recorded in English from here on; the sections above stay as written.
+
+- **The host picks the mode in the lobby** with `setMode`, rather than when the room is created:
+  rooms are created by a link. Switching recreates the mode state and reseats every player;
+  switching from results returns the room to the lobby; a mode whose player limit is below the
+  head count refuses with `room_full`.
+- **Bots exist only in the light cycles.** Elsewhere `addBot` answers `not_supported`. A bot is a
+  room player with no connection and is never expired.
+- **`full` carries each bike's trail as a list of cells**, oldest first, instead of the field. It is
+  sent after `welcome` once a round has started — during the countdown too, since the bikes are
+  already placed — and on `resync`.
+- **`delta` carries each changed cell's final value** (`cells`), the living bikes' heads (`heads`)
+  and events. Two lists of added and freed cells could not be replayed: within one tick a cell can
+  be both (plan 6 review, finding A). A client applies only deltas with `t` above the `full` it
+  started from — `broadcast` reaches a connection before its own `join` has been answered.
+- **No token bucket for the light cycles**: a queue of two turns and the boost cooldown bound what
+  input can change.
+- **Leaving and coming back go through the mode.** A bike whose player leaves is taken off by the
+  next tick, so its cells reach clients through `delta`; a player who rejoins gets the bike back
+  after the respawn wait. This applies from the countdown on.
+- **Round length is code, not deployment config.** `wrangler.jsonc` no longer sets `ROUND_MS` or
+  `COUNTDOWN_MS`; when the environment does set them — tests do — they override every mode.
+- **The protocol version is 2, not 1** (supersedes "`v` stays `1`" in section 6). `players[]` in the
+  snapshot gained a required `bot`, and the schemas are strict, so a tab running the old client
+  would reject every new snapshot and show nothing. A version-1 message is now answered with
+  `bad_version`, which sends the tab to reload. Players stored by an older build lack the flag;
+  `syncConnections` (run whenever the object starts) turns it into `false`.
+- **`full` also goes to everyone, unasked, at two moments.** When a round enters the countdown (slots
+  are renumbered for every round, so no client already in the room could know them), right after
+  the snapshot that announces it; and whenever a bike joins mid-round (a new slot appeared), in the
+  same step as the newcomer's `welcome`. Both are one string built for the room, not per connection.
+- **A living round with no person connected ends after a grace, not at once.** `desertedGraceMs`
+  (10 s by default) counts from the moment the last person's connection closed; any person coming
+  back inside it keeps the round going. Ending at the first step would have turned every network
+  blip of a solo player into a finished round, long before the socket could reconnect. No alarm is
+  needed for it: the ticker runs `advance` every step while the round runs.
+- **`resync` is bounded.** A connection is answered at most once a second (the time is kept in the
+  object's memory, not in storage; a request inside the window is dropped without an error), and
+  the `full` string is built once per state: the cache is keyed on the mode's state object, which
+  the rules replace on every change, so the same string serves the broadcasts and every `resync`
+  until the next tick or bike change.
+- **Each entry of `heads` is five numbers**, not three: slot, head cell, direction, rubber left,
+  boost cooldown left. The client knows no rules, so after `full` it could not otherwise know
+  either of the last two for the HUD.
+- **A snapshot's `data` is tied to its `mode`.** The schema is a variant on `mode`: a light-cycle
+  snapshot carrying clicker scores (or the reverse) no longer parses, and the type of `data`
+  narrows on `mode` alone.

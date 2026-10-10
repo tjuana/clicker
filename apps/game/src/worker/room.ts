@@ -2,10 +2,12 @@ import {
   abortRound,
   apply,
   type Command,
+  type CyclesState,
+  configFor,
   createRoomState,
-  DEFAULT_CONFIG,
   type GameConfig,
   type GameEvent,
+  type ModeState,
   nextDeadline,
   type RoomState,
   syncConnections,
@@ -14,9 +16,12 @@ import {
   PROTOCOL_VERSION,
   parseClientMessage,
   type ServerMessage,
+  toDelta,
+  toFull,
   toSnapshot,
 } from '@clicker/protocol';
 import { type Connection, Server, type WSMessage } from 'partyserver';
+import { Ticker } from './ticker';
 
 /** What we remember about a connection: survives the object going to sleep. */
 interface Session {
@@ -25,20 +30,41 @@ interface Session {
 }
 
 const SNAPSHOT_INTERVAL_MS = 100;
+/** A `full` is tens of kilobytes and a client can ask for it as often as it likes. */
+const RESYNC_MIN_GAP_MS = 1000;
+
+/** How many bikes the room has seated: a new one means every client's slot table is out of date. */
+function seats(state: RoomState): number {
+  return state.mode === 'cycles' ? (state.modeState as CyclesState).bikes.length : 0;
+}
 
 export class Room extends Server<Env> {
   static options = { hibernate: true };
 
   #state: RoomState = createRoomState();
-  #config: GameConfig = DEFAULT_CONFIG;
+  /** What the environment changes, if anything. Wins over the mode: a test round must be short in every mode. */
+  #overrides: Partial<GameConfig> = {};
+  #config: GameConfig = configFor(this.#state.mode);
   #timer: ReturnType<typeof setInterval> | null = null;
+  #ticker = new Ticker<ReturnType<typeof setInterval>>({
+    now: () => Date.now(),
+    setInterval: (wake, ms) => setInterval(wake, ms),
+    clearInterval: (handle) => clearInterval(handle),
+    step: (now) => this.#stepOnce(now),
+  });
   #alarmAt: number | null | undefined = undefined;
+  /** When each connection was last answered a `resync`. Memory only: it is worth nothing after a sleep. */
+  #resyncedAt = new Map<string, number>();
+  /** The whole round as sent, and the state it was built from. */
+  #fullCache: { source: ModeState; json: string | null } | null = null;
 
   override async onStart(): Promise<void> {
-    this.#config = {
-      ...DEFAULT_CONFIG,
-      countdownMs: this.#duration(this.env.COUNTDOWN_MS, DEFAULT_CONFIG.countdownMs),
-      roundMs: this.#duration(this.env.ROUND_MS, DEFAULT_CONFIG.roundMs),
+    // Only what is set and sane: the rest comes from the mode, which knows how long its round is.
+    const countdownMs = this.#duration(this.env.COUNTDOWN_MS);
+    const roundMs = this.#duration(this.env.ROUND_MS);
+    this.#overrides = {
+      ...(countdownMs === undefined ? {} : { countdownMs }),
+      ...(roundMs === undefined ? {} : { roundMs }),
     };
 
     const stored = await this.ctx.storage.get<RoomState>('state');
@@ -61,6 +87,7 @@ export class Room extends Server<Env> {
     }
 
     this.#state = syncConnections(state, live, Date.now());
+    this.#config = this.#configOf(this.#state);
     await this.#persist();
     await this.#scheduleAlarm();
     this.#broadcastSnapshot();
@@ -106,14 +133,34 @@ export class Room extends Server<Env> {
       return;
     }
 
-    if (incoming.type === 'input') {
-      await this.#run(
-        { type: 'input', playerId: session.playerId, input: incoming.input },
-        connection,
-      );
-      return;
+    switch (incoming.type) {
+      case 'input':
+        await this.#run(
+          { type: 'input', playerId: session.playerId, input: incoming.input },
+          connection,
+        );
+        return;
+      case 'resync': {
+        const now = Date.now();
+        const last = this.#resyncedAt.get(connection.id);
+        if (last !== undefined && now - last < RESYNC_MIN_GAP_MS) return;
+        this.#resyncedAt.set(connection.id, now);
+        const full = this.#fullJson();
+        if (full !== null) connection.send(full);
+        return;
+      }
+      case 'setMode':
+        await this.#run(
+          { type: 'setMode', playerId: session.playerId, mode: incoming.mode },
+          connection,
+        );
+        return;
+      case 'addBot':
+      case 'removeBot':
+      case 'start':
+        await this.#run({ type: incoming.type, playerId: session.playerId }, connection);
+        return;
     }
-    await this.#run({ type: 'start', playerId: session.playerId }, connection);
   }
 
   override async onClose(connection: Connection<Session>): Promise<void> {
@@ -125,6 +172,7 @@ export class Room extends Server<Env> {
   }
 
   async #release(connection: Connection<Session>): Promise<void> {
+    this.#resyncedAt.delete(connection.id);
     const session = connection.state;
     if (session === null) return;
     await this.#run(
@@ -142,31 +190,54 @@ export class Room extends Server<Env> {
 
   /** The single path that changes state: rules, events, storage, alarm, broadcast. */
   async #run(command: Command, source?: Connection<Session>): Promise<void> {
-    const applied = apply(this.#state, command, Date.now(), this.#config);
+    const phaseChanged = this.#apply(command, source);
+    await this.#settle(command, phaseChanged);
+  }
+
+  /**
+   * The synchronous half: rules, events, timers. Everything that must be ordered with the next
+   * message or the next step happens here, before the first await.
+   */
+  #apply(command: Command, source?: Connection<Session>, now = Date.now()): boolean {
+    const applied = apply(this.#state, command, now, this.#config);
+    const modeChanged = applied.state.mode !== this.#state.mode;
+    const newSeat = seats(applied.state) > seats(this.#state);
     this.#state = applied.state;
+    if (modeChanged) this.#config = this.#configOf(applied.state);
 
     let phaseChanged = false;
     for (const event of applied.events) {
       if (event.type === 'phaseChanged') phaseChanged = true;
-      this.#handleEvent(event, source);
+      this.#handleEvent(event, source, newSeat);
     }
-
-    // An input can also close the round: advance runs before every command.
-    // We skip persisting only for inputs that merely bumped the score.
-    if (phaseChanged || command.type !== 'input') {
-      await this.#persist();
-    }
-    await this.#scheduleAlarm();
     this.#syncSnapshotTimer();
+    this.#syncTicker();
+    return phaseChanged;
+  }
 
-    // During a round the timer sends snapshots; outside a round, every change does.
-    // A phase change is sent immediately: waiting up to a hundred milliseconds isn't acceptable here.
-    if (phaseChanged || this.#timer === null) {
-      this.#broadcastSnapshot();
+  /** The asynchronous half: storage, the alarm and the snapshot. */
+  async #settle(command: Command, phaseChanged: boolean): Promise<void> {
+    // An input or a step is the hot path: up to thirty a second per player, twenty a second per
+    // room. Neither changes what must survive a restart, so neither writes — unless it also
+    // closed the round (advance runs before every command), which is a phase change.
+    const hot = command.type === 'input' || command.type === 'step';
+    if (phaseChanged || !hot) await this.#persist();
+    await this.#scheduleAlarm();
+
+    // During a clicker round the timer sends snapshots; a living mode sends none on a timer,
+    // because its deltas carry the round. Otherwise every room change is sent at once.
+    // A phase change always is: waiting up to a hundred milliseconds isn't acceptable here.
+    if (phaseChanged || (!hot && this.#timer === null)) this.#broadcastSnapshot();
+
+    // Slots are renumbered for every round, so nobody already in the room can know this one's.
+    // After the snapshot, which tells the client what the round is for.
+    if (phaseChanged && this.#state.phase === 'countdown') {
+      const full = this.#fullJson();
+      if (full !== null) this.broadcast(full);
     }
   }
 
-  #handleEvent(event: GameEvent, source?: Connection<Session>): void {
+  #handleEvent(event: GameEvent, source?: Connection<Session>, newSeat = false): void {
     if (event.type === 'welcome' && source !== undefined) {
       source.setState({ playerId: event.playerId, publicId: event.publicId });
       this.#send(source, {
@@ -175,15 +246,36 @@ export class Room extends Server<Env> {
         you: event.publicId,
         isHost: event.isHost,
       });
+      // Someone arriving in the middle of a light-cycle round has missed every delta so far.
+      // Right after the welcome, so the next thing they hear is the state the deltas build on.
+      // A bike that did not exist a moment ago has a slot nobody else knows: everyone gets the
+      // round again, the newcomer included, in the same synchronous step as the welcome.
+      const live = this.#state.phase === 'countdown' || this.#state.phase === 'running';
+      const full = live ? this.#fullJson() : null;
+      if (full !== null) {
+        if (newSeat) this.broadcast(full);
+        else source.send(full);
+      }
       return;
     }
     if (event.type === 'rejected' && source !== undefined) {
       this.#send(source, { v: PROTOCOL_VERSION, type: 'error', code: event.code });
+      return;
     }
+    // One string for the whole room, however many are connected.
+    if (event.type === 'stepped')
+      this.broadcast(JSON.stringify(toDelta(event.tick, event.changes)));
   }
 
+  /** The base config belongs to the mode in play; what the environment sets wins over it. */
+  #configOf(state: RoomState): GameConfig {
+    return { ...configFor(state.mode), ...this.#overrides };
+  }
+
+  /** Only for a mode without its own tick: the clicker has to show live scores. */
   #syncSnapshotTimer(): void {
-    const live = this.#state.phase === 'countdown' || this.#state.phase === 'running';
+    const round = this.#state.phase === 'countdown' || this.#state.phase === 'running';
+    const live = round && this.#config.tickMs === null;
     if (live && this.#timer === null) {
       this.#timer = setInterval(() => this.#broadcastSnapshot(), SNAPSHOT_INTERVAL_MS);
       return;
@@ -194,9 +286,38 @@ export class Room extends Server<Env> {
     }
   }
 
+  /** Runs while a living mode's round runs, and only then: an idle room must be free to sleep. */
+  #syncTicker(): void {
+    this.#ticker.sync(this.#state.phase === 'running', this.#config.tickMs);
+  }
+
+  /** One owed step. Returns whether the round goes on, so the ticker stops at its end. */
+  #stepOnce(now: number): boolean {
+    const phaseChanged = this.#apply({ type: 'step' }, undefined, now);
+    // Only the end of the round has anything to write; a plain step settles nothing.
+    if (phaseChanged) void this.#settle({ type: 'step' }, true);
+    return this.#state.phase === 'running';
+  }
+
   /** The snapshot is built once for everyone, not per connection. */
   #broadcastSnapshot(): void {
     this.broadcast(JSON.stringify(toSnapshot(this.#state, Date.now())));
+  }
+
+  /**
+   * `null` outside a light-cycle round. One string, however many connections it goes to, and the
+   * same string for as long as the state is the same one: building it walks every trail (tens of
+   * kilobytes), and `resync` lets any client ask. The key is the mode's state object itself —
+   * the rules never mutate, so a changed tick or bike set is always a different object, and
+   * there is no invalidation to forget.
+   */
+  #fullJson(): string | null {
+    const source = this.#state.modeState;
+    if (this.#fullCache?.source === source) return this.#fullCache.json;
+    const full = toFull(this.#state);
+    const json = full === null ? null : JSON.stringify(full);
+    this.#fullCache = { source, json };
+    return json;
   }
 
   #send(connection: Connection<Session>, message: ServerMessage): void {
@@ -207,9 +328,9 @@ export class Room extends Server<Env> {
     await this.ctx.storage.put('state', this.#state);
   }
 
-  #duration(value: string | undefined, fallback: number): number {
+  #duration(value: string | undefined): number | undefined {
     const parsed = Number(value);
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
   }
 
   async #scheduleAlarm(): Promise<void> {

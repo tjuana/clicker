@@ -1,10 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { addPlayer, createCyclesState, finish, leave, startRound } from '../src/modes/cycles';
+import {
+  addPlayer,
+  createCyclesState,
+  finish,
+  leave,
+  removePlayers,
+  startRound,
+} from '../src/modes/cycles';
 import { decide, room } from '../src/modes/cycles/bot';
+import { freeRun } from '../src/modes/cycles/field';
 import { clearance, pickSpawn } from '../src/modes/cycles/spawn';
 import type { CyclesState } from '../src/modes/cycles/state';
 import { step } from '../src/modes/cycles/step';
-import { arena, contradiction, cyclesConfig } from './cycles-support';
+import { arena, contradiction, cyclesConfig, trailOf } from './cycles-support';
 
 const config = cyclesConfig();
 
@@ -54,6 +62,27 @@ describe('the round', () => {
     expect(contradiction(state)).toBeNull();
   });
 
+  it('starts every bike facing open road, whatever the head count', () => {
+    for (let count = 1; count <= 20; count += 1) {
+      const { bikes, field, side } = botRound(count, count);
+      for (const bike of bikes) {
+        const run = freeRun(field, side, bike.x, bike.y, bike.dir, side);
+        expect(run, `${count} bikes, slot ${bike.slot}`).toBeGreaterThanOrEqual(
+          Math.floor(side / 6),
+        );
+      }
+    }
+  });
+
+  it('puts two bikes side by side on the middle row, not both in the top quarter', () => {
+    const { bikes, side } = botRound(2, 1);
+    const [a, b] = bikes;
+    expect(Math.min(a?.x ?? 0, b?.x ?? 0)).toBeLessThan(side / 2);
+    expect(Math.max(a?.x ?? 0, b?.x ?? 0)).toBeGreaterThanOrEqual(side / 2);
+    expect(a?.y).toBe(b?.y);
+    expect(Math.abs((a?.y ?? 0) - side / 2)).toBeLessThanOrEqual(side / 8);
+  });
+
   it('keeps field and trails consistent through whole games', () => {
     for (let seed = 1; seed <= 12; seed += 1) {
       play(botRound(2 + (seed % 7), seed), 600, (state) => {
@@ -88,12 +117,62 @@ describe('the round', () => {
     expect(results.map((row) => row.rank)).toEqual([1, 2, 3]);
   });
 
-  it('takes a leaver’s bike off the field without crediting anyone', () => {
-    const state = leave(botRound(2, 9), 'bot-0');
+  it('marks a leaver and leaves the taking-off to the next tick, crediting no one', () => {
+    const riding = play(botRound(2, 9), 5);
+    const trail = trailOf(riding, 1).map(([x, y]) => y * riding.side + x);
+    expect(trail.length).toBeGreaterThan(1);
+
+    const marked = leave(riding, 'bot-0');
+    expect(marked.bikes[0]?.left).toBe(true);
+    // Nothing else has moved: a client only ever hears of this through the tick.
+    expect(marked.field).toBe(riding.field);
+
+    const { state, changes } = step(marked, config);
     expect(state.bikes[0]?.alive).toBe(false);
-    expect(state.bikes[0]?.left).toBe(true);
-    expect(contradiction(play(state, 100))).toBeNull();
-    expect(play(state, 100).bikes[0]?.alive).toBe(false);
+    expect(state.bikes[0]?.deaths).toBe(1);
+    expect(changes.events).toContainEqual({ type: 'died', slot: 1, by: null });
+    for (const cell of trail) {
+      expect(state.field[cell]).toBe(0);
+      expect(changes.cells[changes.cells.indexOf(cell) + 1]).toBe(0);
+    }
+    expect(state.bikes.map((bike) => bike.kills)).toEqual([0, 0]);
+    expect(contradiction(state)).toBeNull();
+
+    const later = play(state, 100);
+    expect(later.bikes[0]?.alive).toBe(false);
+    expect(contradiction(later)).toBeNull();
+  });
+
+  it('ignores a second leave and a leave of nobody', () => {
+    const state = leave(botRound(2, 9), 'bot-0');
+    expect(leave(state, 'bot-0')).toBe(state);
+    expect(leave(state, 'nobody')).toBe(state);
+  });
+
+  it('lets a leaver come back, and rides again after the usual wait', () => {
+    const gone = step(leave(play(botRound(2, 9), 3), 'bot-0'), config).state;
+    expect(gone.bikes[0]?.alive).toBe(false);
+
+    let back = addPlayer(gone, 'bot-0', true, config);
+    expect(back.bikes[0]?.left).toBe(false);
+    expect(back.bikes).toHaveLength(2);
+    back = play(back, config.respawnTicks - 1);
+    expect(back.bikes[0]?.alive).toBe(false);
+    back = play(back, 1);
+    expect(back.bikes[0]?.alive).toBe(true);
+  });
+
+  it('keeps a bike that came back before the next tick', () => {
+    const state = addPlayer(leave(botRound(2, 9), 'bot-0'), 'bot-0', true, config);
+    expect(step(state, config).changes.events).not.toContainEqual(
+      expect.objectContaining({ type: 'died' }),
+    );
+  });
+
+  it('leaves no trail behind in a lobby after players are removed', () => {
+    const removed = removePlayers(play(botRound(3, 4), 5), ['bot-1']);
+    expect(removed.bikes.map((bike) => bike.trail.size)).toEqual([0, 0]);
+    expect(contradiction(removed)).toBeNull();
   });
 });
 

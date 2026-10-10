@@ -1,3 +1,5 @@
+import type { ModeId } from '../modes';
+
 export interface GameConfig {
   /** Countdown before the round. */
   countdownMs: number;
@@ -15,6 +17,12 @@ export interface GameConfig {
   burst: number;
   /** How long a disconnected player stays in the list. */
   reconnectGraceMs: number;
+  /**
+   * How long a living round waits for a person to come back once no person is connected. Longer
+   * than a socket needs to reconnect after a blip, far shorter than a round: past it the bots
+   * would be playing to an empty room.
+   */
+  desertedGraceMs: number;
   /** Maximum players in a room. */
   maxPlayers: number;
   /**
@@ -33,6 +41,17 @@ export const DEFAULT_CONFIG: GameConfig = {
   clicksPerSecond: 30,
   burst: 30,
   reconnectGraceMs: 30000,
+  desertedGraceMs: 10_000,
   maxPlayers: 50,
   tickMs: null,
 };
+
+/** What a mode changes about the room. Anything not named here comes from DEFAULT_CONFIG. */
+export const MODE_CONFIG: Record<ModeId, Partial<GameConfig>> = {
+  clicker: {},
+  cycles: { tickMs: 50, roundMs: 180_000, maxPlayers: 20 },
+};
+
+export function configFor(mode: ModeId, base: GameConfig = DEFAULT_CONFIG): GameConfig {
+  return { ...base, ...MODE_CONFIG[mode] };
+}

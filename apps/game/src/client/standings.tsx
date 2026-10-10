@@ -1,3 +1,4 @@
+import { clickerData } from './clicker-data';
 import { useClient } from './store';
 import { theme } from './theme';
 
@@ -12,7 +13,7 @@ export function Standings() {
   if (snapshot === null) return null;
 
   // Scores live in the mode's slot: the generic part of a snapshot knows nothing about clicks.
-  const scoreOf = (id: string): number => snapshot.data.scores[id] ?? 0;
+  const scoreOf = (id: string): number => clickerData(snapshot).scores[id] ?? 0;
   // Best first, ties settled by join order so rows do not swap places ten times a second.
   const rows = [...snapshot.players].sort(
     (a, b) => scoreOf(b.id) - scoreOf(a.id) || Number(a.id) - Number(b.id),

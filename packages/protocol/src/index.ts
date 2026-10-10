@@ -1,7 +1,9 @@
 export {
+  addBotSchema,
   type ClientMessage,
   clickerInputSchema,
   clientMessageSchema,
+  cyclesInputSchema,
   inputSchema,
   type JoinMessage,
   joinSchema,
@@ -10,12 +12,20 @@ export {
   type ParsedClientMessage,
   PROTOCOL_VERSION,
   parseClientMessage,
+  removeBotSchema,
+  resyncSchema,
+  setModeSchema,
   startSchema,
 } from './client';
 export { generateId, ID_PATTERN, isId } from './ids';
 export {
   clickerDataSchema,
+  cyclesDataSchema,
+  type DeltaMessage,
+  deltaSchema,
   errorSchema,
+  type FullMessage,
+  fullSchema,
   MAX_SERVER_MESSAGE_BYTES,
   type PrivateMessage,
   parseServerMessage,
@@ -25,6 +35,8 @@ export {
   type SnapshotMessage,
   serverMessageSchema,
   snapshotSchema,
+  toDelta,
+  toFull,
   toSnapshot,
   welcomeSchema,
 } from './server';

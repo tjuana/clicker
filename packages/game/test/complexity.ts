@@ -61,6 +61,42 @@ export function growth(work: (size: number) => number): number {
 /** Array methods that walk the whole array looking for something. */
 const SCANNERS = ['includes', 'indexOf', 'lastIndexOf', 'find', 'findIndex', 'some', 'every'];
 
+/** The rest of the ways to walk a whole array: the passes that build, filter or fold one. */
+const PASSES = ['map', 'filter', 'forEach', 'reduce'];
+
+/**
+ * Runs `run` with each named member of `prototype` replaced by a wrapper that adds `price(this)`
+ * to a running total before calling the original, and returns the total. Everything is restored
+ * in `finally`, so a throwing `run` cannot leave a prototype patched for the next test.
+ */
+function charge(
+  prototype: object,
+  keys: (string | symbol)[],
+  price: (self: unknown) => number,
+  run: () => void,
+): number {
+  let cost = 0;
+  const patched = prototype as Record<string | symbol, unknown>;
+  const originals = keys.map((key) => [key, patched[key]] as const);
+
+  for (const [key, original] of originals) {
+    patched[key] = function charged(this: unknown, ...args: unknown[]): unknown {
+      cost += price(this);
+      return (original as (...rest: unknown[]) => unknown).apply(this, args);
+    };
+  }
+
+  try {
+    run();
+  } finally {
+    for (const [key, original] of originals) patched[key] = original;
+  }
+
+  return cost;
+}
+
+const lengthOf = (self: unknown): number => (self as unknown[]).length;
+
 /**
  * Charges every array scan inside `run` the length it had to walk, and returns the total.
  *
@@ -73,22 +109,39 @@ const SCANNERS = ['includes', 'indexOf', 'lastIndexOf', 'find', 'findIndex', 'so
  * scan whose array grows with the room shows up when the size changes.
  */
 export function scanCost(run: () => void): number {
+  return charge(Array.prototype, SCANNERS, lengthOf, run);
+}
+
+/**
+ * Charges the length of every pass over an array inside `run` — the scans above, plus `map`,
+ * `filter`, `forEach`, `reduce` and the iterator that `for…of` and spread use.
+ *
+ * The tick works on copies it makes itself, and neither the record proxy nor `scanCost` ever
+ * sees those: a loop over the tick's own list of bikes, nested in a loop over the same list,
+ * touches nothing the test owns and scans nothing for a value. Only counting the passes
+ * themselves catches it. Loops written with an index (`for (let i = 0; …)`) are invisible to
+ * every instrument here; the rules use them for the hot path and are checked by review.
+ */
+export function traversalCost(run: () => void): number {
+  return charge(Array.prototype, [...SCANNERS, ...PASSES, Symbol.iterator], lengthOf, run);
+}
+
+/**
+ * Charges one for every keyed lookup or write on a `Map` or `Set` inside `run`.
+ *
+ * `traversalCost` is blind to a loop written with an index, and a settling loop that rebuilds a
+ * `Set` and a `Map` on every pass is made of exactly those: it is quadratic in a chain of bikes
+ * and neither the proxy, the scans nor the passes ever see it. What it cannot hide is the keyed
+ * operations, one per bike per pass, so counting them makes the repetition visible.
+ */
+export function keyedCost(run: () => void): number {
+  const mapOps = ['get', 'set', 'has', 'delete'];
+  const setOps = ['add', 'has', 'delete'];
   let cost = 0;
-  const prototype = Array.prototype as unknown as Record<string, unknown>;
-  const originals = SCANNERS.map((name) => [name, prototype[name]] as const);
-
-  for (const [name, original] of originals) {
-    prototype[name] = function scanned(this: unknown[], ...args: unknown[]): unknown {
-      cost += this.length;
-      return (original as (...rest: unknown[]) => unknown).apply(this, args);
-    };
-  }
-
-  try {
-    run();
-  } finally {
-    for (const [name, original] of originals) prototype[name] = original;
-  }
-
+  const one = (): number => 1;
+  const inner = (): void => {
+    cost += charge(Set.prototype, setOps, one, run);
+  };
+  cost += charge(Map.prototype, mapOps, one, inner);
   return cost;
 }

@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect } from 'react';
+import { clickerData } from '../clicker-data';
 import { secondsLeft, useServerClock } from '../clock';
 import { Hud } from '../hud';
 import { Standings } from '../standings';
@@ -59,7 +60,7 @@ export function Arena({ onClick }: { onClick: () => void }) {
           <Race
             racers={snapshot.players.map((player) => ({
               id: player.id,
-              clicks: snapshot.data.scores[player.id] ?? 0,
+              clicks: clickerData(snapshot).scores[player.id] ?? 0,
             }))}
             you={you}
           />
