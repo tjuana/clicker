@@ -2,8 +2,8 @@ import {
   abortRound,
   apply,
   type Command,
+  configFor,
   createRoomState,
-  DEFAULT_CONFIG,
   type GameConfig,
   type GameEvent,
   nextDeadline,
@@ -14,9 +14,12 @@ import {
   PROTOCOL_VERSION,
   parseClientMessage,
   type ServerMessage,
+  toDelta,
+  toFull,
   toSnapshot,
 } from '@clicker/protocol';
 import { type Connection, Server, type WSMessage } from 'partyserver';
+import { MAX_CATCH_UP, owedSteps } from './ticker';
 
 /** What we remember about a connection: survives the object going to sleep. */
 interface Session {
@@ -30,15 +33,21 @@ export class Room extends Server<Env> {
   static options = { hibernate: true };
 
   #state: RoomState = createRoomState();
-  #config: GameConfig = DEFAULT_CONFIG;
+  /** What the environment changes, if anything. Wins over the mode: a test round must be short in every mode. */
+  #overrides: Partial<GameConfig> = {};
+  #config: GameConfig = configFor(this.#state.mode);
   #timer: ReturnType<typeof setInterval> | null = null;
+  #ticker: ReturnType<typeof setInterval> | null = null;
+  #nextStepAt = 0;
   #alarmAt: number | null | undefined = undefined;
 
   override async onStart(): Promise<void> {
-    this.#config = {
-      ...DEFAULT_CONFIG,
-      countdownMs: this.#duration(this.env.COUNTDOWN_MS, DEFAULT_CONFIG.countdownMs),
-      roundMs: this.#duration(this.env.ROUND_MS, DEFAULT_CONFIG.roundMs),
+    // Only what is set and sane: the rest comes from the mode, which knows how long its round is.
+    const countdownMs = this.#duration(this.env.COUNTDOWN_MS);
+    const roundMs = this.#duration(this.env.ROUND_MS);
+    this.#overrides = {
+      ...(countdownMs === undefined ? {} : { countdownMs }),
+      ...(roundMs === undefined ? {} : { roundMs }),
     };
 
     const stored = await this.ctx.storage.get<RoomState>('state');
@@ -61,6 +70,7 @@ export class Room extends Server<Env> {
     }
 
     this.#state = syncConnections(state, live, Date.now());
+    this.#config = this.#configOf(this.#state);
     await this.#persist();
     await this.#scheduleAlarm();
     this.#broadcastSnapshot();
@@ -106,14 +116,30 @@ export class Room extends Server<Env> {
       return;
     }
 
-    if (incoming.type === 'input') {
-      await this.#run(
-        { type: 'input', playerId: session.playerId, input: incoming.input },
-        connection,
-      );
-      return;
+    switch (incoming.type) {
+      case 'input':
+        await this.#run(
+          { type: 'input', playerId: session.playerId, input: incoming.input },
+          connection,
+        );
+        return;
+      case 'resync': {
+        const full = toFull(this.#state);
+        if (full !== null) this.#send(connection, full);
+        return;
+      }
+      case 'setMode':
+        await this.#run(
+          { type: 'setMode', playerId: session.playerId, mode: incoming.mode },
+          connection,
+        );
+        return;
+      case 'addBot':
+      case 'removeBot':
+      case 'start':
+        await this.#run({ type: incoming.type, playerId: session.playerId }, connection);
+        return;
     }
-    await this.#run({ type: 'start', playerId: session.playerId }, connection);
   }
 
   override async onClose(connection: Connection<Session>): Promise<void> {
@@ -142,28 +168,43 @@ export class Room extends Server<Env> {
 
   /** The single path that changes state: rules, events, storage, alarm, broadcast. */
   async #run(command: Command, source?: Connection<Session>): Promise<void> {
+    const phaseChanged = this.#apply(command, source);
+    await this.#settle(command, phaseChanged);
+  }
+
+  /**
+   * The synchronous half: rules, events, timers. Everything that must be ordered with the next
+   * message or the next step happens here, before the first await.
+   */
+  #apply(command: Command, source?: Connection<Session>): boolean {
     const applied = apply(this.#state, command, Date.now(), this.#config);
+    const modeChanged = applied.state.mode !== this.#state.mode;
     this.#state = applied.state;
+    if (modeChanged) this.#config = this.#configOf(applied.state);
 
     let phaseChanged = false;
     for (const event of applied.events) {
       if (event.type === 'phaseChanged') phaseChanged = true;
       this.#handleEvent(event, source);
     }
-
-    // An input can also close the round: advance runs before every command.
-    // We skip persisting only for inputs that merely bumped the score.
-    if (phaseChanged || command.type !== 'input') {
-      await this.#persist();
-    }
-    await this.#scheduleAlarm();
     this.#syncSnapshotTimer();
+    this.#syncTicker();
+    return phaseChanged;
+  }
 
-    // During a round the timer sends snapshots; outside a round, every change does.
-    // A phase change is sent immediately: waiting up to a hundred milliseconds isn't acceptable here.
-    if (phaseChanged || this.#timer === null) {
-      this.#broadcastSnapshot();
-    }
+  /** The asynchronous half: storage, the alarm and the snapshot. */
+  async #settle(command: Command, phaseChanged: boolean): Promise<void> {
+    // An input or a step is the hot path: up to thirty a second per player, twenty a second per
+    // room. Neither changes what must survive a restart, so neither writes — unless it also
+    // closed the round (advance runs before every command), which is a phase change.
+    const hot = command.type === 'input' || command.type === 'step';
+    if (phaseChanged || !hot) await this.#persist();
+    await this.#scheduleAlarm();
+
+    // During a clicker round the timer sends snapshots; a living mode sends none on a timer,
+    // because its deltas carry the round. Otherwise every room change is sent at once.
+    // A phase change always is: waiting up to a hundred milliseconds isn't acceptable here.
+    if (phaseChanged || (!hot && this.#timer === null)) this.#broadcastSnapshot();
   }
 
   #handleEvent(event: GameEvent, source?: Connection<Session>): void {
@@ -175,18 +216,31 @@ export class Room extends Server<Env> {
         you: event.publicId,
         isHost: event.isHost,
       });
+      // Someone arriving in the middle of a light-cycle round has missed every delta so far.
+      // Right after the welcome, so the next thing they hear is the state the deltas build on.
+      const live = this.#state.phase === 'countdown' || this.#state.phase === 'running';
+      const full = live ? toFull(this.#state) : null;
+      if (full !== null) this.#send(source, full);
       return;
     }
     if (event.type === 'rejected' && source !== undefined) {
-      // The wire has no `not_supported` yet (plan 7, task 4) and the client has no text for it.
-      // Nothing sends the commands that produce it until task 5, so this is only a stopgap.
-      const code = event.code === 'not_supported' ? 'invalid_message' : event.code;
-      this.#send(source, { v: PROTOCOL_VERSION, type: 'error', code });
+      this.#send(source, { v: PROTOCOL_VERSION, type: 'error', code: event.code });
+      return;
     }
+    // One string for the whole room, however many are connected.
+    if (event.type === 'stepped')
+      this.broadcast(JSON.stringify(toDelta(event.tick, event.changes)));
   }
 
+  /** The base config belongs to the mode in play; what the environment sets wins over it. */
+  #configOf(state: RoomState): GameConfig {
+    return { ...configFor(state.mode), ...this.#overrides };
+  }
+
+  /** Only for a mode without its own tick: the clicker has to show live scores. */
   #syncSnapshotTimer(): void {
-    const live = this.#state.phase === 'countdown' || this.#state.phase === 'running';
+    const round = this.#state.phase === 'countdown' || this.#state.phase === 'running';
+    const live = round && this.#config.tickMs === null;
     if (live && this.#timer === null) {
       this.#timer = setInterval(() => this.#broadcastSnapshot(), SNAPSHOT_INTERVAL_MS);
       return;
@@ -195,6 +249,37 @@ export class Room extends Server<Env> {
       clearInterval(this.#timer);
       this.#timer = null;
     }
+  }
+
+  /** Runs while a living mode's round runs, and only then: an idle room must be free to sleep. */
+  #syncTicker(): void {
+    const tickMs = this.#config.tickMs;
+    const live = tickMs !== null && this.#state.phase === 'running';
+    if (live && this.#ticker === null) {
+      this.#nextStepAt = Date.now() + tickMs;
+      // The timer only wakes the room; the clock decides how many steps are owed.
+      this.#ticker = setInterval(() => this.#catchUp(), tickMs);
+      return;
+    }
+    if (!live && this.#ticker !== null) {
+      clearInterval(this.#ticker);
+      this.#ticker = null;
+    }
+  }
+
+  #catchUp(): void {
+    const tickMs = this.#config.tickMs;
+    if (tickMs === null) return;
+    const now = Date.now();
+    const due = owedSteps(now, this.#nextStepAt, tickMs, MAX_CATCH_UP);
+    this.#nextStepAt = due.nextStepAt;
+
+    let phaseChanged = false;
+    for (let i = 0; i < due.owed && this.#state.phase === 'running'; i += 1) {
+      phaseChanged = this.#apply({ type: 'step' }) || phaseChanged;
+    }
+    // Only the end of the round has anything to write; a plain step settles nothing.
+    if (phaseChanged) void this.#settle({ type: 'step' }, true);
   }
 
   /** The snapshot is built once for everyone, not per connection. */
@@ -210,9 +295,9 @@ export class Room extends Server<Env> {
     await this.ctx.storage.put('state', this.#state);
   }
 
-  #duration(value: string | undefined, fallback: number): number {
+  #duration(value: string | undefined): number | undefined {
     const parsed = Number(value);
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
   }
 
   async #scheduleAlarm(): Promise<void> {

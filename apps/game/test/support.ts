@@ -5,11 +5,15 @@ import { afterEach, expect } from 'vitest';
 export type Snapshot = Extract<ServerMessage, { type: 'snapshot' }>;
 export type Welcome = Extract<ServerMessage, { type: 'welcome' }>;
 export type ServerError = Extract<ServerMessage, { type: 'error' }>;
+export type Full = Extract<ServerMessage, { type: 'full' }>;
+export type Delta = Extract<ServerMessage, { type: 'delta' }>;
 
 export const isWelcome = (message: ServerMessage): message is Welcome => message.type === 'welcome';
 export const isSnapshot = (message: ServerMessage): message is Snapshot =>
   message.type === 'snapshot';
 export const isError = (message: ServerMessage): message is ServerError => message.type === 'error';
+export const isFull = (message: ServerMessage): message is Full => message.type === 'full';
+export const isDelta = (message: ServerMessage): message is Delta => message.type === 'delta';
 
 /** Accumulates incoming messages and lets you wait for the one you need. */
 export class Client {

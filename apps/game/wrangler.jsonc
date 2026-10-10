@@ -12,6 +12,5 @@
   "durable_objects": {
     "bindings": [{ "name": "Room", "class_name": "Room" }]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }],
-  "vars": { "COUNTDOWN_MS": "3000", "ROUND_MS": "10000" }
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }]
 }
