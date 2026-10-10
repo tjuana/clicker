@@ -7,6 +7,7 @@ import {
   createRoomState,
   type GameConfig,
   type GameEvent,
+  type ModeState,
   nextDeadline,
   type RoomState,
   syncConnections,
@@ -29,6 +30,8 @@ interface Session {
 }
 
 const SNAPSHOT_INTERVAL_MS = 100;
+/** A `full` is tens of kilobytes and a client can ask for it as often as it likes. */
+const RESYNC_MIN_GAP_MS = 1000;
 
 /** How many bikes the room has seated: a new one means every client's slot table is out of date. */
 function seats(state: RoomState): number {
@@ -50,6 +53,10 @@ export class Room extends Server<Env> {
     step: (now) => this.#stepOnce(now),
   });
   #alarmAt: number | null | undefined = undefined;
+  /** When each connection was last answered a `resync`. Memory only: it is worth nothing after a sleep. */
+  #resyncedAt = new Map<string, number>();
+  /** The whole round as sent, and the state it was built from. */
+  #fullCache: { source: ModeState; json: string | null } | null = null;
 
   override async onStart(): Promise<void> {
     // Only what is set and sane: the rest comes from the mode, which knows how long its round is.
@@ -134,6 +141,10 @@ export class Room extends Server<Env> {
         );
         return;
       case 'resync': {
+        const now = Date.now();
+        const last = this.#resyncedAt.get(connection.id);
+        if (last !== undefined && now - last < RESYNC_MIN_GAP_MS) return;
+        this.#resyncedAt.set(connection.id, now);
         const full = this.#fullJson();
         if (full !== null) connection.send(full);
         return;
@@ -161,6 +172,7 @@ export class Room extends Server<Env> {
   }
 
   async #release(connection: Connection<Session>): Promise<void> {
+    this.#resyncedAt.delete(connection.id);
     const session = connection.state;
     if (session === null) return;
     await this.#run(
@@ -292,10 +304,20 @@ export class Room extends Server<Env> {
     this.broadcast(JSON.stringify(toSnapshot(this.#state, Date.now())));
   }
 
-  /** `null` outside a light-cycle round. One string, however many connections it goes to. */
+  /**
+   * `null` outside a light-cycle round. One string, however many connections it goes to, and the
+   * same string for as long as the state is the same one: building it walks every trail (tens of
+   * kilobytes), and `resync` lets any client ask. The key is the mode's state object itself —
+   * the rules never mutate, so a changed tick or bike set is always a different object, and
+   * there is no invalidation to forget.
+   */
   #fullJson(): string | null {
+    const source = this.#state.modeState;
+    if (this.#fullCache?.source === source) return this.#fullCache.json;
     const full = toFull(this.#state);
-    return full === null ? null : JSON.stringify(full);
+    const json = full === null ? null : JSON.stringify(full);
+    this.#fullCache = { source, json };
+    return json;
   }
 
   #send(connection: Connection<Session>, message: ServerMessage): void {

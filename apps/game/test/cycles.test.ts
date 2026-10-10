@@ -2,7 +2,7 @@ import { runInDurableObject } from 'cloudflare:test';
 import { env } from 'cloudflare:workers';
 import type { CyclesState, RoomState } from '@clicker/game';
 import { generateId } from '@clicker/protocol';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   type Client,
   connect,
@@ -201,6 +201,91 @@ describe('a light-cycle room over websocket', () => {
 
     const full = await host.waitFor(isFull);
     expect(full.bikes).toHaveLength(4);
+  });
+
+  /** A guest in a started round who has already been given the round once, unasked. */
+  async function startedWithGuest(): Promise<{ host: Client; guest: Client }> {
+    const roomId = generateId();
+    const host = await lightCycleLobby(roomId);
+    const guest = await connect(roomId);
+    guest.send({ type: 'join', playerId: generateId(), name: 'Боря' });
+    await guest.waitFor(isWelcome);
+    host.send({ type: 'start' });
+    await guest.waitFor(isFull);
+    return { host, guest };
+  }
+
+  /** The server answers a guest's `start` with an error, and answers in the order it was asked. */
+  async function settled(guest: Client): Promise<void> {
+    const before = guest.received.filter(isError).length;
+    guest.send({ type: 'start' });
+    await guest.waitFor(
+      (message): message is Extract<typeof message, { type: 'error' }> =>
+        isError(message) && guest.received.filter(isError).length > before,
+    );
+  }
+
+  it('answers a connection that asks again at once only the first time', async () => {
+    const { guest } = await startedWithGuest();
+    const before = guest.received.filter(isFull).length;
+
+    guest.send({ type: 'resync' });
+    guest.send({ type: 'resync' });
+    await settled(guest);
+
+    expect(guest.received.filter(isFull).length - before).toBe(1);
+  });
+
+  it('answers the same connection again once a second has gone by', async () => {
+    const { guest } = await startedWithGuest();
+    const before = guest.received.filter(isFull).length;
+    const realNow = Date.now();
+    const clock = vi.spyOn(Date, 'now');
+
+    try {
+      clock.mockReturnValue(realNow);
+      guest.send({ type: 'resync' });
+      await settled(guest);
+      clock.mockReturnValue(realNow + 1000);
+      guest.send({ type: 'resync' });
+      await settled(guest);
+    } finally {
+      clock.mockRestore();
+    }
+
+    expect(guest.received.filter(isFull).length - before).toBe(2);
+  });
+
+  it('builds the whole round once for connections that ask for it while nothing changes', async () => {
+    const roomId = generateId();
+    const host = await lightCycleLobby(roomId);
+    const guests: Client[] = [];
+    for (const name of ['Боря', 'Вася']) {
+      const guest = await connect(roomId);
+      guest.send({ type: 'join', playerId: generateId(), name });
+      await guest.waitFor(isWelcome);
+      guests.push(guest);
+    }
+    host.send({ type: 'start' });
+    // Once the round is over the state stands still, so both asks see the same one.
+    for (const guest of guests) await guest.waitFor(isOver);
+
+    const stringified: string[] = [];
+    const real = JSON.stringify;
+    const spy = vi.spyOn(JSON, 'stringify').mockImplementation((...args) => {
+      const text = real(...(args as Parameters<typeof JSON.stringify>));
+      if ((args[0] as { type?: string } | null)?.type === 'full') stringified.push(text);
+      return text;
+    });
+
+    try {
+      for (const guest of guests) guest.send({ type: 'resync' });
+      for (const guest of guests) await settled(guest);
+    } finally {
+      spy.mockRestore();
+    }
+
+    expect(stringified).toHaveLength(1);
   });
 
   it('refuses resync to a connection that has not joined', async () => {

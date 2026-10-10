@@ -299,3 +299,8 @@ Recorded in English from here on; the sections above stay as written.
   back inside it keeps the round going. Ending at the first step would have turned every network
   blip of a solo player into a finished round, long before the socket could reconnect. No alarm is
   needed for it: the ticker runs `advance` every step while the round runs.
+- **`resync` is bounded.** A connection is answered at most once a second (the time is kept in the
+  object's memory, not in storage; a request inside the window is dropped without an error), and
+  the `full` string is built once per state: the cache is keyed on the mode's state object, which
+  the rules replace on every change, so the same string serves the broadcasts and every `resync`
+  until the next tick or bike change.
