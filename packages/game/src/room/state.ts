@@ -13,6 +13,8 @@ export interface Player {
   /** Ids of the open connections of this player. */
   connectionIds: string[];
   disconnectedAt: number | null;
+  /** Seated by the host, not by a connection: it has none, and so never expires. */
+  bot: boolean;
 }
 
 export interface Round {

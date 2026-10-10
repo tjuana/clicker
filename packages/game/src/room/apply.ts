@@ -1,7 +1,8 @@
 import { modeFor } from '../modes';
+import { comparePublicIds } from '../modes/clicker';
 import { advance } from './advance';
 import type { Command, ErrorCode, GameEvent, InputCommand, JoinCommand } from './commands';
-import { DEFAULT_CONFIG, type GameConfig } from './config';
+import { configFor, DEFAULT_CONFIG, type GameConfig } from './config';
 import type { Player, RoomState } from './state';
 
 export interface ApplyResult {
@@ -31,7 +32,14 @@ export function apply(
 function handle(state: RoomState, command: Command, now: number, config: GameConfig): ApplyResult {
   switch (command.type) {
     case 'tick':
+    case 'step':
       return { state, events: [] };
+    case 'setMode':
+      return setMode(state, command, now, config);
+    case 'addBot':
+      return addBot(state, command.playerId, now, config);
+    case 'removeBot':
+      return removeBot(state, command.playerId);
     case 'join':
       return join(state, command, now, config);
     case 'leave':
@@ -49,6 +57,98 @@ function reject(state: RoomState, playerId: string, code: ErrorCode): ApplyResul
 
 function withPlayer(state: RoomState, playerId: string, player: Player): RoomState {
   return { ...state, players: { ...state.players, [playerId]: player } };
+}
+
+/** The cap belongs to the mode in play, whatever base config the caller hands in. */
+function isFull(state: RoomState, config: GameConfig): boolean {
+  return Object.keys(state.players).length >= configFor(state.mode, config).maxPlayers;
+}
+
+/** Host-only and between rounds: the guard shared by every command that reshapes the lobby. */
+function lobbyHostOnly(state: RoomState, playerId: string): ApplyResult | null {
+  if (state.players[playerId] === undefined) return reject(state, playerId, 'not_joined');
+  if (!state.hosts.includes(playerId)) return reject(state, playerId, 'not_host');
+  if (state.phase !== 'lobby' && state.phase !== 'results')
+    return reject(state, playerId, 'wrong_phase');
+  return null;
+}
+
+function setMode(
+  state: RoomState,
+  command: Extract<Command, { type: 'setMode' }>,
+  now: number,
+  config: GameConfig,
+): ApplyResult {
+  const refused = lobbyHostOnly(state, command.playerId);
+  if (refused !== null) return refused;
+  if (command.mode === state.mode) return { state, events: [] };
+
+  const next = modeFor(command.mode);
+  const players: Record<string, Player> = {};
+  for (const [playerId, player] of Object.entries(state.players)) {
+    // A bot is nothing without a mode that plays it.
+    if (next.bots || !player.bot) players[playerId] = player;
+  }
+
+  // Seated in publicId order, so a slot means the same thing however the room lists its players.
+  let modeState = next.create(now | 0);
+  const seated = Object.values(players).sort((a, b) => comparePublicIds(a.publicId, b.publicId));
+  for (const player of seated) {
+    modeState = next.addPlayer(modeState, player.publicId, player.bot, now, config);
+  }
+
+  return { state: { ...state, mode: command.mode, players, modeState }, events: [] };
+}
+
+function addBot(state: RoomState, playerId: string, now: number, config: GameConfig): ApplyResult {
+  const refused = lobbyHostOnly(state, playerId);
+  if (refused !== null) return refused;
+  const mode = modeFor(state.mode);
+  if (!mode.bots) return reject(state, playerId, 'not_supported');
+  if (isFull(state, config)) return reject(state, playerId, 'room_full');
+
+  const publicId = String(state.nextSeq);
+  const bots = Object.values(state.players).filter((player) => player.bot).length;
+  return {
+    state: {
+      ...withPlayer(state, `bot-${publicId}`, {
+        publicId,
+        name: `Bot ${bots + 1}`,
+        connectionIds: [],
+        disconnectedAt: null,
+        bot: true,
+      }),
+      nextSeq: state.nextSeq + 1,
+      modeState: mode.addPlayer(state.modeState, publicId, true, now, config),
+    },
+    events: [],
+  };
+}
+
+/** The newest bot goes first, so the names stay Bot 1…n without gaps. */
+function removeBot(state: RoomState, playerId: string): ApplyResult {
+  const refused = lobbyHostOnly(state, playerId);
+  if (refused !== null) return refused;
+
+  let newest: [string, Player] | null = null;
+  for (const entry of Object.entries(state.players)) {
+    if (!entry[1].bot) continue;
+    if (newest === null || comparePublicIds(entry[1].publicId, newest[1].publicId) > 0) {
+      newest = entry;
+    }
+  }
+  if (newest === null) return { state, events: [] };
+
+  const players = { ...state.players };
+  delete players[newest[0]];
+  return {
+    state: {
+      ...state,
+      players,
+      modeState: modeFor(state.mode).removePlayers(state.modeState, [newest[1].publicId]),
+    },
+    events: [],
+  };
 }
 
 function join(
@@ -72,7 +172,7 @@ function join(
       disconnectedAt: null,
     };
   } else {
-    if (Object.keys(state.players).length >= config.maxPlayers) {
+    if (isFull(state, config)) {
       return reject(state, command.playerId, 'room_full');
     }
     const publicId = String(state.nextSeq);
@@ -81,6 +181,7 @@ function join(
       name: command.name,
       connectionIds: [command.connectionId],
       disconnectedAt: null,
+      bot: false,
     };
     nextSeq = state.nextSeq + 1;
     modeState = modeFor(state.mode).addPlayer(state.modeState, publicId, false, now, config);

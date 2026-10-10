@@ -28,6 +28,11 @@ export function syncConnections(
 ): RoomState {
   const players: Record<string, Player> = {};
   for (const [playerId, player] of Object.entries(state.players)) {
+    // A bot has no connection to recount; counting it as disconnected would expire it.
+    if (player.bot) {
+      players[playerId] = player;
+      continue;
+    }
     const connectionIds = live[playerId] ?? [];
     players[playerId] = {
       ...player,

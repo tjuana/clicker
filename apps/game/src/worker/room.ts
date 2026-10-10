@@ -178,7 +178,10 @@ export class Room extends Server<Env> {
       return;
     }
     if (event.type === 'rejected' && source !== undefined) {
-      this.#send(source, { v: PROTOCOL_VERSION, type: 'error', code: event.code });
+      // The wire has no `not_supported` yet (plan 7, task 4) and the client has no text for it.
+      // Nothing sends the commands that produce it until task 5, so this is only a stopgap.
+      const code = event.code === 'not_supported' ? 'invalid_message' : event.code;
+      this.#send(source, { v: PROTOCOL_VERSION, type: 'error', code });
     }
   }
 
