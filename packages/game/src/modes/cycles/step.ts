@@ -12,11 +12,16 @@ export type CyclesEvent =
 /**
  * What one tick changed. The step knows this already; recovering it by comparing two fields
  * would be a pass over every cell just to rediscover it.
+ *
+ * Cells are reported as their final value, not as a log of writes: within one tick a cell can be
+ * taken and freed again (a boosting bike enters it and dies), and two separate lists lose which
+ * came last. A final value has no order to lose, so a client can replay it in any sequence.
  */
 export interface TickChanges {
-  /** Flat pairs: cell, slot. */
-  added: number[];
-  freed: number[];
+  /** Flat pairs: cell, what it holds after the tick (0 = empty). Each cell appears once. */
+  cells: number[];
+  /** Flat triples for every bike alive after the tick, in slot order: slot, head cell, direction. */
+  heads: number[];
   events: CyclesEvent[];
 }
 
@@ -25,7 +30,9 @@ export interface Work {
   field: Uint16Array;
   side: number;
   bikes: Bike[];
-  changes: TickChanges;
+  /** Every cell the tick wrote. A `Set` keeps insertion order, so the report is deterministic. */
+  touched: Set<number>;
+  events: CyclesEvent[];
   config: CyclesConfig;
 }
 
@@ -46,7 +53,7 @@ export function place(work: Work, bike: Bike, spot: Spot): void {
   bike.life = 0;
   bike.respawnIn = 0;
   work.field[cell] = bike.slot;
-  work.changes.added.push(cell, bike.slot);
+  work.touched.add(cell);
 }
 
 function kill(work: Work, bike: Bike, by: number | null): void {
@@ -60,12 +67,12 @@ function kill(work: Work, bike: Bike, by: number | null): void {
   // The trail goes out with its rider: a dead bike must not keep walling the living in.
   forEachCell(bike.trail, (cell) => {
     work.field[cell] = 0;
-    work.changes.freed.push(cell);
+    work.touched.add(cell);
   });
   bike.trail.start = 0;
   bike.trail.size = 0;
   bike.cap = work.config.trail;
-  work.changes.events.push({ type: 'died', slot: bike.slot, by });
+  work.events.push({ type: 'died', slot: bike.slot, by });
 
   if (by === null) return;
   const killer = work.bikes[by - 1];
@@ -134,7 +141,7 @@ function substep(work: Work, movers: Bike[]): void {
     if (fates[i] !== ADVANCE || tail < 0) continue;
     dropOldest((movers[i] as Bike).trail);
     field[tail] = 0;
-    work.changes.freed.push(tail);
+    work.touched.add(tail);
   }
   for (let i = 0; i < count; i += 1) {
     if (fates[i] !== ADVANCE) continue;
@@ -144,7 +151,7 @@ function substep(work: Work, movers: Bike[]): void {
     pushNewest(bike.trail, target);
     bike.x = target % side;
     bike.y = (target - bike.x) / side;
-    work.changes.added.push(target, bike.slot);
+    work.touched.add(target);
     bike.regen += 1;
     if (bike.regen >= work.config.rubberRegenTicks) {
       bike.regen = 0;
@@ -181,7 +188,8 @@ export function step(
       trail: copyTrail(bike.trail),
       turns: [...bike.turns],
     })),
-    changes: { added: [], freed: [], events: [] },
+    touched: new Set(),
+    events: [],
     config,
   };
   let seed = prev.seed;
@@ -194,7 +202,7 @@ export function step(
     seed = picked.seed;
     if (picked.spot === null) continue;
     place(work, bike, picked.spot);
-    work.changes.events.push({ type: 'respawned', slot: bike.slot });
+    work.events.push({ type: 'respawned', slot: bike.slot });
   }
 
   for (const bike of work.bikes) {
@@ -206,8 +214,7 @@ export function step(
     }
     const turn = bike.turns.shift();
     if (turn !== undefined) bike.dir = turn === 'left' ? (bike.dir + 3) & 3 : (bike.dir + 1) & 3;
-    if (bike.boost === config.boostTicks)
-      work.changes.events.push({ type: 'boost', slot: bike.slot });
+    if (bike.boost === config.boostTicks) work.events.push({ type: 'boost', slot: bike.slot });
   }
 
   substep(
@@ -225,8 +232,15 @@ export function step(
     if (bike.alive) bike.life += 1;
   }
 
+  const cells: number[] = [];
+  for (const cell of work.touched) cells.push(cell, work.field[cell] ?? 0);
+  const heads: number[] = [];
+  for (const bike of work.bikes) {
+    if (bike.alive) heads.push(bike.slot, bike.y * work.side + bike.x, bike.dir);
+  }
+
   return {
     state: { ...prev, field: work.field, bikes: work.bikes, seed, tick: prev.tick + 1 },
-    changes: work.changes,
+    changes: { cells, heads, events: work.events },
   };
 }

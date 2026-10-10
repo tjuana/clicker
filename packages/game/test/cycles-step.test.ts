@@ -31,8 +31,7 @@ describe('moving', () => {
       arena(10, [{ x: 2, y: 5, dir: EAST, behind: [[1, 5]], cap: 2 }]),
       cyclesConfig(),
     );
-    expect(changes.added).toEqual([5 * 10 + 3, 1]);
-    expect(changes.freed).toEqual([5 * 10 + 1]);
+    expect(changes.cells).toEqual([5 * 10 + 1, 0, 5 * 10 + 3, 1]);
   });
 
   it('never touches the state it was given', () => {

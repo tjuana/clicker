@@ -100,7 +100,8 @@ export function startRound(state: CyclesState, config: CyclesConfig): CyclesStat
     field: new Uint16Array(side * side),
     side,
     bikes: staying.map((bike, position) => newBike(position + 1, bike.publicId, bike.bot, config)),
-    changes: { added: [], freed: [], events: [] },
+    touched: new Set(),
+    events: [],
     config,
   };
   work.bikes.forEach((bike, position) => {

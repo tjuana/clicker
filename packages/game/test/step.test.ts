@@ -49,7 +49,7 @@ describe('step', () => {
     if (event?.type !== 'stepped') return;
     expect(event.tick).toBe(cyclesOf(state).tick + 1);
     expect(event.tick).toBe(cyclesOf(first.state).tick);
-    expect(event.changes.added.length).toBeGreaterThan(0);
+    expect(event.changes.cells.length).toBeGreaterThan(0);
   });
 
   it('counts one tick per step', () => {
