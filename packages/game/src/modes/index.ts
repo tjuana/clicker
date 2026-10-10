@@ -26,6 +26,11 @@ export interface Mode<S extends ModeState, _I extends ModeInput> {
   applyInput(state: S, publicId: string, input: ModeInput, now: number, config: GameConfig): S;
   /** Only living modes have it; the room calls it once per tick while a round runs. */
   step: ((state: S) => { state: S; changes: TickChanges }) | null;
+  /**
+   * A player the room already knows joins again. The clicker must not touch their score; the
+   * cycles bring a bike that left back. Called in any phase, so it must be harmless in a lobby.
+   */
+  rejoin(state: S, publicId: string): S;
   /** A player gone mid-round. The clicker keeps the score; the cycles take the bike off the field. */
   abandon(state: S, publicId: string): S;
   finish(state: S, names: Record<string, string>): S;

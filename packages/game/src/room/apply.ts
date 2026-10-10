@@ -90,6 +90,10 @@ function setMode(
     // A bot is nothing without a mode that plays it.
     if (next.bots || !player.bot) players[playerId] = player;
   }
+  // Counted after the bots went home: the cap is about who would be seated.
+  if (Object.keys(players).length > configFor(command.mode, config).maxPlayers) {
+    return reject(state, command.playerId, 'room_full');
+  }
 
   // Seated in publicId order, so a slot means the same thing however the room lists its players.
   let modeState = next.create(now | 0);
@@ -98,7 +102,18 @@ function setMode(
     modeState = next.addPlayer(modeState, player.publicId, player.bot, now, config);
   }
 
-  return { state: { ...state, mode: command.mode, players, modeState }, events: [] };
+  // The results of the old mode mean nothing in the new one, so the room goes back to the lobby.
+  const fromResults = state.phase === 'results';
+  return {
+    state: {
+      ...state,
+      mode: command.mode,
+      phase: fromResults ? 'lobby' : state.phase,
+      players,
+      modeState,
+    },
+    events: fromResults ? [{ type: 'phaseChanged', phase: 'lobby' }] : [],
+  };
 }
 
 function addBot(state: RoomState, playerId: string, now: number, config: GameConfig): ApplyResult {
@@ -172,6 +187,8 @@ function join(
         : [...existing.connectionIds, command.connectionId],
       disconnectedAt: null,
     };
+    // Whatever the mode keeps for them — a bike that left the field — is theirs to take back.
+    modeState = modeFor(state.mode).rejoin(state.modeState, existing.publicId);
   } else {
     if (isFull(state, config)) {
       return reject(state, command.playerId, 'room_full');
@@ -225,8 +242,10 @@ function leave(state: RoomState, playerId: string, connectionId: string, now: nu
       connectionIds.length === 0 && player.disconnectedAt === null ? now : player.disconnectedAt,
   });
   // The mode decides what a vanished player leaves behind: the clicker keeps the score, the
-  // cycles take the bike off the field. Outside a round there is nothing on the field to take.
-  if (connectionIds.length > 0 || state.phase !== 'running') return { state: left, events: [] };
+  // cycles take the bike off the field. The countdown counts: the bikes are placed when it starts.
+  // Outside a round there is nothing on the field to take.
+  const inRound = state.phase === 'countdown' || state.phase === 'running';
+  if (connectionIds.length > 0 || !inRound) return { state: left, events: [] };
   const mode = modeFor(state.mode);
   return {
     state: { ...left, modeState: mode.abandon(state.modeState, player.publicId) },

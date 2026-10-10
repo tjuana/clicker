@@ -54,6 +54,8 @@ export const cyclesMode: Mode<CyclesState, CyclesInput> = {
     input.type === 'turn' || input.type === 'boost'
       ? applyInput(state, publicId, input, CYCLES_CONFIG)
       : state,
+  // Whoever joins has a connection, so is a person; a bot is never rejoined.
+  rejoin: (state, publicId) => addPlayer(state, publicId, false, CYCLES_CONFIG),
   step: (state) => step(state, CYCLES_CONFIG),
   abandon: leave,
   finish,

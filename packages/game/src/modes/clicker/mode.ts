@@ -19,6 +19,8 @@ export const clickerMode: Mode<ClickerState, ClickerInput> = {
   // A turn or a boost is another game's input: refused by returning the very same state.
   applyInput: (state, publicId, input, now, config) =>
     input.type === 'click' ? applyInput(state, publicId, input, now, config) : state,
+  // `addPlayer` would start the score again, which is exactly what coming back must not do.
+  rejoin: (state) => state,
   step: null,
   // The score stays: whoever left mid-round still clicked what they clicked.
   abandon: (state) => state,

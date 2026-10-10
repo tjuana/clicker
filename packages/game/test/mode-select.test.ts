@@ -148,3 +148,63 @@ describe('the mode of a new room', () => {
     expect(CYCLES.tickMs).toBe(50);
   });
 });
+
+describe('setMode and the size of the room', () => {
+  it('refuses a mode that seats fewer players than the room holds', () => {
+    const joins = Array.from({ length: 20 }, (_, i) => ({
+      type: 'join' as const,
+      playerId: `p${i}`,
+      connectionId: `c${i}`,
+      name: `P${i}`,
+    }));
+    const lobby = run(lobbyWithHost(), joins);
+    expect(Object.keys(lobby.players)).toHaveLength(21);
+
+    const result = apply(lobby, { type: 'setMode', playerId: 'host', mode: 'cycles' }, 0);
+
+    expect(result.events).toEqual([{ type: 'rejected', playerId: 'host', code: 'room_full' }]);
+    expect(result.state).toBe(lobby);
+  });
+
+  it('accepts exactly as many players as the mode holds', () => {
+    const joins = Array.from({ length: 19 }, (_, i) => ({
+      type: 'join' as const,
+      playerId: `p${i}`,
+      connectionId: `c${i}`,
+      name: `P${i}`,
+    }));
+    const lobby = run(lobbyWithHost(), joins);
+
+    const result = apply(lobby, { type: 'setMode', playerId: 'host', mode: 'cycles' }, 0);
+
+    expect(result.state.mode).toBe('cycles');
+  });
+});
+
+describe('setMode from the results', () => {
+  it('moves the room to the lobby: the old mode results mean nothing in the new one', () => {
+    let state = run(lobbyWithHost(), [{ type: 'start', playerId: 'host' }]);
+    const goAt = state.round?.goAt ?? 0;
+    state = apply(state, { type: 'tick' }, goAt + config().roundMs + 1000).state;
+    expect(state.phase).toBe('results');
+
+    const result = apply(
+      state,
+      { type: 'setMode', playerId: 'host', mode: 'cycles' },
+      goAt + 20_000,
+    );
+
+    expect(result.state.phase).toBe('lobby');
+    expect(result.events).toEqual([{ type: 'phaseChanged', phase: 'lobby' }]);
+  });
+
+  it('stays quiet when the lobby is already the lobby', () => {
+    const { events } = apply(
+      lobbyWithHost(),
+      { type: 'setMode', playerId: 'host', mode: 'cycles' },
+      0,
+    );
+
+    expect(events).toEqual([]);
+  });
+});
