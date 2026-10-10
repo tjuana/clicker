@@ -34,14 +34,46 @@ describe('moving', () => {
     expect(changes.cells).toEqual([5 * 10 + 1, 0, 5 * 10 + 3, 1]);
   });
 
-  it('never touches the state it was given', () => {
-    const before = arena(10, [{ x: 2, y: 5, dir: EAST }]);
-    const field = before.field.slice();
-    const cells = before.bikes[0]?.trail.cells.slice();
-    step(before, cyclesConfig());
-    expect(before.field).toEqual(field);
-    expect(before.bikes[0]?.trail.cells).toEqual(cells);
-    expect(before.bikes[0]?.x).toBe(2);
+  it('never touches any state it was given, over a game of every kind of event', () => {
+    // Small rubber and a short wait, so one short game holds a kill with its bonus, a respawn, a
+    // boost, queued human turns and a bot's own decision: every place a step writes to a bike.
+    const config = cyclesConfig({ rubber: 0, respawnTicks: 2, boostTicks: 3 });
+    let state = arena(
+      12,
+      [
+        {
+          x: 6,
+          y: 5,
+          dir: SOUTH,
+          behind: [
+            [6, 3],
+            [6, 4],
+          ],
+          cap: 10,
+        },
+        { x: 4, y: 4, dir: EAST },
+        { x: 1, y: 8, dir: EAST, turns: ['right', 'left'] },
+        { x: 10, y: 10, dir: EAST, bot: true },
+      ],
+      config,
+    );
+    state = applyInput(state, '1', { type: 'boost' }, config);
+    state = applyInput(state, '3', { type: 'turn', side: 'right' }, config);
+
+    let sawBonus = false;
+    let sawRespawn = false;
+    for (let tick = 0; tick < 10; tick += 1) {
+      // A deep copy, not a handful of fields: a shared array or typed array is invisible to a
+      // test that only reads the properties it expects to have changed.
+      const before = structuredClone(state);
+      const { state: after, changes } = step(state, config);
+      expect(state).toEqual(before);
+      sawBonus ||= after.bikes[0]?.cap === 10 + config.killBonus;
+      sawRespawn ||= changes.events.some((event) => event.type === 'respawned');
+      state = after;
+    }
+    expect(sawBonus).toBe(true);
+    expect(sawRespawn).toBe(true);
   });
 });
 
