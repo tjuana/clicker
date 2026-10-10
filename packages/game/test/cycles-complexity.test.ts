@@ -4,7 +4,15 @@ import { decide } from '../src/modes/cycles/bot';
 import { clearance } from '../src/modes/cycles/spawn';
 import type { Bike } from '../src/modes/cycles/state';
 import { step } from '../src/modes/cycles/step';
-import { counted, growth, LINEAR, scanCost, type Tally } from './complexity';
+import {
+  counted,
+  growth,
+  keyedCost,
+  LINEAR,
+  scanCost,
+  type Tally,
+  traversalCost,
+} from './complexity';
 import { arena, cyclesConfig } from './cycles-support';
 
 /**
@@ -46,6 +54,42 @@ describe('a tick', () => {
       return scanCost(() => step(state, config));
     };
     expect(growth(work)).toBeLessThan(LINEAR);
+  });
+
+  it('makes a number of passes over its bikes that grows with the players, not their square', () => {
+    const work = (players: number) => {
+      const state = round(players);
+      return traversalCost(() => step(state, config));
+    };
+    expect(growth(work)).toBeLessThan(LINEAR * 2);
+  });
+
+  it('settles a chain of bikes each following the next one’s tail in work linear in the chain', () => {
+    // Every bike's tail is its own head and the one ahead is blocked by a wall, so the stall
+    // travels down the whole chain: one bike per step of it. A settling loop that rescans every
+    // bike each time something changes would walk the chain once per bike.
+    const chain = (size: number) => {
+      const side = size + 2;
+      const specs = Array.from({ length: size }, (_, position) => ({
+        x: side - size + position,
+        y: 1,
+        dir: 0,
+        cap: 1,
+      }));
+      return arena(side, specs, config);
+    };
+    // Two instruments, because the loops that make a chain quadratic come in two kinds: a pass
+    // over the bikes, and a lookup in a table that is rebuilt on every pass.
+    const passes = (size: number) => {
+      const state = chain(size);
+      return traversalCost(() => step(state, config));
+    };
+    const lookups = (size: number) => {
+      const state = chain(size);
+      return keyedCost(() => step(state, config));
+    };
+    expect(growth(passes)).toBeLessThan(LINEAR * 2);
+    expect(growth(lookups)).toBeLessThan(LINEAR * 2);
   });
 });
 
