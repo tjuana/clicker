@@ -161,7 +161,15 @@ describe('parseClientMessage', () => {
   });
 
   it('rejects a message with a mismatched protocol version', () => {
-    const raw = encode({ v: 2, type: 'start' });
+    const raw = encode({ v: PROTOCOL_VERSION + 1, type: 'start' });
+
+    expect(parseClientMessage(raw)).toEqual({ ok: false, reason: 'bad_version' });
+  });
+
+  // Version 1 had no bot flag in the snapshot: a tab still running that client must be told to
+  // reload, because it would otherwise reject every new snapshot and sit on a blank screen.
+  it('turns away the clients of version 1', () => {
+    const raw = encode({ v: 1, type: 'start' });
 
     expect(parseClientMessage(raw)).toEqual({ ok: false, reason: 'bad_version' });
   });

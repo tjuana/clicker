@@ -4,8 +4,12 @@ import { ID_PATTERN } from './ids';
 /** Anything longer never reaches the parser. */
 export const MAX_MESSAGE_BYTES = 1024;
 export const MAX_NAME_LENGTH = 20;
-/** Bumped when the wire format changes in a way an old client cannot read. */
-export const PROTOCOL_VERSION = 1;
+/**
+ * Bumped when the wire format changes in a way an old client cannot read. 2: players[] in the
+ * snapshot gained a required `bot`, which a strict version-1 client rejects; it now gets
+ * `bad_version` and reloads instead of silently dropping every snapshot.
+ */
+export const PROTOCOL_VERSION = 2;
 
 const encoder = new TextEncoder();
 

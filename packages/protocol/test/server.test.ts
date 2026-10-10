@@ -4,7 +4,9 @@ import {
   configFor,
   createRoomState,
   type GameEvent,
+  type Player,
   type RoomState,
+  syncConnections,
   type TickChanges,
 } from '@clicker/game';
 import { describe, expect, it } from 'vitest';
@@ -110,6 +112,16 @@ describe('toSnapshot', () => {
     expect(snapshot.round).toEqual({ goAt: 4000, endsAt: 14000 });
     expect(snapshot.data.results).toBeNull();
     expect(snapshot.notice).toBeNull();
+  });
+
+  it('passes its own schema for a room stored before players had the bot flag', () => {
+    const { bot: _bot, ...legacy } = playedRoom().players['secret-1'] as Player;
+    const stored = { ...playedRoom(), players: { 'secret-1': legacy as Player } };
+
+    const snapshot = toSnapshot(syncConnections(stored, { 'secret-1': ['conn-9'] }, 0), 42);
+
+    expect(snapshot.players).toEqual([{ id: '1', name: 'Аня', connected: true, bot: false }]);
+    expect(parseServerMessage(JSON.stringify(snapshot))).toEqual(snapshot);
   });
 
   it('passes its own schema', () => {

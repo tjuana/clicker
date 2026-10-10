@@ -285,3 +285,8 @@ Recorded in English from here on; the sections above stay as written.
   after the respawn wait. This applies from the countdown on.
 - **Round length is code, not deployment config.** `wrangler.jsonc` no longer sets `ROUND_MS` or
   `COUNTDOWN_MS`; when the environment does set them — tests do — they override every mode.
+- **The protocol version is 2, not 1** (supersedes "`v` stays `1`" in section 6). `players[]` in the
+  snapshot gained a required `bot`, and the schemas are strict, so a tab running the old client
+  would reject every new snapshot and show nothing. A version-1 message is now answered with
+  `bad_version`, which sends the tab to reload. Players stored by an older build lack the flag;
+  `syncConnections` (run whenever the object starts) turns it into `false`.
