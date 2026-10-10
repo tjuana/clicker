@@ -7,6 +7,13 @@ export {
   type ResultRow,
   toData as toModeData,
 } from './modes/clicker';
+export {
+  type CyclesEvent,
+  type CyclesResultRow,
+  type CyclesState,
+  forEachCell,
+  type TickChanges,
+} from './modes/cycles';
 export { type ApplyResult, apply } from './room/apply';
 export type {
   Command,

@@ -59,7 +59,7 @@ describe('room lifecycle', () => {
         isSnapshot(message) && message.players.some((player) => !player.connected),
     );
 
-    expect(snapshot.players).toEqual([{ id: '1', name: 'Аня', connected: false }]);
+    expect(snapshot.players).toEqual([{ id: '1', name: 'Аня', connected: false, bot: false }]);
 
     client.close();
   });
@@ -114,7 +114,7 @@ describe('room lifecycle', () => {
     );
 
     expect(snapshot.phase).toBe('lobby');
-    expect(snapshot.players).toEqual([{ id: '1', name: 'Аня', connected: true }]);
+    expect(snapshot.players).toEqual([{ id: '1', name: 'Аня', connected: true, bot: false }]);
 
     client.close();
   });

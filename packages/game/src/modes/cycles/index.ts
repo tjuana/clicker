@@ -15,6 +15,7 @@ export {
   type Turn,
 } from './state';
 export { type CyclesEvent, step, type TickChanges } from './step';
+export { forEachCell } from './trail';
 
 /** A bike waiting in the lobby: no position until a round places it. */
 function newBike(slot: number, publicId: string, bot: boolean, config: CyclesConfig): Bike {

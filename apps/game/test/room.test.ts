@@ -41,9 +41,9 @@ describe('room over websocket', () => {
 
     const snapshot = await client.waitFor(isSnapshot);
     expect(snapshot.phase).toBe('lobby');
-    expect(snapshot.players).toEqual([{ id: '1', name: 'Аня', connected: true }]);
+    expect(snapshot.players).toEqual([{ id: '1', name: 'Аня', connected: true, bot: false }]);
     // The score lives in the mode's slot now: the room's player list knows nothing about clicks.
-    expect(snapshot.data.scores).toEqual({ '1': 0 });
+    expect(snapshot.data).toEqual({ scores: { '1': 0 }, results: null });
     expect(JSON.stringify(snapshot)).not.toContain(playerId);
 
     client.close();

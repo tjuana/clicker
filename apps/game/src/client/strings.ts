@@ -53,5 +53,6 @@ export const strings = {
     room_full: 'The room is full',
     invalid_message: 'The server did not understand that',
     bad_version: 'This tab is out of date. Reload the page.',
+    not_supported: 'The room cannot do that in this game',
   } satisfies Record<ServerErrorCode, string>,
 };

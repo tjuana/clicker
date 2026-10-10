@@ -1,7 +1,21 @@
-import { apply, createRoomState, type RoomState } from '@clicker/game';
+import {
+  apply,
+  type Command,
+  configFor,
+  createRoomState,
+  type GameEvent,
+  type RoomState,
+  type TickChanges,
+} from '@clicker/game';
 import { describe, expect, it } from 'vitest';
 import { PROTOCOL_VERSION } from '../src/client';
-import { MAX_SERVER_MESSAGE_BYTES, parseServerMessage, toSnapshot } from '../src/server';
+import {
+  MAX_SERVER_MESSAGE_BYTES,
+  parseServerMessage,
+  toDelta,
+  toFull,
+  toSnapshot,
+} from '../src/server';
 
 /** Host "secret-1" and player "secret-2", round already played out. */
 function playedRoom(): RoomState {
@@ -136,5 +150,188 @@ describe('parseServerMessage', () => {
     const raw = `"${'x'.repeat(MAX_SERVER_MESSAGE_BYTES)}"`;
 
     expect(parseServerMessage(raw)).toBeNull();
+  });
+});
+
+const CYCLES = configFor('cycles');
+
+/** A light-cycle room: the host plus `bots` bots, started and stepped `steps` times. */
+function cyclesRoom(
+  bots: number,
+  steps: number,
+): { state: RoomState; lastChanges: TickChanges | null; lastTick: number } {
+  const commands: Command[] = [
+    {
+      type: 'join',
+      playerId: 'secret-host',
+      connectionId: 'conn-host',
+      name: 'Аня',
+      hostKey: 'key-1',
+    },
+    { type: 'setMode', playerId: 'secret-host', mode: 'cycles' },
+    ...Array.from({ length: bots }, (): Command => ({ type: 'addBot', playerId: 'secret-host' })),
+    { type: 'start', playerId: 'secret-host' },
+  ];
+  let state = createRoomState();
+  for (const command of commands) state = apply(state, command, 0, CYCLES).state;
+  const goAt = state.round?.goAt ?? 0;
+  state = apply(state, { type: 'tick' }, goAt, CYCLES).state;
+
+  let lastChanges: TickChanges | null = null;
+  let lastTick = 0;
+  for (let i = 0; i < steps; i += 1) {
+    const result = apply(state, { type: 'step' }, goAt + i, CYCLES);
+    state = result.state;
+    const stepped = result.events.find(
+      (event): event is Extract<GameEvent, { type: 'stepped' }> => event.type === 'stepped',
+    );
+    if (stepped !== undefined) {
+      lastChanges = stepped.changes;
+      lastTick = stepped.tick;
+    }
+  }
+  return { state, lastChanges, lastTick };
+}
+
+describe('toSnapshot of a light-cycle room', () => {
+  it('names the mode, marks the bots and passes its own schema', () => {
+    const { state } = cyclesRoom(2, 3);
+
+    const snapshot = toSnapshot(state, 7);
+
+    expect(snapshot.mode).toBe('cycles');
+    expect(snapshot.players.map((player) => player.bot)).toEqual([false, true, true]);
+    expect(parseServerMessage(JSON.stringify(snapshot))).toEqual(snapshot);
+  });
+
+  it('carries the results of a finished round under public ids', () => {
+    const { state } = cyclesRoom(2, 3);
+    const over = apply(state, { type: 'tick' }, 10_000_000, CYCLES).state;
+    expect(over.phase).toBe('results');
+
+    const snapshot = toSnapshot(over, 10_000_000);
+
+    expect(snapshot.data).toEqual({
+      results: expect.arrayContaining([expect.objectContaining({ id: '1', name: 'Аня' })]),
+    });
+    expect((snapshot.data.results ?? []).map((row) => row.id).sort()).toEqual(['1', '2', '3']);
+    expect(parseServerMessage(JSON.stringify(snapshot))).toEqual(snapshot);
+  });
+
+  it('shows no results while the round is on', () => {
+    expect(toSnapshot(cyclesRoom(1, 2).state, 0).data).toEqual({ results: null });
+  });
+});
+
+describe('toFull', () => {
+  it('fits the message limit for twenty bikes after four hundred steps, and passes the parser', () => {
+    const { state } = cyclesRoom(19, 400);
+    expect(Object.keys(state.players)).toHaveLength(20);
+
+    const full = toFull(state);
+
+    expect(full).not.toBeNull();
+    const raw = JSON.stringify(full);
+    expect(raw.length).toBeLessThan(MAX_SERVER_MESSAGE_BYTES);
+    expect(parseServerMessage(raw)).toEqual(full);
+    expect(full?.bikes).toHaveLength(20);
+  });
+
+  it('lists a trail from its oldest cell to the head', () => {
+    const { state, lastChanges } = cyclesRoom(3, 30);
+    const full = toFull(state);
+    const delta = toDelta(0, lastChanges as TickChanges);
+
+    const alive = (full?.bikes ?? []).filter((bike) => bike.alive);
+    expect(alive.length).toBeGreaterThan(0);
+    for (const bike of alive) {
+      const at = delta.heads.indexOf(bike.slot);
+      // The head the tick reported is the last cell of the trail, and every cell borders the next.
+      expect(bike.trail.at(-1)).toBe(delta.heads[at + 1]);
+      for (let i = 1; i < bike.trail.length; i += 1) {
+        const step = Math.abs((bike.trail[i] as number) - (bike.trail[i - 1] as number));
+        expect([1, full?.side]).toContain(step);
+      }
+    }
+  });
+
+  it('sends an empty trail for a bike that is not on the field yet', () => {
+    const { state } = cyclesRoom(2, 3);
+    const joined = apply(
+      state,
+      { type: 'join', playerId: 'secret-late', connectionId: 'conn-late', name: 'Боря' },
+      1000,
+      CYCLES,
+    ).state;
+
+    const full = toFull(joined);
+
+    const late = full?.bikes.find((bike) => bike.id === '4');
+    expect(late).toBeDefined();
+    expect(late?.alive).toBe(false);
+    expect(late?.trail).toEqual([]);
+    expect(full?.bikes.filter((bike) => bike.alive)).toHaveLength(3);
+  });
+
+  it('is null for the clicker and for a light-cycle room with no field yet', () => {
+    expect(toFull(playedRoom())).toBeNull();
+
+    let lobby = createRoomState();
+    lobby = apply(
+      lobby,
+      { type: 'join', playerId: 'p', connectionId: 'c', name: 'A', hostKey: 'k' },
+      0,
+    ).state;
+    lobby = apply(lobby, { type: 'setMode', playerId: 'p', mode: 'cycles' }, 0).state;
+    expect(toFull(lobby)).toBeNull();
+  });
+
+  it('holds no secret: not the playerId, not the host key, not a bot playerId', () => {
+    const { state } = cyclesRoom(3, 5);
+    const json = JSON.stringify([toFull(state), toSnapshot(state, 0)]);
+
+    expect(json).not.toContain('secret-host');
+    expect(json).not.toContain('key-1');
+    expect(json).not.toContain('bot-');
+  });
+});
+
+describe('toDelta', () => {
+  it('passes the parser and carries the tick, the cells, the heads and the events', () => {
+    const { lastChanges, lastTick } = cyclesRoom(3, 10);
+    const changes = lastChanges as TickChanges;
+
+    const delta = toDelta(lastTick, changes);
+
+    expect(delta.t).toBe(10);
+    expect(delta.cells).toEqual(changes.cells);
+    expect(delta.heads).toEqual(changes.heads);
+    expect(delta.heads.length).toBeGreaterThan(0);
+    expect(parseServerMessage(JSON.stringify(delta))).toEqual(delta);
+  });
+
+  it('describes every kind of event', () => {
+    const delta = toDelta(1, {
+      cells: [],
+      heads: [],
+      events: [
+        { type: 'died', slot: 1, by: null },
+        { type: 'died', slot: 2, by: 1 },
+        { type: 'respawned', slot: 2 },
+        { type: 'boost', slot: 1 },
+      ],
+    });
+
+    expect(parseServerMessage(JSON.stringify(delta))).toEqual(delta);
+  });
+});
+
+describe('the new error code', () => {
+  it('accepts not_supported', () => {
+    expect(
+      parseServerMessage(
+        JSON.stringify({ v: PROTOCOL_VERSION, type: 'error', code: 'not_supported' }),
+      ),
+    ).not.toBeNull();
   });
 });
