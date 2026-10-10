@@ -241,6 +241,9 @@ export function step(
   };
   let seed = prev.seed;
 
+  // A bike whose player left goes first, so its cells are free for anyone respawning this tick.
+  for (const bike of work.bikes) if (bike.left && bike.alive) kill(work, bike, null);
+
   for (const bike of work.bikes) {
     if (bike.alive || bike.left) continue;
     if (bike.respawnIn > 0) bike.respawnIn -= 1;

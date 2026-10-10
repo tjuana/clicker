@@ -3,7 +3,7 @@ import { openestDirection, sideFor } from './field';
 import type { Spot } from './spawn';
 import type { Bike, CyclesInput, CyclesResultRow, CyclesState } from './state';
 import { place, type Work } from './step';
-import { emptyTrail, forEachCell } from './trail';
+import { emptyTrail } from './trail';
 
 export { CYCLES_CONFIG, type CyclesConfig } from './config';
 export {
@@ -49,7 +49,13 @@ export function addPlayer(
   bot: boolean,
   config: CyclesConfig,
 ): CyclesState {
-  if (state.index[publicId] !== undefined) return state;
+  const position = state.index[publicId];
+  const existing = position === undefined ? undefined : state.bikes[position];
+  if (position !== undefined && existing !== undefined) {
+    // Coming back after leaving: the same slot, and the usual wait before riding again.
+    if (!existing.left) return state;
+    return withBike(state, position, { ...existing, left: false, respawnIn: config.respawnTicks });
+  }
   const bike = newBike(state.bikes.length + 1, publicId, bot, config);
   return {
     ...state,
@@ -60,14 +66,20 @@ export function addPlayer(
 
 /**
  * Outside a round only. Slots are renumbered so they stay 1…n and fit the field, and the field
- * is cleared because its cells name the old slots; the next round rebuilds it anyway.
+ * is cleared because its cells name the old slots, and the trails with it so the two agree; the
+ * next round rebuilds all of it anyway.
  */
 export function removePlayers(state: CyclesState, publicIds: string[]): CyclesState {
   if (publicIds.length === 0) return state;
   const leaving = new Set(publicIds);
   const bikes = state.bikes
     .filter((bike) => !leaving.has(bike.publicId))
-    .map((bike, position) => ({ ...bike, slot: position + 1, alive: false }));
+    .map((bike, position) => ({
+      ...bike,
+      slot: position + 1,
+      alive: false,
+      trail: emptyTrail(bike.trail.cells.length),
+    }));
   const index: Record<string, number> = {};
   bikes.forEach((bike, position) => {
     index[bike.publicId] = position;
@@ -145,27 +157,16 @@ export function applyInput(
 }
 
 /**
- * A player who left mid-round. Its bike is taken off the field with no one to blame, and it
- * keeps its slot until the round ends: renumbering now would rewrite every cell it ever owned.
+ * A player who left mid-round, marked and nothing more. The tick takes the bike off the field, so
+ * that its cells, its death and its end go out with every other change of the tick instead of
+ * vanishing from a state no client was told about. It keeps its slot until the round ends:
+ * renumbering now would rewrite every cell it ever owned.
  */
 export function leave(state: CyclesState, publicId: string): CyclesState {
   const position = state.index[publicId];
   const bike = position === undefined ? undefined : state.bikes[position];
   if (position === undefined || bike === undefined || bike.left) return state;
-  const field = state.field.slice();
-  forEachCell(bike.trail, (cell) => {
-    field[cell] = 0;
-  });
-  return {
-    ...withBike(state, position, {
-      ...bike,
-      alive: false,
-      left: true,
-      trail: emptyTrail(bike.trail.cells.length),
-      longest: Math.max(bike.longest, bike.life),
-    }),
-    field,
-  };
+  return withBike(state, position, { ...bike, left: true });
 }
 
 /**
