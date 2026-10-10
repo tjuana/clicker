@@ -15,7 +15,6 @@ export const MAX_SERVER_MESSAGE_BYTES = 128 * 1024;
 
 const versionSchema = v.literal(PROTOCOL_VERSION);
 const phaseSchema = v.picklist(['lobby', 'countdown', 'running', 'results']);
-const modeSchema = v.picklist(['clicker', 'cycles']);
 
 const errorCodeSchema = v.picklist([
   'not_joined',
@@ -64,11 +63,11 @@ export const cyclesDataSchema = v.strictObject({
   ),
 });
 
-export const snapshotSchema = v.strictObject({
+/** What every mode's snapshot has; the mode picks only the `data` slot. */
+const snapshotFields = {
   v: versionSchema,
   type: v.literal('snapshot'),
   serverNow: v.number(),
-  mode: modeSchema,
   phase: phaseSchema,
   players: v.array(
     v.strictObject({
@@ -80,8 +79,13 @@ export const snapshotSchema = v.strictObject({
   ),
   round: v.nullable(v.strictObject({ goAt: v.number(), endsAt: v.number() })),
   notice: v.nullable(v.literal('round_aborted')),
-  data: v.union([clickerDataSchema, cyclesDataSchema]),
-});
+};
+
+/** The data is tied to the mode: a light-cycle snapshot carrying scores is a bug, not a message. */
+export const snapshotSchema = v.variant('mode', [
+  v.strictObject({ ...snapshotFields, mode: v.literal('clicker'), data: clickerDataSchema }),
+  v.strictObject({ ...snapshotFields, mode: v.literal('cycles'), data: cyclesDataSchema }),
+]);
 
 const eventSchema = v.variant('type', [
   v.strictObject({ type: v.literal('died'), slot: v.number(), by: v.nullable(v.number()) }),
@@ -168,10 +172,8 @@ export function parseServerMessage(raw: string): ServerMessage | null {
   return result.success ? result.output : null;
 }
 
-/** What the mode adds to the snapshot. The room's own fields are the same for every mode. */
-function dataOf(state: RoomState): SnapshotMessage['data'] {
-  if (state.mode === 'clicker') return toModeData(state.modeState as ClickerState);
-  const { results } = state.modeState as CyclesState;
+function cyclesDataOf(state: CyclesState): v.InferOutput<typeof cyclesDataSchema> {
+  const { results } = state;
   return {
     results:
       results === null
@@ -195,17 +197,20 @@ export function toSnapshot(state: RoomState, now: number): SnapshotMessage {
     connected: player.connectionIds.length > 0,
     bot: player.bot,
   }));
-  return {
+  // What the mode adds to the snapshot is its `data`; the room's own fields are the same for all.
+  const common = {
     v: PROTOCOL_VERSION,
     type: 'snapshot',
     serverNow: now,
-    mode: state.mode,
     phase: state.phase,
     players: players.sort((a, b) => comparePublicIds(a.id, b.id)),
     round: state.round === null ? null : { goAt: state.round.goAt, endsAt: state.round.endsAt },
     notice: state.notice,
-    data: dataOf(state),
-  };
+  } as const;
+  if (state.mode === 'clicker') {
+    return { ...common, mode: 'clicker', data: toModeData(state.modeState as ClickerState) };
+  }
+  return { ...common, mode: 'cycles', data: cyclesDataOf(state.modeState as CyclesState) };
 }
 
 /** `null` for a mode with no field, or a light-cycle room before its first round. */

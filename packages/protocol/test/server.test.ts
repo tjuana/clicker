@@ -235,6 +235,29 @@ describe('toSnapshot of a light-cycle room', () => {
   });
 });
 
+describe('a snapshot is tied to its mode', () => {
+  const clickerData = { scores: { '1': 0 }, results: null };
+  const cyclesData = { results: null };
+
+  it('refuses a light-cycle snapshot that carries the clicker data', () => {
+    const snapshot = toSnapshot(cyclesRoom(1, 2).state, 0);
+
+    expect(parseServerMessage(JSON.stringify({ ...snapshot, data: clickerData }))).toBeNull();
+  });
+
+  it('refuses a clicker snapshot that carries the light-cycle data', () => {
+    const snapshot = toSnapshot(playedRoom(), 0);
+
+    expect(parseServerMessage(JSON.stringify({ ...snapshot, data: cyclesData }))).toBeNull();
+  });
+
+  it('still accepts each mode with its own data', () => {
+    for (const snapshot of [toSnapshot(cyclesRoom(1, 2).state, 0), toSnapshot(playedRoom(), 0)]) {
+      expect(parseServerMessage(JSON.stringify(snapshot))).toEqual(snapshot);
+    }
+  });
+});
+
 describe('toFull', () => {
   it('fits the message limit for twenty bikes after four hundred steps, and passes the parser', () => {
     const { state } = cyclesRoom(19, 400);

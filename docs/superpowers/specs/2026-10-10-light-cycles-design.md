@@ -307,3 +307,6 @@ Recorded in English from here on; the sections above stay as written.
 - **Each entry of `heads` is five numbers**, not three: slot, head cell, direction, rubber left,
   boost cooldown left. The client knows no rules, so after `full` it could not otherwise know
   either of the last two for the HUD.
+- **A snapshot's `data` is tied to its `mode`.** The schema is a variant on `mode`: a light-cycle
+  snapshot carrying clicker scores (or the reverse) no longer parses, and the type of `data`
+  narrows on `mode` alone.
