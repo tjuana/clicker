@@ -1,0 +1,135 @@
+import { describe, expect, it } from 'vitest';
+import { addPlayer, createCyclesState, finish, leave, startRound } from '../src/modes/cycles';
+import { decide, room } from '../src/modes/cycles/bot';
+import { clearance, pickSpawn } from '../src/modes/cycles/spawn';
+import type { CyclesState } from '../src/modes/cycles/state';
+import { step } from '../src/modes/cycles/step';
+import { arena, contradiction, cyclesConfig } from './cycles-support';
+
+const config = cyclesConfig();
+
+/** A round of nothing but bots, the way a lone player tests the mode. */
+function botRound(bots: number, seed: number): CyclesState {
+  let state = createCyclesState(seed);
+  for (let index = 0; index < bots; index += 1)
+    state = addPlayer(state, `bot-${index}`, true, config);
+  return startRound(state, config);
+}
+
+function play(
+  state: CyclesState,
+  ticks: number,
+  check?: (state: CyclesState) => void,
+): CyclesState {
+  let current = state;
+  for (let tick = 0; tick < ticks; tick += 1) {
+    current = step(current, config).state;
+    check?.(current);
+  }
+  return current;
+}
+
+describe('clearance', () => {
+  it('measures the distance to the nearest trail or edge', () => {
+    const field = new Uint16Array(25);
+    field[2 * 5 + 2] = 1;
+    const distance = clearance(field, 5);
+    expect(distance[2 * 5 + 2]).toBe(0);
+    expect(distance[2 * 5 + 3]).toBe(1);
+    expect(distance[0]).toBe(1);
+    expect(distance[1 * 5 + 1]).toBe(2);
+  });
+
+  it('chooses the centre of an empty field and gives up on a full one', () => {
+    expect(pickSpawn(new Uint16Array(121), 11, 1).spot).toMatchObject({ x: 5, y: 5 });
+    expect(pickSpawn(new Uint16Array(9).fill(1), 3, 1).spot).toBeNull();
+  });
+});
+
+describe('the round', () => {
+  it('sizes the field for the head count and places everyone apart', () => {
+    const state = botRound(20, 3);
+    expect(state.side).toBe(128);
+    expect(state.bikes.every((bike) => bike.alive)).toBe(true);
+    expect(contradiction(state)).toBeNull();
+  });
+
+  it('keeps field and trails consistent through whole games', () => {
+    for (let seed = 1; seed <= 12; seed += 1) {
+      play(botRound(2 + (seed % 7), seed), 600, (state) => {
+        const broken = contradiction(state);
+        if (broken !== null) throw new Error(`seed ${seed}, tick ${state.tick}: ${broken}`);
+      });
+    }
+  });
+
+  it('replays to the same bit from the same state', () => {
+    const a = play(botRound(8, 42), 500);
+    const b = play(botRound(8, 42), 500);
+    expect(Array.from(a.field)).toEqual(Array.from(b.field));
+    expect(a.bikes.map((bike) => [bike.x, bike.y, bike.kills, bike.deaths])).toEqual(
+      b.bikes.map((bike) => [bike.x, bike.y, bike.kills, bike.deaths]),
+    );
+    expect(a.seed).toBe(b.seed);
+  });
+
+  it('ranks by kills, then fewest deaths, then the longest life', () => {
+    let state = botRound(3, 5);
+    state = {
+      ...state,
+      bikes: state.bikes.map((bike, position) => ({
+        ...bike,
+        kills: [2, 2, 1][position] ?? 0,
+        deaths: [3, 1, 0][position] ?? 0,
+      })),
+    };
+    const results = finish(state, {}).results ?? [];
+    expect(results.map((row) => row.publicId)).toEqual(['bot-1', 'bot-0', 'bot-2']);
+    expect(results.map((row) => row.rank)).toEqual([1, 2, 3]);
+  });
+
+  it('takes a leaver’s bike off the field without crediting anyone', () => {
+    const state = leave(botRound(2, 9), 'bot-0');
+    expect(state.bikes[0]?.alive).toBe(false);
+    expect(state.bikes[0]?.left).toBe(true);
+    expect(contradiction(play(state, 100))).toBeNull();
+    expect(play(state, 100).bikes[0]?.alive).toBe(false);
+  });
+});
+
+describe('bots', () => {
+  it('turns away from a wall rather than into it', () => {
+    const state = arena(20, [{ x: 18, y: 10, dir: 0, bot: true }]);
+    const bike = state.bikes[0];
+    if (bike === undefined) throw new Error('no bike');
+    expect(decide(state.field, state.side, bike, config, 1).turn).not.toBeNull();
+  });
+
+  it('picks the side with more room', () => {
+    // A wall of trail just below: turning right (south) leads into a pocket of one row.
+    const behind: [number, number][] = [];
+    for (let x = 0; x < 12; x += 1) behind.push([x, 12]);
+    const state = arena(20, [{ x: 12, y: 11, dir: 0, behind, bot: true, cap: 50 }]);
+    const bike = state.bikes[0];
+    if (bike === undefined) throw new Error('no bike');
+    const field = state.field.slice();
+    for (let x = 13; x < 20; x += 1) field[11 * 20 + x] = 9; // block ahead
+    expect(decide(field, 20, bike, config, 1).turn).toBe('left');
+  });
+
+  it('stops counting room at its budget', () => {
+    expect(room(new Uint16Array(100 * 100), 100, 5050, 256)).toBe(256);
+  });
+
+  /**
+   * A regression gate, not a promise of perfection: over thirty seeds a lone bot averaged 0.7
+   * deaths a round when this was written. It still coils itself into tight blocks now and then;
+   * the threshold catches a bot that gets worse, and tightens as the bot gets better.
+   */
+  it('rarely dies alone: at most one death a round on average', () => {
+    let deaths = 0;
+    for (let seed = 1; seed <= 30; seed += 1)
+      deaths += play(botRound(1, seed), 3600).bikes[0]?.deaths ?? 0;
+    expect(deaths).toBeLessThanOrEqual(30);
+  });
+});
