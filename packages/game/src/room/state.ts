@@ -1,12 +1,9 @@
-import type { ClickerState } from '../modes/clicker/state';
+import type { ModeId, ModeState } from '../modes';
 import { createClickerState } from '../modes/clicker/state';
 
 export type Phase = 'lobby' | 'countdown' | 'running' | 'results';
 
 export type Notice = 'round_aborted';
-
-/** Only one mode exists today; the union is where the next one is added. */
-export type ModeId = 'clicker';
 
 /** Generic room player. Nothing about a specific game belongs here. */
 export interface Player {
@@ -24,7 +21,6 @@ export interface Round {
 }
 
 export interface RoomState {
-  /** Chosen when the room is created and never changes afterwards. */
   mode: ModeId;
   phase: Phase;
   hostKey: string | null;
@@ -36,7 +32,7 @@ export interface RoomState {
   round: Round | null;
   notice: Notice | null;
   /** Everything only the mode knows: scores, results, its own timers. */
-  modeState: ClickerState;
+  modeState: ModeState;
 }
 
 export function createRoomState(): RoomState {

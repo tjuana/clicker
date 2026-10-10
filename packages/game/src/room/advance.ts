@@ -1,4 +1,4 @@
-import * as mode from '../modes/clicker';
+import { modeFor } from '../modes';
 import type { GameConfig } from './config';
 import type { Phase, RoomState } from './state';
 
@@ -38,7 +38,7 @@ export function advance(state: RoomState, now: number, config: GameConfig): Adva
         ...next,
         phase: 'results',
         round: null,
-        modeState: mode.finish(next.modeState, names(next)),
+        modeState: modeFor(next.mode).finish(next.modeState, names(next)),
       };
       phases.push('results');
       continue;
@@ -80,6 +80,6 @@ function removeExpired(state: RoomState, now: number, config: GameConfig): RoomS
     ...state,
     players,
     hosts: state.hosts.filter((playerId) => !expired.has(playerId)),
-    modeState: mode.removePlayers(state.modeState, publicIds),
+    modeState: modeFor(state.mode).removePlayers(state.modeState, publicIds),
   };
 }

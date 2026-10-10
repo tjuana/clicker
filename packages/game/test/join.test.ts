@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { apply } from '../src/room/apply';
 import { createRoomState } from '../src/room/state';
-import { config, deepFreeze } from './support';
+import { clickerOf, config, deepFreeze } from './support';
 
 describe('join', () => {
   it('adds a new player and answers with welcome', () => {
@@ -19,7 +19,7 @@ describe('join', () => {
       connectionIds: ['conn-1'],
       disconnectedAt: null,
     });
-    expect(result.state.modeState.scores['1']?.clicks).toBe(0);
+    expect(clickerOf(result.state).scores['1']?.clicks).toBe(0);
     expect(result.state.nextSeq).toBe(2);
     expect(result.events).toEqual([
       { type: 'welcome', playerId: 'secret-1', publicId: '1', isHost: false },

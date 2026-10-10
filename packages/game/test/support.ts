@@ -1,4 +1,4 @@
-import { type ClickerScore, emptyScore } from '../src/modes/clicker/state';
+import { type ClickerScore, type ClickerState, emptyScore } from '../src/modes/clicker/state';
 import { DEFAULT_CONFIG, type GameConfig } from '../src/room/config';
 import { createRoomState, type Player, type RoomState } from '../src/room/state';
 
@@ -32,4 +32,10 @@ export function score(overrides: Partial<ClickerScore> = {}): ClickerScore {
 
 export function room(overrides: Partial<RoomState> = {}): RoomState {
   return { ...createRoomState(), ...overrides };
+}
+
+/** The clicker's slice of a room, for tests that read scores: `modeState` is a union of modes. */
+export function clickerOf(state: RoomState): ClickerState {
+  if (state.mode !== 'clicker') throw new Error(`expected a clicker room, got ${state.mode}`);
+  return state.modeState as ClickerState;
 }

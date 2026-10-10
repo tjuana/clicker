@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { apply } from '../src/room/apply';
 import { abortRound, syncConnections } from '../src/room/recovery';
 import { createRoomState, type RoomState } from '../src/room/state';
-import { config, deepFreeze } from './support';
+import { clickerOf, config, deepFreeze } from './support';
 
 const CONFIG = config({ countdownMs: 3000, roundMs: 10000 });
 
@@ -54,11 +54,11 @@ describe('abortRound', () => {
       5000,
       CONFIG,
     ).state;
-    expect(clicked.modeState.scores['1']).toMatchObject({ clicks: 1, lastCountedAt: 5000 });
+    expect(clickerOf(clicked).scores['1']).toMatchObject({ clicks: 1, lastCountedAt: 5000 });
 
     const aborted = abortRound(deepFreeze(clicked));
 
-    expect(aborted.modeState.scores['1']).toMatchObject({ clicks: 0, lastCountedAt: null });
+    expect(clickerOf(aborted).scores['1']).toMatchObject({ clicks: 0, lastCountedAt: null });
   });
 
   it('leaves a room that is not in a round untouched', () => {

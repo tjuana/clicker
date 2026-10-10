@@ -1,3 +1,5 @@
+import type { ModeId } from '../modes';
+
 export interface GameConfig {
   /** Countdown before the round. */
   countdownMs: number;
@@ -36,3 +38,13 @@ export const DEFAULT_CONFIG: GameConfig = {
   maxPlayers: 50,
   tickMs: null,
 };
+
+/** What a mode changes about the room. Anything not named here comes from DEFAULT_CONFIG. */
+export const MODE_CONFIG: Record<ModeId, Partial<GameConfig>> = {
+  clicker: {},
+  cycles: { tickMs: 50, roundMs: 180_000, maxPlayers: 20 },
+};
+
+export function configFor(mode: ModeId, base: GameConfig = DEFAULT_CONFIG): GameConfig {
+  return { ...base, ...MODE_CONFIG[mode] };
+}

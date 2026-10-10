@@ -1,4 +1,4 @@
-import * as mode from '../modes/clicker';
+import { modeFor } from '../modes';
 import type { Player, RoomState } from './state';
 
 /**
@@ -13,7 +13,7 @@ export function abortRound(state: RoomState): RoomState {
     phase: 'lobby',
     round: null,
     notice: 'round_aborted',
-    modeState: mode.clearScores(state.modeState),
+    modeState: modeFor(state.mode).clear(state.modeState),
   };
 }
 

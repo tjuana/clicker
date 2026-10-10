@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ClickerScore } from '../src/modes/clicker/state';
 import { apply } from '../src/room/apply';
 import { createRoomState, type RoomState } from '../src/room/state';
-import { config, deepFreeze } from './support';
+import { clickerOf, config, deepFreeze } from './support';
 
 const CONFIG = config({ countdownMs: 3000, roundMs: 10000 });
 
@@ -48,9 +48,9 @@ describe('start', () => {
       modeState: {
         ...played.modeState,
         scores: {
-          ...played.modeState.scores,
+          ...clickerOf(played).scores,
           '1': {
-            ...(played.modeState.scores['1'] as ClickerScore),
+            ...(clickerOf(played).scores['1'] as ClickerScore),
             clicks: 42,
             lastCountedAt: 900,
           },
@@ -60,12 +60,12 @@ describe('start', () => {
 
     const result = apply(scored, { type: 'start', playerId: 'secret-1' }, 1000, CONFIG);
 
-    expect(result.state.modeState.scores['1']).toMatchObject({
+    expect(clickerOf(result.state).scores['1']).toMatchObject({
       clicks: 0,
       lastCountedAt: null,
       bucket: { tokens: CONFIG.burst, updatedAt: 4000 },
     });
-    expect(result.state.modeState.results).toBeNull();
+    expect(clickerOf(result.state).results).toBeNull();
   });
 
   it('refuses a player who is not the host', () => {

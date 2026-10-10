@@ -1,4 +1,4 @@
-import * as mode from '../modes/clicker';
+import { modeFor } from '../modes';
 import { advance } from './advance';
 import type { Command, ErrorCode, GameEvent, InputCommand, JoinCommand } from './commands';
 import { DEFAULT_CONFIG, type GameConfig } from './config';
@@ -83,7 +83,7 @@ function join(
       disconnectedAt: null,
     };
     nextSeq = state.nextSeq + 1;
-    modeState = mode.addPlayer(state.modeState, publicId, now, config);
+    modeState = modeFor(state.mode).addPlayer(state.modeState, publicId, false, now, config);
   }
 
   let hostKey = state.hostKey;
@@ -142,7 +142,7 @@ function start(state: RoomState, playerId: string, now: number, config: GameConf
       phase: 'countdown',
       round: { goAt, endsAt },
       notice: null,
-      modeState: mode.startRound(state.modeState, goAt, config),
+      modeState: modeFor(state.mode).startRound(state.modeState, goAt, config),
     },
     events: [{ type: 'phaseChanged', phase: 'countdown' }],
   };
@@ -159,7 +159,13 @@ function input(
   // Input outside a round is not an error: the client may not know it ended yet.
   if (state.phase !== 'running') return { state, events: [] };
 
-  const modeState = mode.applyInput(state.modeState, player.publicId, command.input, now, config);
+  const modeState = modeFor(state.mode).applyInput(
+    state.modeState,
+    player.publicId,
+    command.input,
+    now,
+    config,
+  );
   // The mode returns the same reference when nothing changed — a refused click, for instance.
   // Keep that identity: callers rely on it to skip broadcasting a snapshot that is not new.
   if (modeState === state.modeState) return { state, events: [] };

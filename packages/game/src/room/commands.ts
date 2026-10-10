@@ -1,4 +1,4 @@
-import type { ClickerInput } from '../modes/clicker/state';
+import type { ModeInput } from '../modes';
 import type { Phase } from './state';
 
 export interface JoinCommand {
@@ -13,7 +13,7 @@ export interface JoinCommand {
 export interface InputCommand {
   type: 'input';
   playerId: string;
-  input: ClickerInput;
+  input: ModeInput;
 }
 
 export type Command =

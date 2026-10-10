@@ -1,4 +1,4 @@
-import { comparePublicIds, type RoomState, toModeData } from '@clicker/game';
+import { type ClickerState, comparePublicIds, type RoomState, toModeData } from '@clicker/game';
 import * as v from 'valibot';
 import { PROTOCOL_VERSION } from './client';
 
@@ -99,6 +99,9 @@ export function parseServerMessage(raw: string): ServerMessage | null {
 
 /** The secret playerId and hostKey never get in here. */
 export function toSnapshot(state: RoomState, now: number): SnapshotMessage {
+  // The wire has no light-cycle data yet (plan 7, task 4). Nothing can put a room into that mode
+  // until the worker maps `setMode`, so reaching this is a bug, not a state to serialise.
+  if (state.mode !== 'clicker') throw new Error(`snapshot of a ${state.mode} room is not defined`);
   return {
     v: PROTOCOL_VERSION,
     type: 'snapshot',
@@ -114,6 +117,6 @@ export function toSnapshot(state: RoomState, now: number): SnapshotMessage {
       .sort((a, b) => comparePublicIds(a.id, b.id)),
     round: state.round === null ? null : { goAt: state.round.goAt, endsAt: state.round.endsAt },
     notice: state.notice,
-    data: toModeData(state.modeState),
+    data: toModeData(state.modeState as ClickerState),
   };
 }
