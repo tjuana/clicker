@@ -34,3 +34,17 @@ export function freeRun(
   }
   return run;
 }
+
+/** The direction with the longest free run from (x, y); a tie goes to the lowest direction. */
+export function openestDirection(field: Uint16Array, side: number, x: number, y: number): number {
+  let dir = 0;
+  let longest = -1;
+  for (let candidate = 0; candidate < 4; candidate += 1) {
+    const run = freeRun(field, side, x, y, candidate, side);
+    if (run > longest) {
+      longest = run;
+      dir = candidate;
+    }
+  }
+  return dir;
+}

@@ -1,5 +1,5 @@
 import type { CyclesConfig } from './config';
-import { sideFor } from './field';
+import { openestDirection, sideFor } from './field';
 import type { Spot } from './spawn';
 import type { Bike, CyclesInput, CyclesResultRow, CyclesState } from './state';
 import { place, type Work } from './step';
@@ -76,20 +76,22 @@ export function removePlayers(state: CyclesState, publicIds: string[]): CyclesSt
 }
 
 /**
- * Start positions on an even lattice: √n columns by √n rows, each bike in the middle of its own
- * block, rows alternating east and west so neighbours ride apart. O(n). Placing every bike with
- * the respawn search instead would cost a full pass over the field per bike — O(n × cells), and
- * cells grow with n, so the start of a round would be quadratic in the players.
+ * Start positions on an even lattice: √n columns by as many rows as the head count needs, each
+ * bike in the middle of its own block. Dividing the rows by the column count instead leaves a
+ * lone row crowded into the top of the field.
+ *
+ * A bike faces its longest open run on the field as placed so far, ties to the lowest direction,
+ * so nobody starts pointed at a wall or at a neighbour a few cells away. That is four short runs
+ * per bike, O(n × side) for the round. Placing every bike with the respawn search instead would
+ * cost a full pass over the field per bike — O(n × cells), and cells grow with n.
  */
-function startSpot(position: number, count: number, side: number): Spot {
+function startSpot(position: number, count: number, work: Work): Spot {
+  const { field, side } = work;
   const columns = Math.ceil(Math.sqrt(count));
-  const column = position % columns;
-  const row = Math.floor(position / columns);
-  return {
-    x: Math.floor(((2 * column + 1) * side) / (2 * columns)),
-    y: Math.floor(((2 * row + 1) * side) / (2 * columns)),
-    dir: row % 2 === 0 ? 0 : 2,
-  };
+  const rows = Math.ceil(count / columns);
+  const x = Math.floor(((2 * (position % columns) + 1) * side) / (2 * columns));
+  const y = Math.floor(((2 * Math.floor(position / columns) + 1) * side) / (2 * rows));
+  return { x, y, dir: openestDirection(field, side, x, y) };
 }
 
 /** Sizes the field for whoever is here and spreads the bikes evenly over it. */
@@ -105,7 +107,7 @@ export function startRound(state: CyclesState, config: CyclesConfig): CyclesStat
     config,
   };
   work.bikes.forEach((bike, position) => {
-    place(work, bike, startSpot(position, work.bikes.length, side));
+    place(work, bike, startSpot(position, work.bikes.length, work));
   });
   const index: Record<string, number> = {};
   work.bikes.forEach((bike, position) => {

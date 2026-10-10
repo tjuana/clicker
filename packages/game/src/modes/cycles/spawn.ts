@@ -1,4 +1,4 @@
-import { freeRun } from './field';
+import { openestDirection } from './field';
 import { randomBelow } from './random';
 
 /**
@@ -84,14 +84,6 @@ export function pickSpawn(
   const x = cell % side;
   const y = (cell - x) / side;
 
-  let dir = 0;
-  let longest = -1;
-  for (let candidate = 0; candidate < 4; candidate += 1) {
-    const run = freeRun(field, side, x, y, candidate, side);
-    if (run > longest) {
-      longest = run;
-      dir = candidate;
-    }
-  }
+  const dir = openestDirection(field, side, x, y);
   return { spot: { x, y, dir }, seed: drawn.seed };
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { addPlayer, createCyclesState, finish, leave, startRound } from '../src/modes/cycles';
 import { decide, room } from '../src/modes/cycles/bot';
+import { freeRun } from '../src/modes/cycles/field';
 import { clearance, pickSpawn } from '../src/modes/cycles/spawn';
 import type { CyclesState } from '../src/modes/cycles/state';
 import { step } from '../src/modes/cycles/step';
@@ -52,6 +53,27 @@ describe('the round', () => {
     expect(state.side).toBe(128);
     expect(state.bikes.every((bike) => bike.alive)).toBe(true);
     expect(contradiction(state)).toBeNull();
+  });
+
+  it('starts every bike facing open road, whatever the head count', () => {
+    for (let count = 1; count <= 20; count += 1) {
+      const { bikes, field, side } = botRound(count, count);
+      for (const bike of bikes) {
+        const run = freeRun(field, side, bike.x, bike.y, bike.dir, side);
+        expect(run, `${count} bikes, slot ${bike.slot}`).toBeGreaterThanOrEqual(
+          Math.floor(side / 6),
+        );
+      }
+    }
+  });
+
+  it('puts two bikes side by side on the middle row, not both in the top quarter', () => {
+    const { bikes, side } = botRound(2, 1);
+    const [a, b] = bikes;
+    expect(Math.min(a?.x ?? 0, b?.x ?? 0)).toBeLessThan(side / 2);
+    expect(Math.max(a?.x ?? 0, b?.x ?? 0)).toBeGreaterThanOrEqual(side / 2);
+    expect(a?.y).toBe(b?.y);
+    expect(Math.abs((a?.y ?? 0) - side / 2)).toBeLessThanOrEqual(side / 8);
   });
 
   it('keeps field and trails consistent through whole games', () => {
