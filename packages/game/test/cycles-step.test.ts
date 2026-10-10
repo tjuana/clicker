@@ -152,6 +152,110 @@ describe('collisions', () => {
     expect(contradiction(after)).toBeNull();
   });
 
+  it('credits each of two bikes that stop each other head-on, whichever slot it holds', () => {
+    // Both die in the same tick, so each was blocked by the other's head. Crediting must look at
+    // the field as it stood, not as the first victim's death left it.
+    const config = cyclesConfig({ rubber: 0 });
+    const kills = (state: CyclesState) => state.bikes.map((bike) => bike.kills);
+    const forward = step(
+      arena(
+        10,
+        [
+          { x: 4, y: 4, dir: EAST },
+          { x: 5, y: 4, dir: WEST },
+        ],
+        config,
+      ),
+      config,
+    );
+    expect(kills(forward.state)).toEqual([1, 1]);
+    expect(forward.changes.events).toEqual([
+      { type: 'died', slot: 1, by: 2 },
+      { type: 'died', slot: 2, by: 1 },
+    ]);
+
+    const mirrored = step(
+      arena(
+        10,
+        [
+          { x: 5, y: 4, dir: WEST },
+          { x: 4, y: 4, dir: EAST },
+        ],
+        config,
+      ),
+      config,
+    );
+    expect(kills(mirrored.state)).toEqual([1, 1]);
+    expect(mirrored.changes.events).toEqual([
+      { type: 'died', slot: 1, by: 2 },
+      { type: 'died', slot: 2, by: 1 },
+    ]);
+  });
+
+  it('stalls two bikes aiming at a tail that cannot leave, instead of crashing them', () => {
+    // C faces the wall, so its tail at (8,4) stays. A and B both aim at that cell: it is an
+    // obstacle for them, not a meeting point, so they wait rather than die.
+    const config = cyclesConfig();
+    const state = arena(
+      10,
+      [
+        { x: 7, y: 4, dir: EAST },
+        { x: 8, y: 5, dir: 3 },
+        { x: 9, y: 4, dir: EAST, behind: [[8, 4]], cap: 2 },
+      ],
+      config,
+    );
+    const after = step(state, config).state;
+    expect(after.bikes.map((bike) => bike.alive)).toEqual([true, true, true]);
+    expect([after.bikes[0]?.x, after.bikes[0]?.y]).toEqual([7, 4]);
+    expect([after.bikes[1]?.x, after.bikes[1]?.y]).toEqual([8, 5]);
+    expect(after.bikes.map((bike) => bike.rubber)).toEqual([2, 2, 2]);
+  });
+
+  it('stalls bikes aiming at the tail of a bike that crashes on the same tick', () => {
+    // Bikes 3 and 4 meet at (6,5), so bike 3 never moves and its tail at (4,5) stays shut: bikes
+    // 1 and 2, both aiming at that cell, have nothing to collide in and merely wait.
+    const config = cyclesConfig();
+    const state = arena(
+      10,
+      [
+        { x: 4, y: 4, dir: SOUTH },
+        { x: 3, y: 5, dir: EAST },
+        { x: 5, y: 5, dir: EAST, behind: [[4, 5]], cap: 2 },
+        { x: 7, y: 5, dir: WEST },
+      ],
+      config,
+    );
+    const after = step(state, config).state;
+    expect(after.bikes.map((bike) => bike.alive)).toEqual([true, true, false, false]);
+    expect(after.bikes.map((bike) => bike.rubber).slice(0, 2)).toEqual([2, 2]);
+  });
+
+  it('stalls bikes that can only move if each other’s tails do', () => {
+    // Bikes 1 and 2 each aim at the other's tail, and a third bike shares each of those cells.
+    // Whether the tails open depends on the collisions, which depend on the tails: a ring with
+    // no first move. Nobody moves and nobody dies.
+    const config = cyclesConfig();
+    const state = arena(
+      10,
+      [
+        { x: 2, y: 2, dir: EAST, behind: [[5, 6]], cap: 2 },
+        { x: 6, y: 6, dir: WEST, behind: [[3, 2]], cap: 2 },
+        { x: 5, y: 7, dir: 3 },
+        { x: 3, y: 1, dir: SOUTH },
+      ],
+      config,
+    );
+    const after = step(state, config).state;
+    expect(after.bikes.map((bike) => bike.alive)).toEqual([true, true, true, true]);
+    expect(after.bikes.map((bike) => [bike.x, bike.y])).toEqual([
+      [2, 2],
+      [6, 6],
+      [5, 7],
+      [3, 1],
+    ]);
+  });
+
   it('spends rubber against an obstacle and dies when it runs out', () => {
     const config = cyclesConfig({ rubber: 2 });
     const state = arena(10, [{ x: 9, y: 4, dir: EAST, rubber: 2 }], config);
