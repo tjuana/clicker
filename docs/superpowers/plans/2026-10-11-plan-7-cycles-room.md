@@ -23,7 +23,7 @@ Decisions the spec did not make (task 7 records them there):
 
 1. **The host chooses the mode in the lobby** with a `setMode` command, not when the room is created: rooms are created by a link, and carrying the mode through the URL is machinery for nothing. Changing the mode recreates the mode state and seats every player in it again.
 2. **`full` carries trails as lists of cells**, not the field: twenty trails of 200 cells are about 24 KB, against 33 KB of mostly zeros for a 128×128 field. The client rebuilds the field itself.
-3. **`delta` is minimal:** cells added, cells freed, events. A bike's head is the last cell added for its slot; its direction follows from its last two heads.
+3. **`delta` is minimal:** each changed cell with the value it holds after the tick, the living bikes' heads, and events. (Amended after the plan 6 review: two unordered lists of added and freed cells could not be replayed, because one cell can be both within a tick; heads are sent instead of derived.)
 4. **No token bucket for the light cycles.** A queue of two turns and the boost cooldown already bound what input can change in the state.
 5. **Only the light cycles have bots.** A bot would do nothing in the clicker; the command answers `not_supported` there.
 
@@ -319,8 +319,10 @@ export const deltaSchema = v.strictObject({
   v: versionSchema,
   type: v.literal('delta'),
   t: v.number(),
-  added: v.array(v.number()),
-  freed: v.array(v.number()),
+  /** Flat pairs: cell, what it holds after the tick (0 = empty). Apply in any order. */
+  cells: v.array(v.number()),
+  /** Flat triples for every living bike: slot, head cell, direction. */
+  heads: v.array(v.number()),
   events: v.array(eventSchema),
 });
 ```
@@ -397,7 +399,7 @@ The rest of `room.ts`:
 
 Integration tests in `apps/game/test/cycles.test.ts` (in tests `ROUND_MS` is 200 and `COUNTDOWN_MS` is 50):
 - the host switches the mode and adds three bots; the snapshot shows `mode: 'cycles'` and players with `bot: true`;
-- after `start`, `delta` messages arrive and their `t` runs on without gaps for one client;
+- after `start`, `delta` messages arrive and their `t` runs on without gaps for one client; a client that starts from `full` and applies every `delta` holds the same field as the room (compare through `runInDurableObject`);
 - a second player joining mid-round receives `full` right after `welcome`, with the bikes of every participant;
 - `resync` returns `full`;
 - the round ends with a `results` snapshot carrying light-cycle data, after which no `delta` arrives (wait 300 ms and check no new one did);
@@ -427,6 +429,17 @@ Type narrowing only: the mode data in a snapshot is now a union. The clicker's s
 Record in sections 5–6 the five decisions at the top of this plan (mode chosen in the lobby, trails in `full`, a minimal `delta`, no token bucket for the light cycles, bots only in the light cycles), and that `wrangler.jsonc` no longer sets the round length. The spec was written in Russian; the additions are in English, under a heading `Decisions made while building plan 7`. Commit `docs: record how the light-cycle room diverged from the spec`.
 
 ---
+
+## Amendments after the plan 6 review (2026-10-11)
+
+The independent review of plan 6 found defects that changed this plan's contracts. Tasks 1–3 were done before it; the rest follows these amendments.
+
+- `TickChanges` is `{ cells, heads, events }` (see the `delta` contract in task 4), not `{ added, freed, events }`.
+- `Mode` gains `rejoin(state, publicId): S`, called by the room when a player who is already known joins again, in any phase. The clicker's is the identity (its `addPlayer` would wipe the score); the light cycles' revives a bike that left — `addPlayer` on an existing `publicId` already does that.
+- The room calls `abandon` when a player's last connection goes during `countdown` as well as `running`: the bike is already on the field once the countdown starts.
+- `setMode` to a mode whose `maxPlayers` is below the number of players answers `room_full`.
+- `setMode` from `results` moves the room to `lobby` and emits `phaseChanged`: the results of the old mode mean nothing in the new one.
+- `leave` in the light cycles only marks the bike; the next `step` takes it off the field, so its cells reach clients through `delta`.
 
 ## Verifying the whole plan
 
