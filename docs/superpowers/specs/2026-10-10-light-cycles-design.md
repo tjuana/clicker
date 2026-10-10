@@ -290,3 +290,7 @@ Recorded in English from here on; the sections above stay as written.
   would reject every new snapshot and show nothing. A version-1 message is now answered with
   `bad_version`, which sends the tab to reload. Players stored by an older build lack the flag;
   `syncConnections` (run whenever the object starts) turns it into `false`.
+- **`full` also goes to everyone, unasked, at two moments.** When a round enters the countdown (slots
+  are renumbered for every round, so no client already in the room could know them), right after
+  the snapshot that announces it; and whenever a bike joins mid-round (a new slot appeared), in the
+  same step as the newcomer's `welcome`. Both are one string built for the room, not per connection.

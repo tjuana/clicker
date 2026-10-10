@@ -147,6 +147,51 @@ describe('a light-cycle room over websocket', () => {
     expect(full.bikes.find((bike) => bike.id === '5')?.alive).toBe(false);
   });
 
+  it('sends everyone already in the room the whole round when it starts, without being asked', async () => {
+    const roomId = generateId();
+    const host = await lightCycleLobby(roomId);
+    const guest = await connect(roomId);
+    guest.send({ type: 'join', playerId: generateId(), name: 'Боря' });
+    await guest.waitFor(isWelcome);
+    // In the lobby: there is no round yet, so nothing to send.
+    expect(guest.received.filter(isFull)).toHaveLength(0);
+
+    host.send({ type: 'start' });
+
+    for (const client of [host, guest]) {
+      const full = await client.waitFor(isFull);
+      expect(full.bikes.map((bike) => bike.id).sort()).toEqual(['1', '2', '3', '4', '5']);
+      // After the snapshot that announces the countdown, which tells the client what it is for.
+      const countdownAt = client.received.findIndex(
+        (message) => isSnapshot(message) && message.phase === 'countdown',
+      );
+      expect(countdownAt).toBeGreaterThan(-1);
+      expect(client.received.findIndex(isFull)).toBeGreaterThan(countdownAt);
+    }
+  });
+
+  it('sends everyone the whole round again when a bike joins mid-round', async () => {
+    const roomId = generateId();
+    const host = await lightCycleLobby(roomId);
+    const guest = await connect(roomId);
+    guest.send({ type: 'join', playerId: generateId(), name: 'Боря' });
+    await guest.waitFor(isWelcome);
+    host.send({ type: 'start' });
+    await host.waitFor(isUnderway);
+    await guest.waitFor(isFull);
+
+    const late = await connect(roomId);
+    late.send({ type: 'join', playerId: generateId(), name: 'Вася' });
+    await late.waitFor(isWelcome);
+
+    for (const client of [host, guest, late]) {
+      const full = await client.waitFor((message): message is Full => {
+        return isFull(message) && message.bikes.some((bike) => bike.id === '6');
+      });
+      expect(full.bikes).toHaveLength(6);
+    }
+  });
+
   it('answers resync with the whole round', async () => {
     const host = await lightCycleLobby(generateId());
     host.send({ type: 'start' });

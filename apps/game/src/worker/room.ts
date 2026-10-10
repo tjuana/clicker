@@ -2,6 +2,7 @@ import {
   abortRound,
   apply,
   type Command,
+  type CyclesState,
   configFor,
   createRoomState,
   type GameConfig,
@@ -28,6 +29,11 @@ interface Session {
 }
 
 const SNAPSHOT_INTERVAL_MS = 100;
+
+/** How many bikes the room has seated: a new one means every client's slot table is out of date. */
+function seats(state: RoomState): number {
+  return state.mode === 'cycles' ? (state.modeState as CyclesState).bikes.length : 0;
+}
 
 export class Room extends Server<Env> {
   static options = { hibernate: true };
@@ -124,8 +130,8 @@ export class Room extends Server<Env> {
         );
         return;
       case 'resync': {
-        const full = toFull(this.#state);
-        if (full !== null) this.#send(connection, full);
+        const full = this.#fullJson();
+        if (full !== null) connection.send(full);
         return;
       }
       case 'setMode':
@@ -179,13 +185,14 @@ export class Room extends Server<Env> {
   #apply(command: Command, source?: Connection<Session>): boolean {
     const applied = apply(this.#state, command, Date.now(), this.#config);
     const modeChanged = applied.state.mode !== this.#state.mode;
+    const newSeat = seats(applied.state) > seats(this.#state);
     this.#state = applied.state;
     if (modeChanged) this.#config = this.#configOf(applied.state);
 
     let phaseChanged = false;
     for (const event of applied.events) {
       if (event.type === 'phaseChanged') phaseChanged = true;
-      this.#handleEvent(event, source);
+      this.#handleEvent(event, source, newSeat);
     }
     this.#syncSnapshotTimer();
     this.#syncTicker();
@@ -205,9 +212,16 @@ export class Room extends Server<Env> {
     // because its deltas carry the round. Otherwise every room change is sent at once.
     // A phase change always is: waiting up to a hundred milliseconds isn't acceptable here.
     if (phaseChanged || (!hot && this.#timer === null)) this.#broadcastSnapshot();
+
+    // Slots are renumbered for every round, so nobody already in the room can know this one's.
+    // After the snapshot, which tells the client what the round is for.
+    if (phaseChanged && this.#state.phase === 'countdown') {
+      const full = this.#fullJson();
+      if (full !== null) this.broadcast(full);
+    }
   }
 
-  #handleEvent(event: GameEvent, source?: Connection<Session>): void {
+  #handleEvent(event: GameEvent, source?: Connection<Session>, newSeat = false): void {
     if (event.type === 'welcome' && source !== undefined) {
       source.setState({ playerId: event.playerId, publicId: event.publicId });
       this.#send(source, {
@@ -218,9 +232,14 @@ export class Room extends Server<Env> {
       });
       // Someone arriving in the middle of a light-cycle round has missed every delta so far.
       // Right after the welcome, so the next thing they hear is the state the deltas build on.
+      // A bike that did not exist a moment ago has a slot nobody else knows: everyone gets the
+      // round again, the newcomer included, in the same synchronous step as the welcome.
       const live = this.#state.phase === 'countdown' || this.#state.phase === 'running';
-      const full = live ? toFull(this.#state) : null;
-      if (full !== null) this.#send(source, full);
+      const full = live ? this.#fullJson() : null;
+      if (full !== null) {
+        if (newSeat) this.broadcast(full);
+        else source.send(full);
+      }
       return;
     }
     if (event.type === 'rejected' && source !== undefined) {
@@ -285,6 +304,12 @@ export class Room extends Server<Env> {
   /** The snapshot is built once for everyone, not per connection. */
   #broadcastSnapshot(): void {
     this.broadcast(JSON.stringify(toSnapshot(this.#state, Date.now())));
+  }
+
+  /** `null` outside a light-cycle round. One string, however many connections it goes to. */
+  #fullJson(): string | null {
+    const full = toFull(this.#state);
+    return full === null ? null : JSON.stringify(full);
   }
 
   #send(connection: Connection<Session>, message: ServerMessage): void {
