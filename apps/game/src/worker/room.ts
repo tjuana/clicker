@@ -20,7 +20,7 @@ import {
   toSnapshot,
 } from '@clicker/protocol';
 import { type Connection, Server, type WSMessage } from 'partyserver';
-import { MAX_CATCH_UP, owedSteps } from './ticker';
+import { Ticker } from './ticker';
 
 /** What we remember about a connection: survives the object going to sleep. */
 interface Session {
@@ -43,8 +43,12 @@ export class Room extends Server<Env> {
   #overrides: Partial<GameConfig> = {};
   #config: GameConfig = configFor(this.#state.mode);
   #timer: ReturnType<typeof setInterval> | null = null;
-  #ticker: ReturnType<typeof setInterval> | null = null;
-  #nextStepAt = 0;
+  #ticker = new Ticker<ReturnType<typeof setInterval>>({
+    now: () => Date.now(),
+    setInterval: (wake, ms) => setInterval(wake, ms),
+    clearInterval: (handle) => clearInterval(handle),
+    step: (now) => this.#stepOnce(now),
+  });
   #alarmAt: number | null | undefined = undefined;
 
   override async onStart(): Promise<void> {
@@ -182,8 +186,8 @@ export class Room extends Server<Env> {
    * The synchronous half: rules, events, timers. Everything that must be ordered with the next
    * message or the next step happens here, before the first await.
    */
-  #apply(command: Command, source?: Connection<Session>): boolean {
-    const applied = apply(this.#state, command, Date.now(), this.#config);
+  #apply(command: Command, source?: Connection<Session>, now = Date.now()): boolean {
+    const applied = apply(this.#state, command, now, this.#config);
     const modeChanged = applied.state.mode !== this.#state.mode;
     const newSeat = seats(applied.state) > seats(this.#state);
     this.#state = applied.state;
@@ -272,33 +276,15 @@ export class Room extends Server<Env> {
 
   /** Runs while a living mode's round runs, and only then: an idle room must be free to sleep. */
   #syncTicker(): void {
-    const tickMs = this.#config.tickMs;
-    const live = tickMs !== null && this.#state.phase === 'running';
-    if (live && this.#ticker === null) {
-      this.#nextStepAt = Date.now() + tickMs;
-      // The timer only wakes the room; the clock decides how many steps are owed.
-      this.#ticker = setInterval(() => this.#catchUp(), tickMs);
-      return;
-    }
-    if (!live && this.#ticker !== null) {
-      clearInterval(this.#ticker);
-      this.#ticker = null;
-    }
+    this.#ticker.sync(this.#state.phase === 'running', this.#config.tickMs);
   }
 
-  #catchUp(): void {
-    const tickMs = this.#config.tickMs;
-    if (tickMs === null) return;
-    const now = Date.now();
-    const due = owedSteps(now, this.#nextStepAt, tickMs, MAX_CATCH_UP);
-    this.#nextStepAt = due.nextStepAt;
-
-    let phaseChanged = false;
-    for (let i = 0; i < due.owed && this.#state.phase === 'running'; i += 1) {
-      phaseChanged = this.#apply({ type: 'step' }) || phaseChanged;
-    }
+  /** One owed step. Returns whether the round goes on, so the ticker stops at its end. */
+  #stepOnce(now: number): boolean {
+    const phaseChanged = this.#apply({ type: 'step' }, undefined, now);
     // Only the end of the round has anything to write; a plain step settles nothing.
     if (phaseChanged) void this.#settle({ type: 'step' }, true);
+    return this.#state.phase === 'running';
   }
 
   /** The snapshot is built once for everyone, not per connection. */
