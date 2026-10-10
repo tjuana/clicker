@@ -1,3 +1,4 @@
+import { clickerData } from './clicker-data';
 import { secondsLeft, useServerClock } from './clock';
 import { useClient } from './store';
 import { strings } from './strings';
@@ -11,7 +12,7 @@ export function Hud() {
 
   const players = snapshot.players;
   // Scores live in the mode's slot: the generic part of a snapshot knows nothing about clicks.
-  const scoreOf = (id: string): number => snapshot.data.scores[id] ?? 0;
+  const scoreOf = (id: string): number => clickerData(snapshot).scores[id] ?? 0;
   const leader = players.reduce<(typeof players)[number] | null>(
     (best, player) => (best === null || scoreOf(player.id) > scoreOf(best.id) ? player : best),
     null,

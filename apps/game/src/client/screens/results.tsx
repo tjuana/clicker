@@ -1,4 +1,5 @@
 import { lazy, Suspense } from 'react';
+import { clickerData } from '../clicker-data';
 import { Hud } from '../hud';
 import { useClient } from '../store';
 import { strings } from '../strings';
@@ -15,7 +16,7 @@ export function Results({ onStart, onLeave }: { onStart: () => void; onLeave: ()
   const error = useClient((state) => state.lastError);
   if (snapshot === null) return null;
 
-  const results = snapshot.data.results ?? [];
+  const results = clickerData(snapshot).results ?? [];
   const winners = results.filter((row) => row.rank === 1);
   const topWinner = winners[0];
   const nobodyClicked = topWinner !== undefined && topWinner.clicks === 0;
@@ -38,7 +39,7 @@ export function Results({ onStart, onLeave }: { onStart: () => void; onLeave: ()
           <Race
             racers={snapshot.players.map((player) => ({
               id: player.id,
-              clicks: snapshot.data.scores[player.id] ?? 0,
+              clicks: clickerData(snapshot).scores[player.id] ?? 0,
             }))}
             you={you}
           />
