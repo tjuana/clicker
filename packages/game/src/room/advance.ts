@@ -16,6 +16,23 @@ function names(state: RoomState): Record<string, string> {
 }
 
 /**
+ * A living round with nobody watching: only bots would be left playing to an empty room, and
+ * the Durable Object would tick for them until the clock ran out. The clicker is not affected —
+ * its score does not depend on anyone still being there.
+ *
+ * Stops at the first connected person, so the common case — the host is there — reads one
+ * player, not the whole room, on every command.
+ */
+function deserted(state: RoomState): boolean {
+  if (modeFor(state.mode).step === null) return false;
+  for (const playerId in state.players) {
+    const player = state.players[playerId];
+    if (player !== undefined && !player.bot && player.connectionIds.length > 0) return false;
+  }
+  return true;
+}
+
+/**
  * Moves the state through time. Runs before every command, so the rules do not
  * depend on the alarm being punctual.
  */
@@ -32,7 +49,7 @@ export function advance(state: RoomState, now: number, config: GameConfig): Adva
     if (
       next.phase === 'running' &&
       next.round !== null &&
-      now >= next.round.endsAt + config.lateGraceMs
+      (now >= next.round.endsAt + config.lateGraceMs || deserted(next))
     ) {
       next = {
         ...next,

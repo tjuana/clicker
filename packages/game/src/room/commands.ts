@@ -1,4 +1,5 @@
 import type { ModeId, ModeInput } from '../modes';
+import type { TickChanges } from '../modes/cycles/step';
 import type { Phase } from './state';
 
 export interface JoinCommand {
@@ -32,4 +33,5 @@ export type ErrorCode = 'not_joined' | 'not_host' | 'wrong_phase' | 'room_full' 
 export type GameEvent =
   | { type: 'welcome'; playerId: string; publicId: string; isHost: boolean }
   | { type: 'rejected'; playerId: string; code: ErrorCode }
-  | { type: 'phaseChanged'; phase: Phase };
+  | { type: 'phaseChanged'; phase: Phase }
+  | { type: 'stepped'; tick: number; changes: TickChanges };

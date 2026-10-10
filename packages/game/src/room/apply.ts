@@ -1,4 +1,4 @@
-import { modeFor } from '../modes';
+import { type ModeState, modeFor } from '../modes';
 import { comparePublicIds } from '../modes/clicker';
 import { advance } from './advance';
 import type { Command, ErrorCode, GameEvent, InputCommand, JoinCommand } from './commands';
@@ -32,8 +32,9 @@ export function apply(
 function handle(state: RoomState, command: Command, now: number, config: GameConfig): ApplyResult {
   switch (command.type) {
     case 'tick':
-    case 'step':
       return { state, events: [] };
+    case 'step':
+      return step(state);
     case 'setMode':
       return setMode(state, command, now, config);
     case 'addBot':
@@ -217,14 +218,43 @@ function leave(state: RoomState, playerId: string, connectionId: string, now: nu
   // The id was not there: a repeated leave must not move the eviction deadline.
   if (connectionIds.length === player.connectionIds.length) return { state, events: [] };
 
+  const left = withPlayer(state, playerId, {
+    ...player,
+    connectionIds,
+    disconnectedAt:
+      connectionIds.length === 0 && player.disconnectedAt === null ? now : player.disconnectedAt,
+  });
+  // The mode decides what a vanished player leaves behind: the clicker keeps the score, the
+  // cycles take the bike off the field. Outside a round there is nothing on the field to take.
+  if (connectionIds.length > 0 || state.phase !== 'running') return { state: left, events: [] };
+  const mode = modeFor(state.mode);
   return {
-    state: withPlayer(state, playerId, {
-      ...player,
-      connectionIds,
-      disconnectedAt:
-        connectionIds.length === 0 && player.disconnectedAt === null ? now : player.disconnectedAt,
-    }),
+    state: { ...left, modeState: mode.abandon(state.modeState, player.publicId) },
     events: [],
+  };
+}
+
+/**
+ * A living mode counts its ticks in `tick`. The interface does not name the field because the
+ * clicker has none, so the one place that needs it reads it here.
+ */
+function tickOf(state: ModeState): number {
+  return 'tick' in state ? state.tick : 0;
+}
+
+/**
+ * Not an error outside a running round or in a mode with nothing to step: a timer can wake on
+ * the edge of a phase, and the clock is the only thing that knows which side it landed on.
+ */
+function step(state: RoomState): ApplyResult {
+  const stepMode = modeFor(state.mode).step;
+  if (state.phase !== 'running' || stepMode === null) return { state, events: [] };
+
+  const stepped = stepMode(state.modeState);
+  return {
+    state: { ...state, modeState: stepped.state },
+    // The tick number comes from the state that was produced, so it cannot drift from it.
+    events: [{ type: 'stepped', tick: tickOf(stepped.state), changes: stepped.changes }],
   };
 }
 
