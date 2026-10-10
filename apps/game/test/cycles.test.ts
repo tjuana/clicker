@@ -48,7 +48,9 @@ function replay(full: Full, deltas: Delta[]): { field: number[]; heads: number[]
   let heads: number[][] = [];
   for (const bike of full.bikes) {
     for (const cell of bike.trail) field[cell] = bike.slot;
-    if (bike.alive) heads.push([bike.slot, bike.trail.at(-1) ?? -1, bike.dir]);
+    if (bike.alive) {
+      heads.push([bike.slot, bike.trail.at(-1) ?? -1, bike.dir, bike.rubber, bike.cooldown]);
+    }
   }
   let tick = full.tick;
   for (const delta of deltas) {
@@ -58,13 +60,7 @@ function replay(full: Full, deltas: Delta[]): { field: number[]; heads: number[]
       field[delta.cells[i] as number] = delta.cells[i + 1] as number;
     }
     heads = [];
-    for (let i = 0; i < delta.heads.length; i += 3) {
-      heads.push([
-        delta.heads[i] as number,
-        delta.heads[i + 1] as number,
-        delta.heads[i + 2] as number,
-      ]);
-    }
+    for (let i = 0; i < delta.heads.length; i += 5) heads.push(delta.heads.slice(i, i + 5));
   }
   return { field, heads };
 }
@@ -126,7 +122,13 @@ describe('a light-cycle room over websocket', () => {
     expect(seen.field).toEqual(Array.from(state.field));
     const heads = state.bikes
       .filter((bike) => bike.alive)
-      .map((bike) => [bike.slot, bike.y * state.side + bike.x, bike.dir]);
+      .map((bike) => [
+        bike.slot,
+        bike.y * state.side + bike.x,
+        bike.dir,
+        bike.rubber,
+        bike.cooldown,
+      ]);
     expect(seen.heads).toEqual(heads);
   });
 

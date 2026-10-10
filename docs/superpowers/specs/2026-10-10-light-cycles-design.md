@@ -304,3 +304,6 @@ Recorded in English from here on; the sections above stay as written.
   the `full` string is built once per state: the cache is keyed on the mode's state object, which
   the rules replace on every change, so the same string serves the broadcasts and every `resync`
   until the next tick or bike change.
+- **Each entry of `heads` is five numbers**, not three: slot, head cell, direction, rubber left,
+  boost cooldown left. The client knows no rules, so after `full` it could not otherwise know
+  either of the last two for the HUD.

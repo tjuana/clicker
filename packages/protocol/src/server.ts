@@ -120,7 +120,7 @@ export const deltaSchema = v.strictObject({
   t: v.number(),
   /** Flat pairs: cell, what it holds after the tick (0 = empty). Apply in any order. */
   cells: v.array(v.number()),
-  /** Flat triples for every living bike: slot, head cell, direction. */
+  /** Flat 5-tuples for every living bike: slot, head cell, direction, rubber left, boost cooldown left. */
   heads: v.array(v.number()),
   events: v.array(eventSchema),
 });

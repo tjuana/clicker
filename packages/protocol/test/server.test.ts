@@ -257,7 +257,9 @@ describe('toFull', () => {
     const alive = (full?.bikes ?? []).filter((bike) => bike.alive);
     expect(alive.length).toBeGreaterThan(0);
     for (const bike of alive) {
-      const at = delta.heads.indexOf(bike.slot);
+      // Heads are 5-tuples; searching the flat list for the slot could land on a rubber or a cooldown.
+      let at = 0;
+      while (delta.heads[at] !== bike.slot) at += 5;
       // The head the tick reported is the last cell of the trail, and every cell borders the next.
       expect(bike.trail.at(-1)).toBe(delta.heads[at + 1]);
       for (let i = 1; i < bike.trail.length; i += 1) {
@@ -319,6 +321,7 @@ describe('toDelta', () => {
     expect(delta.cells).toEqual(changes.cells);
     expect(delta.heads).toEqual(changes.heads);
     expect(delta.heads.length).toBeGreaterThan(0);
+    expect(delta.heads.length % 5).toBe(0);
     expect(parseServerMessage(JSON.stringify(delta))).toEqual(delta);
   });
 

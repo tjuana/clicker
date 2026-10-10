@@ -15,7 +15,9 @@ function replay(field: Uint16Array, changes: TickChanges): Uint16Array {
 
 function livingHeads(state: CyclesState): number[] {
   return state.bikes.flatMap((bike) =>
-    bike.alive ? [bike.slot, bike.y * state.side + bike.x, bike.dir] : [],
+    bike.alive
+      ? [bike.slot, bike.y * state.side + bike.x, bike.dir, bike.rubber, bike.cooldown]
+      : [],
   );
 }
 
@@ -60,6 +62,33 @@ describe('what a tick reports', () => {
     );
     expect(changes.cells).toEqual([5 * 10 + 1, 0, 5 * 10 + 3, 1]);
     expect(after.field[5 * 10 + 3]).toBe(1);
+  });
+
+  it('carries the rubber and the boost cooldown of each living bike, which the client cannot work out', () => {
+    // Bike 1 stands against the east wall and has just boosted; bike 2 is riding free.
+    const config = cyclesConfig();
+    const state = applyInput(
+      arena(
+        10,
+        [
+          { x: 9, y: 2, dir: 0 },
+          { x: 2, y: 7, dir: 0 },
+        ],
+        config,
+      ),
+      '1',
+      { type: 'boost' },
+      config,
+    );
+
+    const { changes } = step(state, config);
+
+    const [slot1, , , rubber1, cooldown1, slot2, , , rubber2, cooldown2] = changes.heads;
+    expect([slot1, slot2]).toEqual([1, 2]);
+    expect(rubber1).toBeLessThan(config.rubber);
+    expect(cooldown1).toBeGreaterThan(0);
+    expect(rubber2).toBe(config.rubber);
+    expect(cooldown2).toBe(0);
   });
 
   it('keeps the field and the head list replayable through whole games', () => {

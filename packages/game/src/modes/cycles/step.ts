@@ -20,7 +20,11 @@ export type CyclesEvent =
 export interface TickChanges {
   /** Flat pairs: cell, what it holds after the tick (0 = empty). Each cell appears once. */
   cells: number[];
-  /** Flat triples for every bike alive after the tick, in slot order: slot, head cell, direction. */
+  /**
+   * Flat 5-tuples for every bike alive after the tick, in slot order: slot, head cell, direction,
+   * rubber left, boost cooldown left. The last two are not derivable from the cells: a client
+   * that only has `full` and these deltas has no other way to draw the HUD.
+   */
   heads: number[];
   events: CyclesEvent[];
 }
@@ -286,7 +290,9 @@ export function step(
   for (const cell of work.touched) cells.push(cell, work.field[cell] ?? 0);
   const heads: number[] = [];
   for (const bike of work.bikes) {
-    if (bike.alive) heads.push(bike.slot, bike.y * work.side + bike.x, bike.dir);
+    if (bike.alive) {
+      heads.push(bike.slot, bike.y * work.side + bike.x, bike.dir, bike.rubber, bike.cooldown);
+    }
   }
 
   return {
