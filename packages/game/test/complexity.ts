@@ -19,9 +19,11 @@ export interface Tally {
  */
 export function counted<T extends object>(record: T, tally: Tally): T {
   return new Proxy(record, {
-    get(target, key, receiver) {
+    get(target, key) {
       tally.touches += 1;
-      return Reflect.get(target, key, receiver);
+      // The target, not the proxy, is the receiver: typed arrays refuse to run their own
+      // getters, such as `length`, on anything but a real typed array.
+      return Reflect.get(target, key);
     },
     ownKeys(target) {
       tally.touches += 1;

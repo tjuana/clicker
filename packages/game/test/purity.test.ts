@@ -1,6 +1,8 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { addPlayer, createCyclesState, startRound, step } from '../src/modes/cycles';
+import { CYCLES_CONFIG } from '../src/modes/cycles/config';
 import { apply } from '../src/room/apply';
 import { nextDeadline } from '../src/room/deadline';
 import { abortRound, syncConnections } from '../src/room/recovery';
@@ -76,6 +78,23 @@ describe('the rules in their source', () => {
   });
 });
 
+/**
+ * The light-cycle rules will also run on the client to predict a player's own bike, and only
+ * arithmetic that IEEE 754 rounds exactly is guaranteed to agree bit for bit across engines.
+ * `+ − × ÷` and `Math.sqrt` are; the transcendental functions are not.
+ */
+const TRANSCENDENTAL =
+  /\bMath\s*\.\s*(?:sin|cos|tan|asin|acos|atan2?|exp|expm1|log\w*|pow|cbrt|hypot)\b/;
+
+describe('the light-cycle rules', () => {
+  it('use only arithmetic every engine rounds the same way', () => {
+    const offenders = sources(join(SOURCE, 'modes', 'cycles')).filter((path) =>
+      TRANSCENDENTAL.test(code(path)),
+    );
+    expect(offenders).toEqual([]);
+  });
+});
+
 /** Replaces every ambient source of time and randomness with a trap, for the duration of `run`. */
 function sealed<T>(run: () => T): T {
   const realNow = Date.now;
@@ -137,6 +156,17 @@ describe('the rules at runtime', () => {
 
         syncConnections(state, { a: ['c1'] }, goAt + settings.roundMs + 3000);
         abortRound(state);
+      }),
+    ).not.toThrow();
+  });
+
+  it('plays a round of bots, deaths and respawns included, without the clock or the dice', () => {
+    expect(() =>
+      sealed(() => {
+        let state = createCyclesState(3);
+        for (let i = 0; i < 6; i += 1) state = addPlayer(state, `bot-${i}`, true, CYCLES_CONFIG);
+        state = startRound(state, CYCLES_CONFIG);
+        for (let tick = 0; tick < 600; tick += 1) state = step(state, CYCLES_CONFIG).state;
       }),
     ).not.toThrow();
   });
