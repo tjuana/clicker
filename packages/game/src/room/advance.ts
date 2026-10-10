@@ -20,14 +20,21 @@ function names(state: RoomState): Record<string, string> {
  * the Durable Object would tick for them until the clock ran out. The clicker is not affected —
  * its score does not depend on anyone still being there.
  *
+ * "Nobody" means every person has been gone for the whole grace: a network blip closes the
+ * socket for a moment, and ending a solo round at the first step after it would punish that.
+ *
  * Stops at the first connected person, so the common case — the host is there — reads one
  * player, not the whole room, on every command.
  */
-function deserted(state: RoomState): boolean {
+function deserted(state: RoomState, now: number, config: GameConfig): boolean {
   if (modeFor(state.mode).step === null) return false;
   for (const playerId in state.players) {
     const player = state.players[playerId];
-    if (player !== undefined && !player.bot && player.connectionIds.length > 0) return false;
+    if (player === undefined || player.bot) continue;
+    if (player.connectionIds.length > 0) return false;
+    if (player.disconnectedAt === null || player.disconnectedAt + config.desertedGraceMs > now) {
+      return false;
+    }
   }
   return true;
 }
@@ -49,7 +56,7 @@ export function advance(state: RoomState, now: number, config: GameConfig): Adva
     if (
       next.phase === 'running' &&
       next.round !== null &&
-      (now >= next.round.endsAt + config.lateGraceMs || deserted(next))
+      (now >= next.round.endsAt + config.lateGraceMs || deserted(next, now, config))
     ) {
       next = {
         ...next,

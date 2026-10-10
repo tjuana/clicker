@@ -17,6 +17,12 @@ export interface GameConfig {
   burst: number;
   /** How long a disconnected player stays in the list. */
   reconnectGraceMs: number;
+  /**
+   * How long a living round waits for a person to come back once no person is connected. Longer
+   * than a socket needs to reconnect after a blip, far shorter than a round: past it the bots
+   * would be playing to an empty room.
+   */
+  desertedGraceMs: number;
   /** Maximum players in a room. */
   maxPlayers: number;
   /**
@@ -35,6 +41,7 @@ export const DEFAULT_CONFIG: GameConfig = {
   clicksPerSecond: 30,
   burst: 30,
   reconnectGraceMs: 30000,
+  desertedGraceMs: 10_000,
   maxPlayers: 50,
   tickMs: null,
 };

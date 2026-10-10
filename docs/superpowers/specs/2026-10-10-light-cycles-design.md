@@ -294,3 +294,8 @@ Recorded in English from here on; the sections above stay as written.
   are renumbered for every round, so no client already in the room could know them), right after
   the snapshot that announces it; and whenever a bike joins mid-round (a new slot appeared), in the
   same step as the newcomer's `welcome`. Both are one string built for the room, not per connection.
+- **A living round with no person connected ends after a grace, not at once.** `desertedGraceMs`
+  (10 s by default) counts from the moment the last person's connection closed; any person coming
+  back inside it keeps the round going. Ending at the first step would have turned every network
+  blip of a solo player into a finished round, long before the socket could reconnect. No alarm is
+  needed for it: the ticker runs `advance` every step while the round runs.

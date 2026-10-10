@@ -110,21 +110,84 @@ describe('step', () => {
 });
 
 describe('a person who leaves a living round', () => {
-  it('ends it at once when they were the only person: the bots would play to an empty room', () => {
+  const GRACE = CYCLES.desertedGraceMs;
+
+  it('lets it go on inside the grace: a network blip must not end a solo round', () => {
     const { state, goAt } = running();
+    const goneAt = goAt + 100;
     const gone = apply(
       state,
       { type: 'leave', playerId: 'host', connectionId: 'c-host' },
-      goAt + 100,
+      goneAt,
       CYCLES,
     ).state;
 
-    const next = apply(gone, { type: 'tick' }, goAt + 150, CYCLES);
+    const early = apply(gone, { type: 'step' }, goneAt + 50, CYCLES);
+    const last = apply(early.state, { type: 'step' }, goneAt + GRACE - 1, CYCLES);
+
+    expect(early.state.phase).toBe('running');
+    expect(last.state.phase).toBe('running');
+    expect(cyclesOf(last.state).tick).toBe(cyclesOf(early.state).tick + 1);
+  });
+
+  it('ends it at the first command after the grace when nobody came back: the bots would play to an empty room', () => {
+    const { state, goAt } = running();
+    const goneAt = goAt + 100;
+    const gone = apply(
+      state,
+      { type: 'leave', playerId: 'host', connectionId: 'c-host' },
+      goneAt,
+      CYCLES,
+    ).state;
+
+    const next = apply(gone, { type: 'tick' }, goneAt + GRACE, CYCLES);
 
     expect(next.state.phase).toBe('results');
     expect(next.state.round).toBeNull();
     expect(next.events).toEqual([{ type: 'phaseChanged', phase: 'results' }]);
     expect(cyclesOf(next.state).results).not.toBeNull();
+  });
+
+  it('goes on past the grace when they reconnected inside it', () => {
+    const { state, goAt } = running();
+    const goneAt = goAt + 100;
+    let next = apply(
+      state,
+      { type: 'leave', playerId: 'host', connectionId: 'c-host' },
+      goneAt,
+      CYCLES,
+    ).state;
+    next = apply(
+      next,
+      { type: 'join', playerId: 'host', connectionId: 'c-again', name: 'Host' },
+      goneAt + GRACE - 1,
+      CYCLES,
+    ).state;
+
+    const later = apply(next, { type: 'tick' }, goneAt + 3 * GRACE, CYCLES);
+
+    expect(later.state.phase).toBe('running');
+  });
+
+  it('waits for every person to be gone for the whole grace, not just one of them', () => {
+    const { state, goAt } = running(true);
+    let next = apply(
+      state,
+      { type: 'leave', playerId: 'host', connectionId: 'c-host' },
+      goAt + 100,
+      CYCLES,
+    ).state;
+    next = apply(
+      next,
+      { type: 'leave', playerId: 'guest', connectionId: 'c-guest' },
+      goAt + 100 + GRACE - 5,
+      CYCLES,
+    ).state;
+
+    expect(apply(next, { type: 'tick' }, goAt + 100 + GRACE, CYCLES).state.phase).toBe('running');
+    expect(apply(next, { type: 'tick' }, goAt + 100 + GRACE - 5 + GRACE, CYCLES).state.phase).toBe(
+      'results',
+    );
   });
 
   it('lets it go on while a second person is connected, and takes the leaver off the field', () => {
