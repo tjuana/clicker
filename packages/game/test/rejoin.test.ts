@@ -146,3 +146,64 @@ describe('a player who leaves during the countdown', () => {
     expect(cycles.field.includes(bike?.slot ?? 0)).toBe(false);
   });
 });
+
+describe('a person who is not connected when the host starts', () => {
+  /** The guest closed the tab in the lobby; the reconnect grace has not run out, so they are still listed. */
+  function startedWithoutGuest(): { state: RoomState; goAt: number } {
+    const lobby = run(
+      lobbyWithHost(),
+      [
+        { type: 'join', playerId: 'guest', connectionId: 'c-guest', name: 'Guest' },
+        { type: 'setMode', playerId: 'host', mode: 'cycles' },
+        { type: 'leave', playerId: 'guest', connectionId: 'c-guest' },
+        { type: 'start', playerId: 'host' },
+      ],
+      0,
+      CYCLES,
+    );
+    const goAt = lobby.round?.goAt ?? 0;
+    return { state: apply(lobby, { type: 'tick' }, goAt, CYCLES).state, goAt };
+  }
+
+  const livingIds = (state: RoomState): string[] =>
+    cyclesOf(state)
+      .bikes.filter((bike) => bike.alive)
+      .map((bike) => bike.publicId);
+
+  it('gets no bike on the field, however long the round runs', () => {
+    const { state, goAt } = startedWithoutGuest();
+    expect(state.players.guest?.connectionIds).toEqual([]);
+
+    let next = state;
+    for (let i = 0; i < CYCLES_CONFIG.respawnTicks + 5; i += 1) {
+      next = apply(next, { type: 'step' }, goAt + 1 + i, CYCLES).state;
+      expect(livingIds(next)).not.toContain('2');
+    }
+    expect(cyclesOf(next).bikes.some((bike) => bike.publicId === '2' && bike.kills > 0)).toBe(
+      false,
+    );
+  });
+
+  it('is not counted when the field is sized and the bikes are spread', () => {
+    const { state } = startedWithoutGuest();
+
+    expect(cyclesOf(state).bikes.map((bike) => bike.publicId)).toEqual(['1']);
+  });
+
+  it('gets a bike after the respawn wait when they come back mid-round', () => {
+    const { state, goAt } = startedWithoutGuest();
+    let next = apply(
+      state,
+      { type: 'join', playerId: 'guest', connectionId: 'c-again', name: 'Guest' },
+      goAt + 1,
+      CYCLES,
+    ).state;
+
+    for (let i = 0; i < CYCLES_CONFIG.respawnTicks - 1; i += 1) {
+      next = apply(next, { type: 'step' }, goAt + 2 + i, CYCLES).state;
+    }
+    expect(livingIds(next)).not.toContain('2');
+    next = apply(next, { type: 'step' }, goAt + 100, CYCLES).state;
+    expect(livingIds(next)).toContain('2');
+  });
+});

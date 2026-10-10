@@ -286,13 +286,24 @@ function start(state: RoomState, playerId: string, now: number, config: GameConf
   const goAt = now + config.countdownMs;
   const endsAt = goAt + config.roundMs;
 
+  // Someone still listed but with no connection — they closed the tab in the lobby, or the object
+  // restarted and `clear` forgave every bike — would otherwise be seated and ride into walls with
+  // nobody at the wheel. The mode decides what that means: the cycles leave them off the field.
+  const mode = modeFor(state.mode);
+  let modeState = state.modeState;
+  for (const player of Object.values(state.players)) {
+    if (!player.bot && player.connectionIds.length === 0) {
+      modeState = mode.abandon(modeState, player.publicId);
+    }
+  }
+
   return {
     state: {
       ...state,
       phase: 'countdown',
       round: { goAt, endsAt },
       notice: null,
-      modeState: modeFor(state.mode).startRound(state.modeState, goAt, config),
+      modeState: mode.startRound(modeState, goAt, config),
     },
     events: [{ type: 'phaseChanged', phase: 'countdown' }],
   };
