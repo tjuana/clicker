@@ -260,3 +260,28 @@ A/D или ←/→ — поворот, пробел — рывок. `event.repea
 - **Bloom на слабых ноутбуках.** Включаем по замеру.
 - Объём: спецификация разворачивается в несколько планов — правила и боты; комната, тик и
   протокол; клиент и оформление.
+
+## Decisions made while building plan 7
+
+Recorded in English from here on; the sections above stay as written.
+
+- **The host picks the mode in the lobby** with `setMode`, rather than when the room is created:
+  rooms are created by a link. Switching recreates the mode state and reseats every player;
+  switching from results returns the room to the lobby; a mode whose player limit is below the
+  head count refuses with `room_full`.
+- **Bots exist only in the light cycles.** Elsewhere `addBot` answers `not_supported`. A bot is a
+  room player with no connection and is never expired.
+- **`full` carries each bike's trail as a list of cells**, oldest first, instead of the field. It is
+  sent after `welcome` once a round has started — during the countdown too, since the bikes are
+  already placed — and on `resync`.
+- **`delta` carries each changed cell's final value** (`cells`), the living bikes' heads (`heads`)
+  and events. Two lists of added and freed cells could not be replayed: within one tick a cell can
+  be both (plan 6 review, finding A). A client applies only deltas with `t` above the `full` it
+  started from — `broadcast` reaches a connection before its own `join` has been answered.
+- **No token bucket for the light cycles**: a queue of two turns and the boost cooldown bound what
+  input can change.
+- **Leaving and coming back go through the mode.** A bike whose player leaves is taken off by the
+  next tick, so its cells reach clients through `delta`; a player who rejoins gets the bike back
+  after the respawn wait. This applies from the countdown on.
+- **Round length is code, not deployment config.** `wrangler.jsonc` no longer sets `ROUND_MS` or
+  `COUNTDOWN_MS`; when the environment does set them — tests do — they override every mode.

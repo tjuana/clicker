@@ -441,6 +441,16 @@ The independent review of plan 6 found defects that changed this plan's contract
 - `setMode` from `results` moves the room to `lobby` and emits `phaseChanged`: the results of the old mode mean nothing in the new one.
 - `leave` in the light cycles only marks the bike; the next `step` takes it off the field, so its cells reach clients through `delta`.
 
+## What execution taught
+
+- **Task order was wrong.** Task 4 widens the snapshot's mode data to a union, which breaks the
+  client's compile; task 6 narrowed it only afterwards, so tasks 4 and 5 could not pass the
+  "typecheck before commit" rule. The client narrowing was committed first, as its own commit.
+  Lesson: a contract change and every consumer that must adapt to it belong in the same task, or
+  the consumers go first.
+- **Environment overrides win over a mode's defaults.** Applying them underneath, as the plan said,
+  would have given the light cycles a 180-second round in tests that set `ROUND_MS` to 200.
+
 ## Verifying the whole plan
 
 1. `pnpm format && pnpm check && pnpm typecheck && pnpm test` — green in every package.
