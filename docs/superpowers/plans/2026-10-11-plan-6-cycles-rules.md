@@ -116,7 +116,7 @@ describe('the seeded generator', () => {
 - [ ] **Step 2: Run it to see it fail**
 
 Run: `pnpm --filter @clicker/game exec vitest run test/cycles-random.test.ts`
-Expected: FAIL — `Failed to resolve import "../src/modes/cycles/random"`.
+Expected: FAIL — `Cannot find module` (в этой версии Vitest; раньше — `Failed to resolve import`) "../src/modes/cycles/random"`.
 
 - [ ] **Step 3: Implement**
 
@@ -330,7 +330,7 @@ describe('the field size', () => {
 - [ ] **Step 2: Run them to see them fail**
 
 Run: `pnpm --filter @clicker/game exec vitest run test/cycles-trail.test.ts`
-Expected: FAIL — `Failed to resolve import "../src/modes/cycles/field"`.
+Expected: FAIL — `Cannot find module` (в этой версии Vitest; раньше — `Failed to resolve import`) "../src/modes/cycles/field"`.
 
 - [ ] **Step 3: Implement**
 
@@ -992,7 +992,7 @@ describe('bots', () => {
 - [ ] **Step 2: Run them to see them fail**
 
 Run: `pnpm --filter @clicker/game exec vitest run test/cycles-step.test.ts test/cycles-game.test.ts`
-Expected: FAIL — `Failed to resolve import "../src/modes/cycles"`.
+Expected: FAIL — `Cannot find module` (в этой версии Vitest; раньше — `Failed to resolve import`) "../src/modes/cycles"`.
 
 - [ ] **Step 3: Implement**
 
@@ -1452,12 +1452,7 @@ export function step(
 import type { CyclesConfig } from './config';
 import { sideFor } from './field';
 import type { Spot } from './spawn';
-import {
-  type Bike,
-  type CyclesInput,
-  type CyclesResultRow,
-  type CyclesState,
-} from './state';
+import type { Bike, CyclesInput, CyclesResultRow, CyclesState } from './state';
 import { place, type Work } from './step';
 import { emptyTrail, forEachCell } from './trail';
 
