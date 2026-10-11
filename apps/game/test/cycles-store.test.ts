@@ -4,6 +4,7 @@ import {
   clearCycles,
   feedCycles,
   followPhase,
+  onRoundEvents,
   RESYNC_RETRY_MS,
   useCycles,
 } from '../src/client/cycles/store';
@@ -133,6 +134,30 @@ describe('feeding the round to the client', () => {
 
     feedCycles(full(20), 5_000);
     expect(useCycles.getState().feed).toEqual([]);
+  });
+
+  it('tells a listener what happened in a tick once the round holds that tick', () => {
+    feedCycles(full(5), 0);
+    const heard: Array<{ tick: number | undefined; types: string[] }> = [];
+    const stop = onRoundEvents((events) => {
+      heard.push({
+        tick: useCycles.getState().model?.tick,
+        types: events.map((event) => event.type),
+      });
+    });
+
+    feedCycles({ ...delta(6), events: [{ type: 'boost', slot: 1 }] }, 125);
+    feedCycles(delta(7), 250);
+    feedCycles({ ...delta(8), events: [{ type: 'died', slot: 1, by: null }] }, 375);
+    // Old news is not news: the same tick again, and a tick the listener has already had.
+    feedCycles({ ...delta(8), events: [{ type: 'died', slot: 1, by: null }] }, 380);
+    stop();
+    feedCycles({ ...delta(9), events: [{ type: 'boost', slot: 1 }] }, 500);
+
+    expect(heard).toEqual([
+      { tick: 6, types: ['boost'] },
+      { tick: 8, types: ['died'] },
+    ]);
   });
 
   it('does not place a tick it has already seen on the timeline twice', () => {

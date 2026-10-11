@@ -69,6 +69,8 @@ export const strings = {
     turnLeft: 'Left',
     turnRight: 'Right',
     keys: 'A / D or arrows to turn, Space to boost',
+    soundOn: 'Sound on',
+    soundOff: 'Sound off',
     nobodyScored: 'Nobody cut anyone off',
   },
   cyclesResultsHeaders: {

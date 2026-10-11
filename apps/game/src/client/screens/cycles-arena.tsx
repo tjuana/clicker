@@ -1,6 +1,15 @@
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense, useCallback, useEffect } from 'react';
+import { useSound } from '../audio/use-sound';
 import { secondsLeft, useServerClock } from '../clock';
-import { CyclesBar, KillFeed, RubberBar, slotOfId, TopFive, useBoostCharge } from '../cycles/hud';
+import {
+  CyclesBar,
+  KillFeed,
+  MuteButton,
+  RubberBar,
+  slotOfId,
+  TopFive,
+  useBoostCharge,
+} from '../cycles/hud';
 import { useCycles } from '../cycles/store';
 import { useClient } from '../store';
 import { strings } from '../strings';
@@ -92,6 +101,14 @@ export function CyclesArena({
   const model = useCycles((state) => state.model);
   const charge = useBoostCharge();
   const running = snapshot?.phase === 'running';
+  const blip = useSound(you);
+  const turn = useCallback(
+    (side: 'left' | 'right') => {
+      blip();
+      onTurn(side);
+    },
+    [blip, onTurn],
+  );
 
   // Everything an input needs is known before the early return: hooks run on every render.
   useEffect(() => {
@@ -105,12 +122,12 @@ export function CyclesArena({
       // Arrows and Space scroll the page unless told otherwise.
       event.preventDefault();
       if (side === undefined) onBoost();
-      else onTurn(side);
+      else turn(side);
     };
 
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [running, onTurn, onBoost]);
+  }, [running, turn, onBoost]);
 
   if (snapshot === null) return null;
   const round = snapshot.round;
@@ -134,6 +151,7 @@ export function CyclesArena({
         </Suspense>
         <KillFeed />
         <TopFive />
+        <MuteButton />
         <div
           style={{
             position: 'absolute',
@@ -167,7 +185,7 @@ export function CyclesArena({
           testId="turn-left"
           variant="secondary"
           disabled={!running}
-          onPointerDown={() => onTurn('left')}
+          onPointerDown={() => turn('left')}
           style={{ flex: 1, minHeight: 84, fontSize: 20 }}
         >
           {strings.cycles.turnLeft}
@@ -177,7 +195,7 @@ export function CyclesArena({
           testId="turn-right"
           variant="secondary"
           disabled={!running}
-          onPointerDown={() => onTurn('right')}
+          onPointerDown={() => turn('right')}
           style={{ flex: 1, minHeight: 84, fontSize: 20 }}
         >
           {strings.cycles.turnRight}

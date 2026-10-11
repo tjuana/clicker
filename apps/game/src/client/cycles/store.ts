@@ -39,6 +39,21 @@ export function clearCycles(): void {
   useCycles.setState(EMPTY);
 }
 
+type RoundEvents = DeltaMessage['events'];
+const eventListeners = new Set<(events: RoundEvents) => void>();
+
+/**
+ * Hears what happened in each tick as it arrives: the sound needs the events, and the store keeps
+ * only the ones the feed shows. A listener is called after the store holds the tick, so it reads
+ * a round that already includes what it is told about. Returns the way to stop listening.
+ */
+export function onRoundEvents(listener: (events: RoundEvents) => void): () => void {
+  eventListeners.add(listener);
+  return () => {
+    eventListeners.delete(listener);
+  };
+}
+
 /**
  * A room that is not in a round keeps no round. Without this the lobby, and the countdown of the
  * next round, would still hold the last one's model until its `full` arrived.
@@ -104,5 +119,8 @@ export function feedCycles(message: FullMessage | DeltaMessage, now: number): 'r
       ? {}
       : { feed: [...useCycles.getState().feed, ...lines].slice(-FEED_LENGTH) }),
   });
+  if (result.events.length > 0) {
+    for (const listener of eventListeners) listener(result.events);
+  }
   return null;
 }

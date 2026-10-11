@@ -1,4 +1,5 @@
 import { type CSSProperties, useRef } from 'react';
+import { useMuted } from '../audio/mute';
 import { secondsLeft, useServerClock } from '../clock';
 import { useClient } from '../store';
 import { strings } from '../strings';
@@ -120,6 +121,39 @@ const overlay: CSSProperties = {
   fontSize: 13,
   fontVariantNumeric: 'tabular-nums',
 };
+
+/** Sound on or off, remembered between visits. A corner of the scene: the bar has no room for it. */
+export function MuteButton() {
+  const muted = useMuted((state) => state.muted);
+  const toggle = useMuted((state) => state.toggle);
+  return (
+    <button
+      type="button"
+      data-testid="mute"
+      data-muted={muted}
+      onClick={(event) => {
+        toggle();
+        // A button that keeps focus would also answer Space, which in this screen is the boost.
+        event.currentTarget.blur();
+      }}
+      style={{
+        ...veil,
+        position: 'absolute',
+        bottom: 8,
+        left: 8,
+        minHeight: 36,
+        border: `1px solid ${theme.border}`,
+        fontSize: 13,
+        color: muted ? theme.muted : theme.text,
+        cursor: 'pointer',
+        touchAction: 'manipulation',
+        userSelect: 'none',
+      }}
+    >
+      {muted ? strings.cycles.soundOff : strings.cycles.soundOn}
+    </button>
+  );
+}
 
 /** The live top five, in the corner. The full table waits for the results. */
 export function TopFive() {
