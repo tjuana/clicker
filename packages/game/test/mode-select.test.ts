@@ -145,7 +145,8 @@ describe('the mode of a new room', () => {
   it('is the clicker, which has no tick', () => {
     expect(createRoomState().mode).toBe('clicker');
     expect(configFor(createRoomState().mode).tickMs).toBeNull();
-    expect(CYCLES.tickMs).toBe(50);
+    // Eight cells a second until the host picks another speed.
+    expect(CYCLES.tickMs).toBe(125);
   });
 });
 

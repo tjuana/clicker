@@ -310,3 +310,20 @@ Recorded in English from here on; the sections above stay as written.
 - **A snapshot's `data` is tied to its `mode`.** The schema is a variant on `mode`: a light-cycle
   snapshot carrying clicker scores (or the reverse) no longer parses, and the type of `data`
   narrows on `mode` alone.
+
+## Decisions made while building plan 8
+
+- **Speed is a room setting.** The owner found 20 cells a second too fast to react to behind a
+  chase camera; the default is now 8 and the host chooses among 8, 12, 16 and 20 in the lobby or
+  on the results screen with `setSpeed` (host only; `not_supported` outside the light cycles,
+  `wrong_phase` in a round). It lives in `RoomState`, not in the mode, so it survives a trip
+  through the clicker; a stored room without it reads as 8. This supersedes the 50 ms tick of
+  section 4: one cell per tick, so `tickMs = 1000 / speed`, and the worker recomputes its config
+  when the speed changes exactly as it does when the mode changes.
+- **Durations are designed in seconds**, then converted to ticks for the speed: a boost lasts one
+  second, its cooldown four, a respawn two, and a unit of rubber regrows in one, at any speed.
+  Rubber itself stays three ticks: it forgives latency, and a slower tick forgives more.
+  `CYCLES_CONFIG` stays the 20-cells-a-second config (`cyclesConfigFor(20)` equals it).
+- **The wire carries the pace.** `full` gains `tickMs` (the client places ticks in time with it),
+  and the light-cycle snapshot's `data` gains `speed`. The protocol version stays 2: the light
+  cycles have not been released, so no client of that version exists to be turned away.

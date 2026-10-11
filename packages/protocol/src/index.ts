@@ -15,6 +15,7 @@ export {
   removeBotSchema,
   resyncSchema,
   setModeSchema,
+  setSpeedSchema,
   startSchema,
 } from './client';
 export { generateId, ID_PATTERN, isId } from './ids';

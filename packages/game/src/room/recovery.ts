@@ -1,4 +1,5 @@
 import { modeFor } from '../modes';
+import { DEFAULT_SPEED } from '../modes/cycles/config';
 import type { Player, RoomState } from './state';
 
 /**
@@ -13,7 +14,7 @@ export function abortRound(state: RoomState): RoomState {
     phase: 'lobby',
     round: null,
     notice: 'round_aborted',
-    modeState: modeFor(state.mode).clear(state.modeState),
+    modeState: modeFor(state.mode).clear(state.modeState, state.speed),
   };
 }
 
@@ -26,6 +27,8 @@ export function syncConnections(
   live: Record<string, string[]>,
   now: number,
 ): RoomState {
+  // Same for the speed: a room stored before it existed reads as the default.
+  const speed = (state as Omit<RoomState, 'speed'> & { speed?: RoomState['speed'] }).speed;
   const players: Record<string, Player> = {};
   for (const [playerId, stored] of Object.entries(state.players)) {
     // What storage hands back was written by an older build and may lack the flag. Every stored
@@ -44,5 +47,5 @@ export function syncConnections(
       disconnectedAt: connectionIds.length > 0 ? null : (player.disconnectedAt ?? now),
     };
   }
-  return { ...state, players };
+  return { ...state, players, speed: speed ?? DEFAULT_SPEED };
 }

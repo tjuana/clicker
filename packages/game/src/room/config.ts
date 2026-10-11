@@ -1,4 +1,5 @@
 import type { ModeId } from '../modes';
+import { DEFAULT_SPEED, type Speed } from '../modes/cycles/config';
 
 export interface GameConfig {
   /** Countdown before the round. */
@@ -49,9 +50,24 @@ export const DEFAULT_CONFIG: GameConfig = {
 /** What a mode changes about the room. Anything not named here comes from DEFAULT_CONFIG. */
 export const MODE_CONFIG: Record<ModeId, Partial<GameConfig>> = {
   clicker: {},
-  cycles: { tickMs: 50, roundMs: 180_000, maxPlayers: 20 },
+  // No `tickMs`: the light cycles take one cell per tick, so the speed decides it (`configFor`).
+  cycles: { roundMs: 180_000, maxPlayers: 20 },
 };
 
-export function configFor(mode: ModeId, base: GameConfig = DEFAULT_CONFIG): GameConfig {
-  return { ...base, ...MODE_CONFIG[mode] };
+/** The time between ticks of a light-cycle room: one cell per tick, so it is the time a cell takes. */
+export function tickMsFor(speed: Speed): number {
+  return 1000 / speed;
+}
+
+/** What a mode changes about the room, and the pace the host chose for the light cycles. */
+export function configFor(
+  mode: ModeId,
+  base: GameConfig = DEFAULT_CONFIG,
+  speed: Speed = DEFAULT_SPEED,
+): GameConfig {
+  return {
+    ...base,
+    ...MODE_CONFIG[mode],
+    ...(mode === 'cycles' ? { tickMs: tickMsFor(speed) } : {}),
+  };
 }

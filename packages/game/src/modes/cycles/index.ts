@@ -5,7 +5,14 @@ import type { Bike, CyclesInput, CyclesResultRow, CyclesState } from './state';
 import { place, type Work } from './step';
 import { emptyTrail } from './trail';
 
-export { CYCLES_CONFIG, type CyclesConfig } from './config';
+export {
+  CYCLES_CONFIG,
+  type CyclesConfig,
+  cyclesConfigFor,
+  DEFAULT_SPEED,
+  SPEEDS,
+  type Speed,
+} from './config';
 export {
   type Bike,
   type CyclesInput,

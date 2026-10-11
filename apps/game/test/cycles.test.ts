@@ -23,12 +23,17 @@ const isOver = (message: Parameters<typeof isSnapshot>[0]): message is Snapshot 
 const isUnderway = (message: Parameters<typeof isSnapshot>[0]): message is Snapshot =>
   isSnapshot(message) && message.phase !== 'lobby';
 
-/** A host in a light-cycle room with `bots` bots seated, round not started. */
-async function lightCycleLobby(roomId: string, bots = 3): Promise<Client> {
+/**
+ * A host in a light-cycle room with `bots` bots seated, round not started. The rounds of these
+ * tests last a fraction of a second, so unless a test is about the speed it rides at the fastest
+ * one: at the default there would be too few ticks in a round to see anything happen.
+ */
+async function lightCycleLobby(roomId: string, bots = 3, speed = 20): Promise<Client> {
   const host = await connect(roomId);
   host.send({ type: 'join', playerId: generateId(), name: 'Аня', hostKey: generateId() });
   await host.waitFor(isWelcome);
   host.send({ type: 'setMode', mode: 'cycles' });
+  host.send({ type: 'setSpeed', speed });
   for (let i = 0; i < bots; i += 1) host.send({ type: 'addBot' });
   await host.waitFor(
     (message): message is Snapshot =>
@@ -78,7 +83,7 @@ describe('a light-cycle room over websocket', () => {
       'Bot 3',
     ]);
     expect(snapshot.players.filter((player) => !player.bot)).toHaveLength(1);
-    expect(snapshot.data).toEqual({ results: null });
+    expect(snapshot.data).toEqual({ results: null, speed: 20 });
   });
 
   it('answers not_supported to a bot in the clicker', async () => {
@@ -306,6 +311,7 @@ describe('a light-cycle room over websocket', () => {
 
     expect(over.mode).toBe('cycles');
     expect(over.data).toEqual({
+      speed: 20,
       results: expect.arrayContaining([expect.objectContaining({ id: '1', name: 'Аня' })]),
     });
     const before = host.received.filter(isDelta).length;
@@ -359,5 +365,68 @@ describe('a light-cycle room over websocket', () => {
     expect(puts.reached).toBeGreaterThanOrEqual(puts.first);
     // Five steps ran; the round's end is the only thing that may have been written.
     expect(puts.count).toBeLessThanOrEqual(1);
+  });
+});
+
+describe('the speed of a light-cycle room', () => {
+  const lobbyAt = (speed: number) => lightCycleLobby(generateId(), 1, speed);
+
+  /** Deltas a whole round streams: the ticks that went by, which is what the speed decides. */
+  async function ticksOfARound(speed: number): Promise<number> {
+    const host = await lobbyAt(speed);
+    host.send({ type: 'start' });
+    await host.waitFor(isOver);
+    return host.received.filter(isDelta).length;
+  }
+
+  it('tells the client how long a tick lasts, and what the host chose', async () => {
+    const host = await lobbyAt(16);
+    const lobby = host.received.filter(isSnapshot).at(-1);
+    host.send({ type: 'start' });
+
+    const full = await host.waitFor(isFull);
+
+    expect(full.tickMs).toBe(62.5);
+    expect(lobby?.data).toMatchObject({ speed: 16 });
+  });
+
+  it('is eight cells a second until the host says otherwise', async () => {
+    const host = await lightCycleLobby(generateId(), 1, 8);
+    host.send({ type: 'start' });
+
+    expect((await host.waitFor(isFull)).tickMs).toBe(125);
+  });
+
+  it('is stored with the room, so it outlives the object', async () => {
+    const roomId = generateId();
+    await lightCycleLobby(roomId, 0, 12);
+
+    await vi.waitFor(async () => expect((await storedState(roomId))?.speed).toBe(12));
+  });
+
+  it('makes the room tick at the new pace, not the one the room was created with', async () => {
+    const slow = await ticksOfARound(8);
+    const fast = await ticksOfARound(20);
+
+    // 8 against 20 cells a second: two and a half times the ticks. Far from the threshold, so
+    // the scheduler's jitter does not matter.
+    expect(fast).toBeGreaterThan(slow * 2);
+  });
+
+  it('answers not_host to a guest and not_supported to the clicker', async () => {
+    const roomId = generateId();
+    await lightCycleLobby(roomId, 0);
+    const guest = await connect(roomId);
+    guest.send({ type: 'join', playerId: generateId(), name: 'Боря' });
+    await guest.waitFor(isWelcome);
+
+    guest.send({ type: 'setSpeed', speed: 8 });
+    expect((await guest.waitFor(isError)).code).toBe('not_host');
+
+    const clicker = await connect(generateId());
+    clicker.send({ type: 'join', playerId: generateId(), name: 'Аня', hostKey: generateId() });
+    await clicker.waitFor(isWelcome);
+    clicker.send({ type: 'setSpeed', speed: 8 });
+    expect((await clicker.waitFor(isError)).code).toBe('not_supported');
   });
 });

@@ -1,5 +1,6 @@
 import type { ModeId, ModeState } from '../modes';
 import { createClickerState } from '../modes/clicker/state';
+import { DEFAULT_SPEED, type Speed } from '../modes/cycles/config';
 
 export type Phase = 'lobby' | 'countdown' | 'running' | 'results';
 
@@ -33,6 +34,8 @@ export interface RoomState {
   nextSeq: number;
   round: Round | null;
   notice: Notice | null;
+  /** The light cycles' pace. Lives here, not in the mode, so it outlasts a trip through the clicker. */
+  speed: Speed;
   /** Everything only the mode knows: scores, results, its own timers. */
   modeState: ModeState;
 }
@@ -47,6 +50,7 @@ export function createRoomState(): RoomState {
     nextSeq: 1,
     round: null,
     notice: null,
+    speed: DEFAULT_SPEED,
     modeState: createClickerState(),
   };
 }

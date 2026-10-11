@@ -8,10 +8,16 @@ export {
   toData as toModeData,
 } from './modes/clicker';
 export {
+  CYCLES_CONFIG,
+  type CyclesConfig,
   type CyclesEvent,
   type CyclesResultRow,
   type CyclesState,
+  cyclesConfigFor,
+  DEFAULT_SPEED,
   forEachCell,
+  SPEEDS,
+  type Speed,
   type TickChanges,
 } from './modes/cycles';
 export { type ApplyResult, apply } from './room/apply';
@@ -22,7 +28,13 @@ export type {
   InputCommand,
   JoinCommand,
 } from './room/commands';
-export { configFor, DEFAULT_CONFIG, type GameConfig, MODE_CONFIG } from './room/config';
+export {
+  configFor,
+  DEFAULT_CONFIG,
+  type GameConfig,
+  MODE_CONFIG,
+  tickMsFor,
+} from './room/config';
 export { nextDeadline } from './room/deadline';
 export { abortRound, syncConnections } from './room/recovery';
 export type { Notice, Phase, Player, RoomState, Round } from './room/state';
