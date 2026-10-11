@@ -12,8 +12,6 @@ const JITTER_MS = 60;
  * frames.
  */
 export const renderDelay = (tickMs: number): number => tickMs + JITTER_MS;
-/** Heads kept for interpolation. */
-export const KEPT_TICKS = 16;
 /**
  * How far back the estimate of the server's clock looks. It is also how long a stale estimate can
  * outlive a server that stalled: the old minimum is forgotten once it is this old.
@@ -58,6 +56,13 @@ export interface Timeline {
    * stands, and before the first delta there is no clock to wait on.
    */
   release: (now: number, ahead?: number) => Step[];
+  /**
+   * Makes the next `release` start over from the latest full. For a scene that was built again
+   * while the round went on: its walls are empty, and what was laid is in steps that were handed
+   * out to the one before it. The steps are kept for as long as the round, about 13 MB for the
+   * longest, twenty bikes for three minutes at the fastest speed, and gone with the timeline.
+   */
+  rewind: () => void;
   /** `null` until the first message. */
   sample: (now: number) => Sample | null;
 }
@@ -85,8 +90,10 @@ export function createTimeline(tickMs: number): Timeline {
   let base = 0;
   /** Steps in tick order with no gaps: the model refuses anything else before it gets here. */
   const steps: Step[] = [];
+  /** Where the latest full is in `steps`: a late reader starts there, everything before is replaced by it. */
+  let resetAt = 0;
   let released = Number.NEGATIVE_INFINITY;
-  // The estimate can drift upward when an old minimum leaves the window; stalling beats rewinding.
+  // The estimate can drift upward when an old minimum leaves the window; stalling beats running backwards.
   let latest = Number.NEGATIVE_INFINITY;
 
   const renderTick = (now: number): number => {
@@ -109,6 +116,7 @@ export function createTimeline(tickMs: number): Timeline {
         steps.length = kept < 0 || kept > steps.length ? 0 : kept;
         // The scene may have laid a tick this one replaces; it lays the full when the clock gets there.
         released = Math.min(released, step.tick - 1);
+        resetAt = steps.length;
       } else {
         offsets[seen % CAPACITY] = now - step.tick * tickMs;
         arrivals[seen % CAPACITY] = now;
@@ -133,9 +141,11 @@ export function createTimeline(tickMs: number): Timeline {
         out.push(step);
         released = step.tick;
       }
-      // Only what has been shown may go: an unreleased step carries walls nobody has laid yet.
-      while (steps.length > KEPT_TICKS && (steps[0] as Step).tick < released) steps.shift();
       return out.length === 0 ? NONE : out;
+    },
+    rewind: () => {
+      const from = steps[resetAt];
+      if (from !== undefined) released = from.tick - 1;
     },
     sample: (now) => {
       const first = steps[0];

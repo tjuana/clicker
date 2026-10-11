@@ -154,7 +154,7 @@ describe('the heads the scene draws between two ticks', () => {
     expect(sample?.alpha).toBe(0);
   });
 
-  it('keeps answering correctly long after the old ticks were dropped', () => {
+  it('keeps answering correctly deep into a long round', () => {
     const timeline = running(200);
 
     for (let now = origin; now < origin + 190 * TICK_MS; now += 16) {
@@ -334,5 +334,62 @@ describe('a server that stalls for a long time', () => {
     const steps = places.slice(1).map((each, index) => each.place - (places[index]?.place ?? 0));
     expect(Math.min(...steps)).toBeGreaterThan(FRAME_MS / TICK_MS / 2);
     expect(Math.max(...steps)).toBeLessThan((FRAME_MS / TICK_MS) * 2);
+  });
+});
+
+describe('a scene that starts drawing after the round did', () => {
+  const origin = 2_000;
+
+  /** A full of tick 5, then a delta a tick until `until`, on schedule. */
+  function round(until: number) {
+    const timeline = createTimeline(TICK_MS);
+    timeline.arrive(reset(5), origin);
+    for (let tick = 6; tick <= until; tick += 1) {
+      timeline.arrive(step(tick), origin + (tick - 5) * TICK_MS);
+    }
+    return timeline;
+  }
+  const late = origin + 400 * TICK_MS;
+
+  it('is given the round again from the full, in order, as if it had been there all along', () => {
+    const timeline = round(200);
+    const first = timeline.release(late, 1);
+    expect(first.map((each) => each.tick)).toEqual(
+      Array.from({ length: 196 }, (_, index) => 5 + index),
+    );
+    expect(timeline.release(late, 1)).toEqual([]);
+
+    // The scene was torn down and built again: its walls are empty.
+    timeline.rewind();
+
+    const again = timeline.release(late, 1);
+    expect(again.map((each) => each.tick)).toEqual(first.map((each) => each.tick));
+    expect(again[0]?.reset).toBe(true);
+  });
+
+  it('is given it from the latest full, not from the first, when the round was sent again', () => {
+    const timeline = round(40);
+    timeline.arrive(reset(40), origin + 35 * TICK_MS + 2);
+    for (let tick = 41; tick <= 60; tick += 1) {
+      timeline.arrive(step(tick), origin + (tick - 5) * TICK_MS);
+    }
+    timeline.release(late, 1);
+
+    timeline.rewind();
+
+    const again = timeline.release(late, 1);
+    expect(again[0]?.tick).toBe(40);
+    expect(again[0]?.reset).toBe(true);
+    expect(again.map((each) => each.tick)).toEqual(
+      Array.from({ length: 21 }, (_, index) => 40 + index),
+    );
+  });
+
+  it('does nothing before there is a round to give', () => {
+    const timeline = createTimeline(TICK_MS);
+
+    timeline.rewind();
+
+    expect(timeline.release(late, 1)).toEqual([]);
   });
 });

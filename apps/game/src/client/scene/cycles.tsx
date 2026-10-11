@@ -339,6 +339,10 @@ function Field({ side, you }: { side: number; you: string | null }) {
       if (rig.timeline !== timeline) {
         rig.timeline = timeline;
         rig.killedBy = null;
+        // This field has laid nothing yet, whatever an earlier one took from the same timeline:
+        // a new round starts at its first step anyway, a field built again in the middle of one
+        // has to be given the round from its latest full.
+        timeline.rewind();
       }
       ownSlotOf(rig, model.ids, you);
       // One tick ahead of the render clock: a bike is drawn riding towards the head of the next
