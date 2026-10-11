@@ -9,19 +9,24 @@ import {
   useCycles,
 } from '../src/client/cycles/store';
 
-const full = (tick: number): FullMessage => ({
+const full = (
+  tick: number,
+  trail: number[] = [11, 12],
+  over: Partial<FullMessage> = {},
+): FullMessage => ({
   v: PROTOCOL_VERSION,
   type: 'full',
   tick,
   tickMs: 125,
   side: 10,
+  ...over,
   bikes: [
     {
       slot: 1,
       id: '1',
       alive: true,
       dir: 0,
-      trail: [11, 12],
+      trail,
       kills: 0,
       deaths: 0,
       rubber: 3,
@@ -132,7 +137,8 @@ describe('feeding the round to the client', () => {
     ]);
     expect(new Set(feed.map((line) => line.seq)).size).toBe(4);
 
-    feedCycles(full(20), 5_000);
+    // Another round starts again from tick 0.
+    feedCycles(full(0), 5_000);
     expect(useCycles.getState().feed).toEqual([]);
   });
 
@@ -167,5 +173,91 @@ describe('feeding the round to the client', () => {
 
     const released = useCycles.getState().timeline?.release(1_000) ?? [];
     expect(released.map((step) => step.tick)).toEqual([5, 6]);
+  });
+});
+
+describe('a full in the middle of the round', () => {
+  beforeEach(clearCycles);
+
+  /** The bike rides one cell a tick; the head of tick t is at cell 12 + (t - 5). */
+  const trailTo = (tick: number): number[] =>
+    Array.from({ length: tick - 3 }, (_, index) => 11 + index);
+
+  /** Deltas of ticks 6 to `until`, one every 125 ms, a bike cut off at tick 7. */
+  function ride(until: number): void {
+    feedCycles(full(5), 0);
+    for (let t = 6; t <= until; t += 1) {
+      const events = t === 7 ? [{ type: 'died' as const, slot: 2, by: 1 }] : [];
+      feedCycles({ ...delta(t), events }, (t - 5) * 125);
+    }
+  }
+
+  it('keeps the kill feed, which the same round still has to show', () => {
+    ride(30);
+    const before = useCycles.getState().feed;
+    expect(before).toHaveLength(1);
+
+    // A bike joined: everyone is sent the round again, the same round.
+    feedCycles(full(30, trailTo(30)), 25 * 125 + 5);
+
+    expect(useCycles.getState().feed).toEqual(before);
+    expect(useCycles.getState().model?.tick).toBe(30);
+  });
+
+  it('lays the whole field again from it, whatever was laid before', () => {
+    ride(30);
+    useCycles.getState().timeline?.release(1_000_000, 1);
+
+    feedCycles(full(30, trailTo(30)), 25 * 125 + 5);
+
+    const [again] = useCycles.getState().timeline?.release(1_000_000, 1) ?? [];
+    expect(again?.reset).toBe(true);
+    expect(again?.tick).toBe(30);
+    expect(again?.walls.length).toBe(trailTo(30).length);
+  });
+
+  it('keeps the clock: the bike goes on riding between two ticks across it', () => {
+    const held: number[] = [];
+    let next = 6;
+    feedCycles(full(5), 0);
+    // Frames every 16 ms; the full of tick 30 is sent right after the delta of tick 30.
+    for (let now = 0; now < 8_000; now += 16) {
+      while (next <= 60 && (next - 5) * 125 <= now) {
+        feedCycles(delta(next), (next - 5) * 125);
+        if (next === 30) feedCycles(full(30, trailTo(30)), (next - 5) * 125 + 2);
+        next += 1;
+      }
+      const timeline = useCycles.getState().timeline;
+      timeline?.release(now, 1);
+      const sample = timeline?.sample(now);
+      // Until the last delta is in: after it the bike is rightly held on the newest head.
+      if (sample === null || sample === undefined || now < 2_000) continue;
+      if (sample.from.get(1)?.cell === sample.to.get(1)?.cell && now < (60 - 5) * 125)
+        held.push(now);
+    }
+
+    expect(held).toEqual([]);
+  });
+
+  it.each([
+    ['of another size', { side: 12 }],
+    ['at another speed', { tickMs: 83 }],
+  ])('starts over for a round %s', (_, over) => {
+    ride(30);
+    const timeline = useCycles.getState().timeline;
+
+    feedCycles(full(30, trailTo(30), over), 3_000);
+
+    expect(useCycles.getState().feed).toEqual([]);
+    expect(useCycles.getState().timeline).not.toBe(timeline);
+  });
+
+  it('starts over for a round that began again from an earlier tick', () => {
+    ride(30);
+
+    feedCycles(full(0), 6_000);
+
+    expect(useCycles.getState().feed).toEqual([]);
+    expect(useCycles.getState().model?.tick).toBe(0);
   });
 });

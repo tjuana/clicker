@@ -17,7 +17,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import type { WallOp } from '../cycles/model';
 import { useCycles } from '../cycles/store';
-import type { Sample, Step } from '../cycles/timeline';
+import type { Sample, Step, Timeline } from '../cycles/timeline';
 
 /** Twenty bikes with trails of at most 400 cells, and room for the cells a boost lays in passing. */
 const MAX_WALLS = 20 * 400 + 64;
@@ -183,6 +183,8 @@ function createWalls(side: number): Walls {
 
 /** What the camera remembers from frame to frame, kept out of React: it changes sixty times a second. */
 interface Rig {
+  /** The round being drawn: another timeline is another round, with nothing in common. */
+  timeline: Timeline | null;
   /** The camera's heading, eased on its own; null until the first frame. */
   yaw: number | null;
   /** Whom the camera is on: a slot, or -1 for the overview. */
@@ -205,6 +207,7 @@ interface Rig {
 
 function createRig(): Rig {
   return {
+    timeline: null,
     yaw: null,
     subject: -2,
     killedBy: null,
@@ -235,10 +238,9 @@ function applyWall(walls: Walls, op: WallOp): void {
 }
 
 function applyStep(walls: Walls, rig: Rig, step: Step): void {
-  if (step.reset) {
-    walls.clear();
-    rig.killedBy = null;
-  }
+  // A full of the same round (a bike joined, or a gap was closed) says nothing new about who
+  // killed the player, so `killedBy` stays; a new round gets a new timeline, which clears it.
+  if (step.reset) walls.clear();
   for (const op of step.walls) applyWall(walls, op);
   for (const event of step.events) {
     if (event.slot !== rig.ownSlot) continue;
@@ -334,6 +336,10 @@ function Field({ side, you }: { side: number; you: string | null }) {
     const fog = scene.fog as Fog | null;
 
     if (model !== null && timeline !== null) {
+      if (rig.timeline !== timeline) {
+        rig.timeline = timeline;
+        rig.killedBy = null;
+      }
       ownSlotOf(rig, model.ids, you);
       // One tick ahead of the render clock: a bike is drawn riding towards the head of the next
       // tick, and its wall has to reach it there, as in the prototype the owner played.

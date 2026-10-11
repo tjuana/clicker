@@ -43,7 +43,10 @@ export interface Sample {
 }
 
 export interface Timeline {
-  /** The message of `step.tick` arrived at local time `now`. Ticks arrive consecutively. */
+  /**
+   * The message of `step.tick` arrived at local time `now`. Ticks arrive consecutively; a full may
+   * arrive at any time and replaces everything from its own tick on, the clock untouched.
+   */
   arrive: (step: Step, now: number) => void;
   /** The tick the scene should draw at `now`, fractional; never goes backwards. */
   renderTick: (now: number) => number;
@@ -98,7 +101,15 @@ export function createTimeline(tickMs: number): Timeline {
 
   return {
     arrive: (step, now) => {
-      if (!step.reset) {
+      if (step.reset) {
+        // The full is the field as it stands at its tick. What came before it stays to ride from,
+        // unless a gap lies between: heads are not interpolated across ticks nobody saw.
+        const first = steps[0];
+        const kept = first === undefined ? 0 : step.tick - first.tick;
+        steps.length = kept < 0 || kept > steps.length ? 0 : kept;
+        // The scene may have laid a tick this one replaces; it lays the full when the clock gets there.
+        released = Math.min(released, step.tick - 1);
+      } else {
         offsets[seen % CAPACITY] = now - step.tick * tickMs;
         arrivals[seen % CAPACITY] = now;
         seen += 1;

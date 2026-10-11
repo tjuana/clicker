@@ -73,9 +73,20 @@ export function followPhase(phase: SnapshotMessage['phase']): void {
 export function feedCycles(message: FullMessage | DeltaMessage, now: number): 'resync' | null {
   if (message.type === 'full') {
     const { model, walls } = fromFull(message);
-    const timeline = createTimeline(model.tickMs);
+    const { model: before, timeline: running, feed } = useCycles.getState();
+    // The room sends everyone the round again when a bike joins in the middle of it, and a client
+    // that asked after a gap gets it too. That is the same round, not a new one: what it has
+    // built up (the feed, the clock) is still true. A round of another size or speed, or one
+    // that began again from an earlier tick, shares none of it.
+    const sameRound =
+      before !== null &&
+      running !== null &&
+      before.side === model.side &&
+      before.tickMs === model.tickMs &&
+      before.tick <= model.tick;
+    const timeline = sameRound ? running : createTimeline(model.tickMs);
     timeline.arrive({ tick: model.tick, walls, heads: model.heads, events: [], reset: true }, now);
-    useCycles.setState({ model, timeline, askedAt: null, feed: [] });
+    useCycles.setState({ model, timeline, askedAt: null, feed: sameRound ? feed : [] });
     return null;
   }
 
