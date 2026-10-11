@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { Head } from '../src/client/cycles/model';
-import { createTimeline, type Step } from '../src/client/cycles/timeline';
+import { createTimeline, renderDelay, type Step } from '../src/client/cycles/timeline';
 
 const TICK_MS = 125;
 /** The delay the scene draws behind the server; the same figure the timeline is built around. */
-const DELAY_MS = 100;
+const DELAY_MS = renderDelay(TICK_MS);
 
 function head(cell: number): Map<number, Head> {
   return new Map([[1, { slot: 1, cell, dir: 0, rubber: 3, cooldown: 0 }]]);
@@ -99,8 +99,11 @@ describe('a burst of deltas', () => {
   it('is released on the schedule the ticks were stepped on, not all at once on arrival', () => {
     const { timeline, arrival } = afterBurst();
 
-    // Tick 14 was stepped just now; ticks 10 to 13 were due while the network held them.
-    expect(timeline.release(arrival).map((each) => each.tick)).toEqual([10, 11, 12, 13]);
+    // Tick 14 was stepped just now. Ticks 10 to 12 were due while the network held them; 13 and 14
+    // wait for the moment each was stepped plus the delay, a tick apart.
+    expect(timeline.release(arrival).map((each) => each.tick)).toEqual([10, 11, 12]);
+    expect(timeline.release(arrival + DELAY_MS - TICK_MS - 1)).toEqual([]);
+    expect(timeline.release(arrival + DELAY_MS - TICK_MS).map((each) => each.tick)).toEqual([13]);
     expect(timeline.release(arrival + DELAY_MS - 1)).toEqual([]);
     expect(timeline.release(arrival + DELAY_MS).map((each) => each.tick)).toEqual([14]);
   });
@@ -163,4 +166,70 @@ describe('the heads the scene draws between two ticks', () => {
     expect(createTimeline(TICK_MS).sample(origin)).toBeNull();
     expect(createTimeline(TICK_MS).release(origin)).toEqual([]);
   });
+});
+
+describe('a scene that draws while the ticks are still arriving', () => {
+  const FRAME_MS = 16;
+  const LATENCY_MS = 40;
+  const origin = 10_000;
+  const SECONDS = 30;
+
+  /** A late arrival in [0, max] ms without a random generator: a fixed walk that does not repeat soon. */
+  const late = (tick: number, max: number): number => (((tick * 7919) % 101) / 100) * max;
+
+  /**
+   * The bike of the arena's scene, frame by frame: a message is handed over when its time has come,
+   * then the frame takes what the clock has reached and samples as the scene does. Arrivals and
+   * frames are interleaved because a timeline that is given every arrival first is never short of
+   * a tick, whatever delay it draws at. The bike rides one cell a tick, so its place is its cell.
+   */
+  function ride(speed: number, jitter: number) {
+    const tickMs = 1000 / speed;
+    const timeline = createTimeline(tickMs);
+    const places: number[] = [];
+    let held = 0;
+    let next = 0;
+    for (let now = origin; now < origin + SECONDS * 1000; now += FRAME_MS) {
+      while (origin + next * tickMs + LATENCY_MS + late(next, jitter) <= now) {
+        const arrival = origin + next * tickMs + LATENCY_MS + late(next, jitter);
+        timeline.arrive(step(next), arrival);
+        next += 1;
+      }
+      timeline.release(now, 1);
+      const sample = timeline.sample(now);
+      // The first seconds are the clock finding the schedule; what is asked is the steady state.
+      if (sample === null || now < origin + 5_000) continue;
+      const from = sample.from.get(1)?.cell as number;
+      const to = sample.to.get(1)?.cell as number;
+      if (from === to) held += 1;
+      places.push(from + (to - from) * sample.alpha);
+    }
+    return { places, held, smooth: FRAME_MS / tickMs };
+  }
+
+  const cases = [8, 12, 16, 20].flatMap((speed) =>
+    [0, 30, 57].map((jitter) => ({ speed, jitter })),
+  );
+
+  it.each(cases)(
+    'never freezes the bike at speed $speed with arrivals up to $jitter ms late',
+    ({ speed, jitter }) => {
+      const { places, held } = ride(speed, jitter);
+
+      expect(places.length).toBeGreaterThan(1_000);
+      expect(held).toBe(0);
+    },
+  );
+
+  it.each(cases)(
+    'moves the bike smoothly at speed $speed with arrivals up to $jitter ms late',
+    ({ speed, jitter }) => {
+      const { places, smooth } = ride(speed, jitter);
+
+      const steps = places.slice(1).map((place, index) => place - (places[index] as number));
+      // Never backwards, never more than two frames' worth at once, and never standing still.
+      expect(Math.min(...steps)).toBeGreaterThan(smooth / 2);
+      expect(Math.max(...steps)).toBeLessThan(smooth * 2);
+    },
+  );
 });

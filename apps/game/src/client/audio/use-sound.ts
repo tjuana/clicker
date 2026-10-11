@@ -1,7 +1,7 @@
 import { useCallback, useEffect } from 'react';
 import { slotOfId } from '../cycles/hud';
 import { onRoundEvents, useCycles } from '../cycles/store';
-import { RENDER_DELAY_MS } from '../cycles/timeline';
+import { renderDelay } from '../cycles/timeline';
 import { serverNow, useClient } from '../store';
 import { useMuted } from './mute';
 import { synth } from './synth';
@@ -41,15 +41,18 @@ export function useSound(you: string | null): () => void {
     return synth.stop;
   }, [live, goAt, endsAt]);
 
-  // The picture is drawn `RENDER_DELAY_MS` behind the server, so the sound is put back by as much.
+  // The picture is drawn `renderDelay` behind the server, so the sound is put back by as much.
   useEffect(
     () =>
       onRoundEvents((events) => {
-        const own = slotOfId(useCycles.getState().model, you);
+        const { model } = useCycles.getState();
+        if (model === null) return;
+        const own = slotOfId(model, you);
+        const delay = renderDelay(model.tickMs) / 1000;
         for (const event of events) {
           if (event.slot !== own) continue;
-          if (event.type === 'boost') synth.sweep(RENDER_DELAY_MS / 1000);
-          if (event.type === 'died') synth.crash(RENDER_DELAY_MS / 1000);
+          if (event.type === 'boost') synth.sweep(delay);
+          if (event.type === 'died') synth.crash(delay);
         }
       }),
     [you],

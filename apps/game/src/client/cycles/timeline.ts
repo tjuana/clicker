@@ -1,8 +1,17 @@
 import type { DeltaMessage } from '@clicker/protocol';
 import type { Head, WallOp } from './model';
 
-/** The scene draws the world this far in the past: it covers the measured p99 network jitter. */
-export const RENDER_DELAY_MS = 100;
+/** What the network adds to a message on top of its fastest trip: the measured p99 is 57 ms. */
+const JITTER_MS = 60;
+
+/**
+ * How far in the past the scene draws the world. A bike is drawn riding from its head of tick t to
+ * the head of t + 1, so the next tick has to be here before the ride starts: a whole tick of delay
+ * for that, and the network's jitter on top so a late message is still in time. A fixed delay is
+ * shorter than a tick at the slowest speed, and the bike then froze and jumped on a fifth of the
+ * frames.
+ */
+export const renderDelay = (tickMs: number): number => tickMs + JITTER_MS;
 /** Heads kept for interpolation. */
 export const KEPT_TICKS = 16;
 /** Arrivals the estimate of the server's clock looks back over: about eight seconds at 8 a second. */
@@ -48,13 +57,14 @@ export interface Timeline {
  * Places ticks in time. A tick is stepped on the server at `base + tick × tickMs`, and the network
  * only ever adds to that, so the arrival that was delayed least — the minimum of
  * `arrival − tick × tickMs` over recent arrivals — is the best estimate of `base`. The scene then
- * draws `RENDER_DELAY_MS` behind it, so a tick that is a little late is still on time, and a burst
+ * draws `renderDelay` behind it, so a tick that is a little late is still on time, and a burst
  * of ticks that the network held back comes out at the pace it was stepped, not all at once.
  *
  * The minimum is taken over a plain scan of 64 numbers per arrival, eight to twenty times a
  * second: a monotonic deque would be less code to get wrong, but no less to read.
  */
 export function createTimeline(tickMs: number): Timeline {
+  const delay = renderDelay(tickMs);
   const offsets = new Float64Array(WINDOW);
   let seen = 0;
   let base = 0;
@@ -66,7 +76,7 @@ export function createTimeline(tickMs: number): Timeline {
 
   const renderTick = (now: number): number => {
     if (seen === 0) return Number.NEGATIVE_INFINITY;
-    latest = Math.max(latest, (now - base - RENDER_DELAY_MS) / tickMs);
+    latest = Math.max(latest, (now - base - delay) / tickMs);
     return latest;
   };
 
