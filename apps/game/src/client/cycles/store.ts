@@ -1,7 +1,17 @@
-import type { DeltaMessage, FullMessage } from '@clicker/protocol';
+import type { DeltaMessage, FullMessage, SnapshotMessage } from '@clicker/protocol';
 import { create } from 'zustand';
 import { applyDelta, type CyclesModel, fromFull } from './model';
 import { createTimeline, type Timeline } from './timeline';
+
+/** One line of the kill feed. `killer` is `null` for a crash into a wall or a trail's end. */
+export interface FeedItem {
+  seq: number;
+  killer: number | null;
+  victim: number;
+}
+
+/** The feed shows the last few; older ones have nothing left to say. */
+const FEED_LENGTH = 4;
 
 interface CyclesStore {
   model: CyclesModel | null;
@@ -12,17 +22,30 @@ interface CyclesStore {
    * of the last ask, so a lost answer can be asked for again; `null` when nothing is awaited.
    */
   askedAt: number | null;
+  /** Newest last; the HUD fades each line by itself. */
+  feed: FeedItem[];
 }
 
 /** The server answers a connection's `resync` at most once a second; asking again sooner is noise. */
 export const RESYNC_RETRY_MS = 1500;
 
-const EMPTY: CyclesStore = { model: null, timeline: null, askedAt: null };
+const EMPTY: CyclesStore = { model: null, timeline: null, askedAt: null, feed: [] };
+
+let feedSeq = 0;
 
 export const useCycles = create<CyclesStore>(() => EMPTY);
 
 export function clearCycles(): void {
   useCycles.setState(EMPTY);
+}
+
+/**
+ * A room that is not in a round keeps no round. Without this the lobby, and the countdown of the
+ * next round, would still hold the last one's model until its `full` arrived.
+ */
+export function followPhase(phase: SnapshotMessage['phase']): void {
+  if (phase !== 'lobby' && phase !== 'results') return;
+  if (useCycles.getState().model !== null) clearCycles();
 }
 
 /**
@@ -37,7 +60,7 @@ export function feedCycles(message: FullMessage | DeltaMessage, now: number): 'r
     const { model, walls } = fromFull(message);
     const timeline = createTimeline(model.tickMs);
     timeline.arrive({ tick: model.tick, walls, heads: model.heads, events: [], reset: true }, now);
-    useCycles.setState({ model, timeline, askedAt: null });
+    useCycles.setState({ model, timeline, askedAt: null, feed: [] });
     return null;
   }
 
@@ -68,6 +91,18 @@ export function feedCycles(message: FullMessage | DeltaMessage, now: number): 'r
     },
     now,
   );
-  useCycles.setState({ model: result.model });
+  const lines: FeedItem[] = [];
+  for (const event of result.events) {
+    if (event.type === 'died') {
+      feedSeq += 1;
+      lines.push({ seq: feedSeq, killer: event.by, victim: event.slot });
+    }
+  }
+  useCycles.setState({
+    model: result.model,
+    ...(lines.length === 0
+      ? {}
+      : { feed: [...useCycles.getState().feed, ...lines].slice(-FEED_LENGTH) }),
+  });
   return null;
 }

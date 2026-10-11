@@ -1,6 +1,12 @@
 import { type DeltaMessage, type FullMessage, PROTOCOL_VERSION } from '@clicker/protocol';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { clearCycles, feedCycles, RESYNC_RETRY_MS, useCycles } from '../src/client/cycles/store';
+import {
+  clearCycles,
+  feedCycles,
+  followPhase,
+  RESYNC_RETRY_MS,
+  useCycles,
+} from '../src/client/cycles/store';
 
 const full = (tick: number): FullMessage => ({
   v: PROTOCOL_VERSION,
@@ -88,6 +94,45 @@ describe('feeding the round to the client', () => {
   it('ignores deltas that come before any full without asking for anything', () => {
     expect(feedCycles(delta(6), 0)).toBeNull();
     expect(useCycles.getState().model).toBeNull();
+  });
+
+  it('forgets the round when the room goes back to the lobby or to the results', () => {
+    for (const phase of ['lobby', 'results'] as const) {
+      feedCycles(full(5), 0);
+      followPhase('countdown');
+      followPhase('running');
+      expect(useCycles.getState().model).not.toBeNull();
+
+      followPhase(phase);
+
+      expect(useCycles.getState().model).toBeNull();
+      expect(useCycles.getState().timeline).toBeNull();
+    }
+  });
+
+  it('lists who cut off whom, the last four', () => {
+    feedCycles(full(5), 0);
+    for (let t = 6; t <= 11; t += 1) {
+      feedCycles(
+        {
+          ...delta(t),
+          events: [{ type: 'died', slot: t, by: t % 2 === 0 ? null : 1 }],
+        },
+        t * 125,
+      );
+    }
+
+    const feed = useCycles.getState().feed;
+    expect(feed.map((line) => [line.victim, line.killer])).toEqual([
+      [8, null],
+      [9, 1],
+      [10, null],
+      [11, 1],
+    ]);
+    expect(new Set(feed.map((line) => line.seq)).size).toBe(4);
+
+    feedCycles(full(20), 5_000);
+    expect(useCycles.getState().feed).toEqual([]);
   });
 
   it('does not place a tick it has already seen on the timeline twice', () => {

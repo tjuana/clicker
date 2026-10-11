@@ -22,6 +22,16 @@
       input {
         font: inherit;
       }
+      /* A kill-feed line stays a while, then goes: no timer in JavaScript, no list to prune. */
+      @keyframes feed-fade {
+        0%,
+        65% {
+          opacity: 1;
+        }
+        100% {
+          opacity: 0;
+        }
+      }
     </style>
   </head>
   <body>

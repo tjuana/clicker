@@ -1,6 +1,6 @@
 import { type ClientMessage, PROTOCOL_VERSION, parseServerMessage } from '@clicker/protocol';
 import PartySocket from 'partysocket';
-import { clearCycles, feedCycles } from './cycles/store';
+import { clearCycles, feedCycles, followPhase } from './cycles/store';
 import { hostKeyFor, playerId } from './room-link';
 import { useClient } from './store';
 
@@ -59,7 +59,10 @@ export function connect(roomId: string, name: string): Connection {
     const message = parseServerMessage(event.data);
     if (message === null) return;
     if (message.type === 'welcome') useClient.getState().welcome(message.you, message.isHost);
-    if (message.type === 'snapshot') useClient.getState().receive(message);
+    if (message.type === 'snapshot') {
+      useClient.getState().receive(message);
+      followPhase(message.phase);
+    }
     if (message.type === 'error') useClient.getState().fail(message.code);
     if (message.type === 'full' || message.type === 'delta') {
       if (feedCycles(message, performance.now()) === 'resync') {

@@ -45,6 +45,8 @@ interface ButtonProps {
   variant?: 'primary' | 'secondary';
   testId?: string;
   style?: CSSProperties;
+  /** For a button that is one of a set of choices: whether it is the chosen one. */
+  pressed?: boolean;
 }
 
 export function Button({
@@ -55,6 +57,7 @@ export function Button({
   variant = 'primary',
   testId,
   style,
+  pressed,
 }: ButtonProps) {
   const primary = variant === 'primary';
   return (
@@ -64,6 +67,7 @@ export function Button({
       onClick={onClick}
       onPointerDown={onPointerDown}
       disabled={disabled}
+      aria-pressed={pressed}
       style={{
         ...TOUCH_STYLE,
         padding: '14px 20px',
@@ -198,6 +202,81 @@ export function ShareLink({
         }}
       />
       <CopyButton value={value} label={strings.copy} testId={testId} />
+    </div>
+  );
+}
+
+/** A row of buttons of which exactly one is chosen. Not interactive for a guest, who only reads it. */
+export function Choice<T extends string | number>({
+  options,
+  value,
+  onChoose,
+  testId,
+}: {
+  options: { value: T; label: string }[];
+  value: T;
+  onChoose: (value: T) => void;
+  /** Each button is `${testId}-${value}`. */
+  testId: string;
+}) {
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+      {options.map((option) => (
+        <Button
+          key={option.value}
+          testId={`${testId}-${option.value}`}
+          variant={option.value === value ? 'primary' : 'secondary'}
+          pressed={option.value === value}
+          onClick={() => onChoose(option.value)}
+          style={{ padding: '10px 16px', flex: '1 1 0' }}
+        >
+          {option.label}
+        </Button>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Across the whole screen, because three seconds of countdown is the one moment everyone is
+ * looking for the same thing. Never interactive: the instant it goes, the controls underneath
+ * have to be live.
+ */
+export function CountdownOverlay({
+  seconds,
+  veil = 0.82,
+}: {
+  seconds: number;
+  /** How opaque the dark veil is: a scene worth looking at while waiting gets a thin one. */
+  veil?: number;
+}) {
+  return (
+    <div
+      data-testid="countdown"
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 2,
+        pointerEvents: 'none',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        background: `rgba(11, 13, 20, ${veil})`,
+      }}
+    >
+      <span style={{ color: theme.muted, fontSize: 24 }}>{strings.getReady}</span>
+      <strong
+        style={{
+          fontSize: 'min(40vw, 220px)',
+          lineHeight: 1,
+          color: theme.goldBright,
+          fontVariantNumeric: 'tabular-nums',
+        }}
+      >
+        {seconds}
+      </strong>
     </div>
   );
 }
