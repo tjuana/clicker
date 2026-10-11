@@ -8,6 +8,9 @@ export const KEPT_TICKS = 16;
 /** Arrivals the estimate of the server's clock looks back over: about eight seconds at 8 a second. */
 const WINDOW = 64;
 
+/** What a frame with nothing to show gets: the scene asks sixty times a second. */
+const NONE: Step[] = [];
+
 /** Everything one message changed, to be shown when its tick comes. */
 export interface Step {
   tick: number;
@@ -30,8 +33,13 @@ export interface Timeline {
   arrive: (step: Step, now: number) => void;
   /** The tick the scene should draw at `now`, fractional; never goes backwards. */
   renderTick: (now: number) => number;
-  /** Takes the steps whose tick the render clock has reached, oldest first. */
-  release: (now: number) => Step[];
+  /**
+   * Takes the steps whose tick the render clock has reached, oldest first. With `ahead` ticks of
+   * lead it takes those that many ticks early: a bike is drawn riding from its head of tick t to
+   * the head of t + 1, so its wall has to be laid to t + 1 already, or the trail would stop short
+   * of the bike by the distance it has covered.
+   */
+  release: (now: number, ahead?: number) => Step[];
   /** `null` until the first message. */
   sample: (now: number) => Sample | null;
 }
@@ -72,11 +80,11 @@ export function createTimeline(tickMs: number): Timeline {
       steps.push(step);
     },
     renderTick,
-    release: (now) => {
-      const reached = renderTick(now);
-      const out: Step[] = [];
+    release: (now, ahead = 0) => {
+      const reached = renderTick(now) + ahead;
       const first = steps[0];
-      if (first === undefined) return out;
+      if (first === undefined) return NONE;
+      const out: Step[] = [];
       for (let i = Math.max(0, released + 1 - first.tick); i < steps.length; i += 1) {
         const step = steps[i] as Step;
         if (step.tick > reached) break;
@@ -85,7 +93,7 @@ export function createTimeline(tickMs: number): Timeline {
       }
       // Only what has been shown may go: an unreleased step carries walls nobody has laid yet.
       while (steps.length > KEPT_TICKS && (steps[0] as Step).tick < released) steps.shift();
-      return out;
+      return out.length === 0 ? NONE : out;
     },
     sample: (now) => {
       const first = steps[0];

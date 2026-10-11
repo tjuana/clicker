@@ -1,6 +1,6 @@
 import { type DeltaMessage, type FullMessage, PROTOCOL_VERSION } from '@clicker/protocol';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { clearCycles, feedCycles, useCycles } from '../src/client/cycles/store';
+import { clearCycles, feedCycles, RESYNC_RETRY_MS, useCycles } from '../src/client/cycles/store';
 
 const full = (tick: number): FullMessage => ({
   v: PROTOCOL_VERSION,
@@ -58,6 +58,31 @@ describe('feeding the round to the client', () => {
     expect(feedCycles(full(9), 600)).toBeNull();
     expect(feedCycles(delta(10), 625)).toBeNull();
     expect(useCycles.getState().model?.tick).toBe(10);
+  });
+
+  it('asks again, never faster than the retry interval, while no full comes', () => {
+    feedCycles(full(5), 0);
+    expect(feedCycles(delta(7), 250)).toBe('resync');
+
+    // Deltas keep arriving every 125 ms; none of them inside the interval asks again.
+    let asked = [250];
+    for (let t = 8, now = 375; now < 250 + 3 * RESYNC_RETRY_MS; t += 1, now += 125) {
+      if (feedCycles(delta(t), now) === 'resync') asked.push(now);
+    }
+
+    expect(asked.length).toBeGreaterThanOrEqual(3);
+    for (let i = 1; i < asked.length; i += 1) {
+      const gap = (asked[i] as number) - (asked[i - 1] as number);
+      expect(gap).toBeGreaterThanOrEqual(RESYNC_RETRY_MS);
+      // Late by at most one delta: the clock is the arrival of messages, not a timer.
+      expect(gap).toBeLessThan(RESYNC_RETRY_MS + 125);
+    }
+
+    // The answer ends the asking.
+    asked = [];
+    expect(feedCycles(full(40), 6_000)).toBeNull();
+    expect(feedCycles(delta(41), 7_800)).toBeNull();
+    expect(useCycles.getState().model?.tick).toBe(41);
   });
 
   it('ignores deltas that come before any full without asking for anything', () => {

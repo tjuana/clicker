@@ -70,6 +70,20 @@ describe('the timeline of a steady stream with jittery arrival', () => {
   });
 });
 
+describe('releasing a tick early', () => {
+  it('lays the walls of the next tick while the bike still rides towards it, and no sooner', () => {
+    const origin = 7_000;
+    const timeline = createTimeline(TICK_MS);
+    for (let tick = 0; tick < 8; tick += 1) timeline.arrive(step(tick), origin + tick * TICK_MS);
+
+    // The render clock sits exactly on tick 3: a lead of one tick takes tick 4, not tick 5.
+    const at = origin + 3 * TICK_MS + DELAY_MS;
+    expect(timeline.release(at, 1).map((each) => each.tick)).toEqual([0, 1, 2, 3, 4]);
+    expect(timeline.release(at, 1)).toEqual([]);
+    expect(timeline.release(at + TICK_MS, 1).map((each) => each.tick)).toEqual([5]);
+  });
+});
+
 describe('a burst of deltas', () => {
   /** Ten ticks on time, then ticks 10-14 held back and delivered together as tick 14 is stepped. */
   function afterBurst() {
