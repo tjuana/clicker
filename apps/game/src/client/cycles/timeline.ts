@@ -14,8 +14,13 @@ const JITTER_MS = 60;
 export const renderDelay = (tickMs: number): number => tickMs + JITTER_MS;
 /** Heads kept for interpolation. */
 export const KEPT_TICKS = 16;
-/** Arrivals the estimate of the server's clock looks back over: about eight seconds at 8 a second. */
-const WINDOW = 64;
+/**
+ * How far back the estimate of the server's clock looks. It is also how long a stale estimate can
+ * outlive a server that stalled: the old minimum is forgotten once it is this old.
+ */
+const WINDOW_MS = 4_000;
+/** Twenty ticks a second is the fastest the room runs: eighty arrivals fit in the window, and room to spare. */
+const CAPACITY = 128;
 
 /** What a frame with nothing to show gets: the scene asks sixty times a second. */
 const NONE: Step[] = [];
@@ -46,7 +51,8 @@ export interface Timeline {
    * Takes the steps whose tick the render clock has reached, oldest first. With `ahead` ticks of
    * lead it takes those that many ticks early: a bike is drawn riding from its head of tick t to
    * the head of t + 1, so its wall has to be laid to t + 1 already, or the trail would stop short
-   * of the bike by the distance it has covered.
+   * of the bike by the distance it has covered. A full is not waited for: it is the field as it
+   * stands, and before the first delta there is no clock to wait on.
    */
   release: (now: number, ahead?: number) => Step[];
   /** `null` until the first message. */
@@ -56,16 +62,22 @@ export interface Timeline {
 /**
  * Places ticks in time. A tick is stepped on the server at `base + tick × tickMs`, and the network
  * only ever adds to that, so the arrival that was delayed least — the minimum of
- * `arrival − tick × tickMs` over recent arrivals — is the best estimate of `base`. The scene then
- * draws `renderDelay` behind it, so a tick that is a little late is still on time, and a burst
+ * `arrival − tick × tickMs` over the last few seconds — is the best estimate of `base`. The scene
+ * then draws `renderDelay` behind it, so a tick that is a little late is still on time, and a burst
  * of ticks that the network held back comes out at the pace it was stepped, not all at once.
  *
- * The minimum is taken over a plain scan of 64 numbers per arrival, eight to twenty times a
- * second: a monotonic deque would be less code to get wrong, but no less to read.
+ * Only deltas place the clock. A full is sent when the countdown starts, three seconds before
+ * tick 1 is stepped, so as the minimum it put the clock a whole countdown ahead and nothing
+ * moved until it was forgotten.
+ *
+ * The minimum is taken over a plain scan of at most 128 numbers per arrival, eight to twenty times
+ * a second: a monotonic deque would be less code to get wrong, but no less to read.
  */
 export function createTimeline(tickMs: number): Timeline {
   const delay = renderDelay(tickMs);
-  const offsets = new Float64Array(WINDOW);
+  const offsets = new Float64Array(CAPACITY);
+  const arrivals = new Float64Array(CAPACITY);
+  /** Deltas seen; the clock does not start without one. */
   let seen = 0;
   let base = 0;
   /** Steps in tick order with no gaps: the model refuses anything else before it gets here. */
@@ -75,18 +87,27 @@ export function createTimeline(tickMs: number): Timeline {
   let latest = Number.NEGATIVE_INFINITY;
 
   const renderTick = (now: number): number => {
-    if (seen === 0) return Number.NEGATIVE_INFINITY;
-    latest = Math.max(latest, (now - base - delay) / tickMs);
+    const newest = steps.at(-1);
+    if (seen === 0 || newest === undefined) return Number.NEGATIVE_INFINITY;
+    // Never past the newest tick there is. A clock that ran ahead of the data, as one does after
+    // a server stall until the old minimum is forgotten, would otherwise stay ahead for as long
+    // as it was: it cannot go back, so the bike would stand still while real time caught up.
+    latest = Math.max(latest, Math.min((now - base - delay) / tickMs, newest.tick));
     return latest;
   };
 
   return {
     arrive: (step, now) => {
-      offsets[seen % WINDOW] = now - step.tick * tickMs;
-      seen += 1;
-      base = Number.POSITIVE_INFINITY;
-      for (let i = 0; i < Math.min(seen, WINDOW); i += 1)
-        base = Math.min(base, offsets[i] as number);
+      if (!step.reset) {
+        offsets[seen % CAPACITY] = now - step.tick * tickMs;
+        arrivals[seen % CAPACITY] = now;
+        seen += 1;
+        base = Number.POSITIVE_INFINITY;
+        for (let i = 0; i < Math.min(seen, CAPACITY); i += 1) {
+          if (now - (arrivals[i] as number) <= WINDOW_MS)
+            base = Math.min(base, offsets[i] as number);
+        }
+      }
       steps.push(step);
     },
     renderTick,
@@ -97,7 +118,7 @@ export function createTimeline(tickMs: number): Timeline {
       const out: Step[] = [];
       for (let i = Math.max(0, released + 1 - first.tick); i < steps.length; i += 1) {
         const step = steps[i] as Step;
-        if (step.tick > reached) break;
+        if (step.tick > reached && !step.reset) break;
         out.push(step);
         released = step.tick;
       }

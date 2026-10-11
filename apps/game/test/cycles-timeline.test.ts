@@ -20,6 +20,11 @@ function step(tick: number): Step {
   };
 }
 
+/** The `full` of a tick: everything laid at once, the scene clears before it. */
+function reset(tick: number): Step {
+  return { ...step(tick), walls: [{ kind: 'put', cell: tick, slot: 1, from: -1 }], reset: true };
+}
+
 /** Jitter without a random generator: a fixed walk through [-30, 30] that never repeats at once. */
 function jitter(tick: number): number {
   return ((tick * 37) % 61) - 30;
@@ -96,7 +101,7 @@ describe('a burst of deltas', () => {
     return { timeline, arrival };
   }
 
-  it('is released on the schedule the ticks were stepped on, not all at once on arrival', () => {
+  it('releases the ticks that fell due while the network held them together, in order, and the rest as each falls due', () => {
     const { timeline, arrival } = afterBurst();
 
     // Tick 14 was stepped just now. Ticks 10 to 12 were due while the network held them; 13 and 14
@@ -232,4 +237,102 @@ describe('a scene that draws while the ticks are still arriving', () => {
       expect(Math.max(...steps)).toBeLessThan(smooth * 2);
     },
   );
+});
+
+describe('a full that comes long before the first delta', () => {
+  const FRAME_MS = 16;
+  const LATENCY_MS = 40;
+  const COUNTDOWN_MS = 3_000;
+  const origin = 10_000;
+  const goAt = origin + COUNTDOWN_MS;
+
+  /**
+   * What the room sends: the full of tick 0 as the countdown starts, then the first delta a tick
+   * after the countdown ends. Frames run from the countdown on; each gives the scene what it
+   * takes and notes whether the bike is between two ticks or held on one.
+   */
+  function countdown(speed: number) {
+    const tickMs = 1000 / speed;
+    const timeline = createTimeline(tickMs);
+    timeline.arrive(reset(0), origin + LATENCY_MS);
+    const frames: Array<{
+      now: number;
+      delta: number;
+      released: number[];
+      place: number;
+      held: boolean;
+    }> = [];
+    let next = 1;
+    for (let now = origin + LATENCY_MS; now < goAt + 20_000; now += FRAME_MS) {
+      while (goAt + next * tickMs + LATENCY_MS <= now) {
+        timeline.arrive(step(next), goAt + next * tickMs + LATENCY_MS);
+        next += 1;
+      }
+      const released = timeline.release(now, 1).map((each) => each.tick);
+      const sample = timeline.sample(now);
+      if (sample === null) continue;
+      const from = sample.from.get(1)?.cell as number;
+      const to = sample.to.get(1)?.cell as number;
+      frames.push({
+        now,
+        delta: next - 1,
+        released,
+        place: from + (to - from) * sample.alpha,
+        held: from === to,
+      });
+    }
+    return { frames, smooth: FRAME_MS / tickMs };
+  }
+
+  it('lays the spawn walls at once, during the countdown, not when a clock says so', () => {
+    const { frames } = countdown(12);
+
+    expect(frames[0]?.released).toEqual([0]);
+    expect(frames[0]?.now).toBeLessThan(goAt);
+  });
+
+  it.each([8, 12, 16, 20])('rides smoothly from the third delta on at speed %i', (speed) => {
+    const { frames, smooth } = countdown(speed);
+
+    const riding = frames.filter((frame) => frame.delta >= 3);
+    expect(riding.length).toBeGreaterThan(1_000);
+    expect(riding.filter((frame) => frame.held)).toEqual([]);
+    const steps = riding.slice(1).map((frame, index) => frame.place - (riding[index]?.place ?? 0));
+    expect(Math.min(...steps)).toBeGreaterThan(smooth / 2);
+    expect(Math.max(...steps)).toBeLessThan(smooth * 2);
+  });
+});
+
+describe('a server that stalls for a long time', () => {
+  const FRAME_MS = 16;
+  const LATENCY_MS = 40;
+  const STALL_MS = 10_000;
+  const origin = 10_000;
+
+  it('is found again within a second of the first tick after it, not after sixty-four of them', () => {
+    const timeline = createTimeline(TICK_MS);
+    const resumeAt = origin + 40 * TICK_MS + STALL_MS + LATENCY_MS;
+    const arrival = (tick: number) =>
+      origin + tick * TICK_MS + LATENCY_MS + (tick < 40 ? 0 : STALL_MS);
+    const places: Array<{ now: number; place: number; held: boolean }> = [];
+    let next = 0;
+    for (let now = origin; now < resumeAt + 15_000; now += FRAME_MS) {
+      while (arrival(next) <= now) {
+        timeline.arrive(step(next), arrival(next));
+        next += 1;
+      }
+      timeline.release(now, 1);
+      const sample = timeline.sample(now);
+      if (sample === null || now < resumeAt + 1_000) continue;
+      const from = sample.from.get(1)?.cell as number;
+      const to = sample.to.get(1)?.cell as number;
+      places.push({ now, place: from + (to - from) * sample.alpha, held: from === to });
+    }
+
+    expect(places.length).toBeGreaterThan(800);
+    expect(places.filter((each) => each.held)).toEqual([]);
+    const steps = places.slice(1).map((each, index) => each.place - (places[index]?.place ?? 0));
+    expect(Math.min(...steps)).toBeGreaterThan(FRAME_MS / TICK_MS / 2);
+    expect(Math.max(...steps)).toBeLessThan((FRAME_MS / TICK_MS) * 2);
+  });
 });
