@@ -190,6 +190,23 @@ Commit: `test(app): play a light-cycle round against bots end to end`.
 
 ---
 
+## What execution taught
+
+- **The respawn rule in Task 2 was wrong.** The rules place a respawned bike and ride its first
+  step in the same tick, so a delta names only the head; the spawn cell arrives only as a second
+  cell of that slot in `cells`. The replay property test caught it at the first respawn. The model
+  lays the spawn cell with `from = -1` and the head from it.
+- **Walls are released one tick early.** The scene draws a bike riding from head(t) toward
+  head(t+1); releasing tick t's walls only when the render clock reaches t left the trail a cell
+  short of the bike. `release(now, ahead = 1)` reproduces the prototype.
+- **Task 7 had no short-round mechanism to follow.** `ROUND_MS` existed only in the Vitest
+  bindings. The end-to-end server gets `ROUND_MS: '10000'` through `webServer.env`, which the
+  Cloudflare Vite plugin reads only with `CLOUDFLARE_INCLUDE_PROCESS_ENV: 'true'`. Ten seconds is
+  the clicker's default, so its tests are unchanged; a test asserts the timer reads under a minute,
+  so a lost override fails fast and by name.
+- **Never stress the owner's machine.** A subagent ran twelve busy loops to probe flakiness and put
+  the laptop into a thermal-emergency sleep. Briefs now forbid it.
+
 ## Verifying the whole plan
 
 1. The gate, green.
