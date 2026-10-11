@@ -1,11 +1,20 @@
-import { PROTOCOL_VERSION, parseServerMessage } from '@clicker/protocol';
+import { type ClientMessage, PROTOCOL_VERSION, parseServerMessage } from '@clicker/protocol';
 import PartySocket from 'partysocket';
+import { clearCycles, feedCycles } from './cycles/store';
 import { hostKeyFor, playerId } from './room-link';
 import { useClient } from './store';
+
+type Message<T extends ClientMessage['type']> = Extract<ClientMessage, { type: T }>;
 
 export interface Connection {
   start: () => void;
   click: () => void;
+  turn: (side: 'left' | 'right') => void;
+  boost: () => void;
+  setMode: (mode: Message<'setMode'>['mode']) => void;
+  setSpeed: (speed: Message<'setSpeed'>['speed']) => void;
+  addBot: () => void;
+  removeBot: () => void;
   close: () => void;
 }
 
@@ -17,6 +26,8 @@ export function connect(roomId: string, name: string): Connection {
   });
 
   let closedByUs = false;
+  // A round from another room must not linger under this one.
+  clearCycles();
 
   const send = (message: unknown): boolean => {
     // Clicks can't be queued during a disconnect: they'd all arrive in a burst after the round ends.
@@ -50,7 +61,18 @@ export function connect(roomId: string, name: string): Connection {
     if (message.type === 'welcome') useClient.getState().welcome(message.you, message.isHost);
     if (message.type === 'snapshot') useClient.getState().receive(message);
     if (message.type === 'error') useClient.getState().fail(message.code);
+    if (message.type === 'full' || message.type === 'delta') {
+      if (feedCycles(message, performance.now()) === 'resync') {
+        send({ v: PROTOCOL_VERSION, type: 'resync' });
+      }
+    }
   });
+
+  /** A lobby setting or a move: the previous error is stale the moment the player tries again. */
+  const command = (message: Record<string, unknown>) => {
+    useClient.getState().clearError();
+    send({ v: PROTOCOL_VERSION, ...message });
+  };
 
   return {
     start: () => {
@@ -63,6 +85,12 @@ export function connect(roomId: string, name: string): Connection {
         useClient.getState().countClick();
       }
     },
+    turn: (side) => command({ type: 'input', input: { type: 'turn', side } }),
+    boost: () => command({ type: 'input', input: { type: 'boost' } }),
+    setMode: (mode) => command({ type: 'setMode', mode }),
+    setSpeed: (speed) => command({ type: 'setSpeed', speed }),
+    addBot: () => command({ type: 'addBot' }),
+    removeBot: () => command({ type: 'removeBot' }),
     close: () => {
       closedByUs = true;
       socket.close();
