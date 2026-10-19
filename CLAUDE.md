@@ -107,6 +107,9 @@ repository and every agent has them:
   look at the picture before calling visual work done.
 - **`prototype-before-planning`** — run the risky seam in a scratch project before writing a plan
   about it. Every command in a plan should have been executed once already.
+- **`review-and-merge`** — a finished branch gets an independent review, every finding is reproduced
+  before it is fixed, and the merge commit describes what changed. Merging is routine; pushing to
+  `main` deploys to production and stays the owner's call.
 
 A skill is written only after something has actually gone wrong that way; a procedure invented in
 advance teaches the wrong lesson. Repeatable chores live as commands in

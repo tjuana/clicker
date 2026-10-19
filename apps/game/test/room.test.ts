@@ -1,7 +1,7 @@
 import { runInDurableObject, SELF } from 'cloudflare:test';
 import { env } from 'cloudflare:workers';
 import type { RoomState } from '@clicker/game';
-import { generateId } from '@clicker/protocol';
+import { generateId, PROTOCOL_VERSION } from '@clicker/protocol';
 import { describe, expect, it } from 'vitest';
 import { connect, isError, isSnapshot, isWelcome, type Snapshot } from './support';
 
@@ -37,13 +37,13 @@ describe('room over websocket', () => {
     client.send({ type: 'join', playerId, name: 'Аня' });
 
     const welcome = await client.waitFor(isWelcome);
-    expect(welcome).toEqual({ v: 1, type: 'welcome', you: '1', isHost: false });
+    expect(welcome).toEqual({ v: PROTOCOL_VERSION, type: 'welcome', you: '1', isHost: false });
 
     const snapshot = await client.waitFor(isSnapshot);
     expect(snapshot.phase).toBe('lobby');
-    expect(snapshot.players).toEqual([{ id: '1', name: 'Аня', connected: true }]);
+    expect(snapshot.players).toEqual([{ id: '1', name: 'Аня', connected: true, bot: false }]);
     // The score lives in the mode's slot now: the room's player list knows nothing about clicks.
-    expect(snapshot.data.scores).toEqual({ '1': 0 });
+    expect(snapshot.data).toEqual({ scores: { '1': 0 }, results: null });
     expect(JSON.stringify(snapshot)).not.toContain(playerId);
 
     client.close();
@@ -184,7 +184,7 @@ describe('room over websocket', () => {
         // Straight onto the instance, so this frame bypasses the helper and carries its own version.
         await instance.onMessage(
           connection,
-          JSON.stringify({ v: 1, type: 'input', input: { type: 'click' } }),
+          JSON.stringify({ v: PROTOCOL_VERSION, type: 'input', input: { type: 'click' } }),
         );
       }
 
@@ -202,6 +202,16 @@ describe('room over websocket', () => {
 
     const error = await client.waitFor(isError);
     expect(error.code).toBe('invalid_message');
+
+    client.close();
+  });
+
+  it('answers a tab still running version 1 with bad_version', async () => {
+    const client = await connect(generateId());
+    client.sendRaw(JSON.stringify({ v: 1, type: 'join', playerId: generateId(), name: 'Аня' }));
+
+    const error = await client.waitFor(isError);
+    expect(error.code).toBe('bad_version');
 
     client.close();
   });

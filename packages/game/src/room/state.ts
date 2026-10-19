@@ -1,12 +1,10 @@
-import type { ClickerState } from '../modes/clicker/state';
+import type { ModeId, ModeState } from '../modes';
 import { createClickerState } from '../modes/clicker/state';
+import { DEFAULT_SPEED, type Speed } from '../modes/cycles/config';
 
 export type Phase = 'lobby' | 'countdown' | 'running' | 'results';
 
 export type Notice = 'round_aborted';
-
-/** Only one mode exists today; the union is where the next one is added. */
-export type ModeId = 'clicker';
 
 /** Generic room player. Nothing about a specific game belongs here. */
 export interface Player {
@@ -16,6 +14,8 @@ export interface Player {
   /** Ids of the open connections of this player. */
   connectionIds: string[];
   disconnectedAt: number | null;
+  /** Seated by the host, not by a connection: it has none, and so never expires. */
+  bot: boolean;
 }
 
 export interface Round {
@@ -24,7 +24,6 @@ export interface Round {
 }
 
 export interface RoomState {
-  /** Chosen when the room is created and never changes afterwards. */
   mode: ModeId;
   phase: Phase;
   hostKey: string | null;
@@ -35,8 +34,10 @@ export interface RoomState {
   nextSeq: number;
   round: Round | null;
   notice: Notice | null;
+  /** The light cycles' pace. Lives here, not in the mode, so it outlasts a trip through the clicker. */
+  speed: Speed;
   /** Everything only the mode knows: scores, results, its own timers. */
-  modeState: ClickerState;
+  modeState: ModeState;
 }
 
 export function createRoomState(): RoomState {
@@ -49,6 +50,7 @@ export function createRoomState(): RoomState {
     nextSeq: 1,
     round: null,
     notice: null,
+    speed: DEFAULT_SPEED,
     modeState: createClickerState(),
   };
 }

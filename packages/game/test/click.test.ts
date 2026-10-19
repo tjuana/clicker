@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { apply } from '../src/room/apply';
 import { createRoomState, type RoomState } from '../src/room/state';
-import { config, deepFreeze } from './support';
+import { clickerOf, config, deepFreeze } from './support';
 
 const CONFIG = config({ countdownMs: 3000, roundMs: 10000, burst: 15, clicksPerSecond: 15 });
 const GO_AT = 4000;
@@ -48,7 +48,7 @@ describe('click', () => {
       CONFIG,
     );
 
-    expect(result.state.modeState.scores['1']?.clicks).toBe(0);
+    expect(clickerOf(result.state).scores['1']?.clicks).toBe(0);
     expect(result.events).toEqual([]);
   });
 
@@ -61,7 +61,7 @@ describe('click', () => {
     );
 
     expect(result.state.phase).toBe('running');
-    expect(result.state.modeState.scores['1']).toMatchObject({ clicks: 1, lastCountedAt: GO_AT });
+    expect(clickerOf(result.state).scores['1']).toMatchObject({ clicks: 1, lastCountedAt: GO_AT });
   });
 
   it('counts a click that arrives inside the late grace window', () => {
@@ -72,7 +72,7 @@ describe('click', () => {
       CONFIG,
     );
 
-    expect(result.state.modeState.scores['1']?.clicks).toBe(1);
+    expect(clickerOf(result.state).scores['1']?.clicks).toBe(1);
   });
 
   it('ignores a click that arrives after the grace window', () => {
@@ -84,7 +84,7 @@ describe('click', () => {
     );
 
     expect(result.state.phase).toBe('results');
-    expect(result.state.modeState.results?.[0]?.clicks).toBe(0);
+    expect(clickerOf(result.state).results?.[0]?.clicks).toBe(0);
   });
 
   it('lets a burst of 15 clicks through at the same instant and stops the 16th', () => {
@@ -92,7 +92,7 @@ describe('click', () => {
 
     const state = clickTimes(started(), times);
 
-    expect(state.modeState.scores['1']?.clicks).toBe(15);
+    expect(clickerOf(state).scores['1']?.clicks).toBe(15);
   });
 
   it('refills the bucket over time', () => {
@@ -103,7 +103,7 @@ describe('click', () => {
       CONFIG,
     );
 
-    expect(later.state.modeState.scores['1']?.clicks).toBe(16);
+    expect(clickerOf(later.state).scores['1']?.clicks).toBe(16);
   });
 
   it('refills at 15 clicks per second, no faster', () => {
@@ -122,8 +122,8 @@ describe('click', () => {
       CONFIG,
     );
 
-    expect(tooSoon.state.modeState.scores['1']?.clicks).toBe(CONFIG.burst);
-    expect(inTime.state.modeState.scores['1']?.clicks).toBe(CONFIG.burst + 1);
+    expect(clickerOf(tooSoon.state).scores['1']?.clicks).toBe(CONFIG.burst);
+    expect(clickerOf(inTime.state).scores['1']?.clicks).toBe(CONFIG.burst + 1);
   });
 
   it('returns the state untouched when the click is refused', () => {
@@ -142,7 +142,7 @@ describe('click', () => {
 
   it('does not let a click stamped in the past rewind the bucket anchor', () => {
     const spent = drained();
-    expect(spent.modeState.scores['1']?.clicks).toBe(CONFIG.burst);
+    expect(clickerOf(spent).scores['1']?.clicks).toBe(CONFIG.burst);
 
     // A message timestamped in the past: the anchor must not move backwards.
     const past = apply(
@@ -156,7 +156,7 @@ describe('click', () => {
       Array.from({ length: CONFIG.burst }, () => GO_AT + 1),
     );
 
-    expect(after.modeState.scores['1']?.clicks).toBe(CONFIG.burst);
+    expect(clickerOf(after).scores['1']?.clicks).toBe(CONFIG.burst);
   });
 
   it('gives no more than a burst to a player who idled for ten seconds', () => {
@@ -166,7 +166,7 @@ describe('click', () => {
       Array.from({ length: CONFIG.burst + 1 }, () => GO_AT + 10_000),
     );
 
-    expect(state.modeState.scores['1']?.clicks).toBe(CONFIG.burst * 2);
+    expect(clickerOf(state).scores['1']?.clicks).toBe(CONFIG.burst * 2);
   });
 
   it('refuses a click from an unknown player', () => {

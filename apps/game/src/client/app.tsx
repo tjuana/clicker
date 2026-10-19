@@ -1,7 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { type Connection, connect } from './net';
 import { roomIdFromPath, savedName, saveName, takeHostKeyFromHash } from './room-link';
 import { Arena } from './screens/arena';
+import { CyclesArena } from './screens/cycles-arena';
+import { CyclesResults } from './screens/cycles-results';
+import type { RoomSettings } from './screens/host-settings';
 import { Join } from './screens/join';
 import { Landing } from './screens/landing';
 import { Lobby } from './screens/lobby';
@@ -70,6 +73,17 @@ function Room({ roomId, onLeave }: { roomId: string; onLeave: () => void }) {
   const changeName = useCallback(() => setShowJoin(true), []);
   const start = useCallback(() => connectionRef.current?.start(), []);
   const click = useCallback(() => connectionRef.current?.click(), []);
+  const turn = useCallback((side: 'left' | 'right') => connectionRef.current?.turn(side), []);
+  const boost = useCallback(() => connectionRef.current?.boost(), []);
+  const settings = useMemo<RoomSettings>(
+    () => ({
+      setMode: (mode) => connectionRef.current?.setMode(mode),
+      setSpeed: (speed) => connectionRef.current?.setSpeed(speed),
+      addBot: () => connectionRef.current?.addBot(),
+      removeBot: () => connectionRef.current?.removeBot(),
+    }),
+    [],
+  );
 
   if (showJoin) return <Join onEnter={enter} />;
 
@@ -84,14 +98,21 @@ function Room({ roomId, onLeave }: { roomId: string; onLeave: () => void }) {
           isHost={isHost}
           you={you}
           snapshot={snapshot}
+          settings={settings}
           onStart={start}
           onChangeName={changeName}
           onLeave={onLeave}
         />
       ) : snapshot.phase === 'countdown' || snapshot.phase === 'running' ? (
-        <Arena onClick={click} />
+        snapshot.mode === 'cycles' ? (
+          <CyclesArena onTurn={turn} onBoost={boost} />
+        ) : (
+          <Arena onClick={click} />
+        )
+      ) : snapshot.mode === 'cycles' ? (
+        <CyclesResults settings={settings} onStart={start} onLeave={onLeave} />
       ) : (
-        <Results onStart={start} onLeave={onLeave} />
+        <Results settings={settings} onStart={start} onLeave={onLeave} />
       )}
     </>
   );

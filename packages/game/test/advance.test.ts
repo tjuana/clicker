@@ -3,7 +3,7 @@ import { emptyScore } from '../src/modes/clicker/state';
 import { advance } from '../src/room/advance';
 import { apply } from '../src/room/apply';
 import type { RoomState } from '../src/room/state';
-import { config, deepFreeze, player, room } from './support';
+import { clickerOf, config, deepFreeze, player, room } from './support';
 
 const CONFIG = config({
   countdownMs: 3000,
@@ -56,7 +56,7 @@ describe('advance', () => {
 
     expect(result.state.phase).toBe('results');
     expect(result.state.round).toBeNull();
-    expect(result.state.modeState.results).toEqual([
+    expect(clickerOf(result.state).results).toEqual([
       { publicId: '1', name: 'Аня', clicks: 0, rank: 1 },
     ]);
     expect(result.phases).toEqual(['results']);

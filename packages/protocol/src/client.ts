@@ -1,11 +1,16 @@
+import { SPEEDS } from '@clicker/game';
 import * as v from 'valibot';
 import { ID_PATTERN } from './ids';
 
 /** Anything longer never reaches the parser. */
 export const MAX_MESSAGE_BYTES = 1024;
 export const MAX_NAME_LENGTH = 20;
-/** Bumped when the wire format changes in a way an old client cannot read. */
-export const PROTOCOL_VERSION = 1;
+/**
+ * Bumped when the wire format changes in a way an old client cannot read. 2: players[] in the
+ * snapshot gained a required `bot`, which a strict version-1 client rejects; it now gets
+ * `bad_version` and reloads instead of silently dropping every snapshot.
+ */
+export const PROTOCOL_VERSION = 2;
 
 const encoder = new TextEncoder();
 
@@ -29,6 +34,12 @@ const nameSchema = v.pipe(
 /** The clicker's input. What it means is the mode's business, not the room's. */
 export const clickerInputSchema = v.strictObject({ type: v.literal('click') });
 
+/** The light cycles' input: a turn to a side, or a boost. */
+export const cyclesInputSchema = v.variant('type', [
+  v.strictObject({ type: v.literal('turn'), side: v.picklist(['left', 'right']) }),
+  v.strictObject({ type: v.literal('boost') }),
+]);
+
 export const joinSchema = v.strictObject({
   v: versionSchema,
   type: v.literal('join'),
@@ -42,10 +53,35 @@ export const startSchema = v.strictObject({ v: versionSchema, type: v.literal('s
 export const inputSchema = v.strictObject({
   v: versionSchema,
   type: v.literal('input'),
-  input: clickerInputSchema,
+  input: v.union([clickerInputSchema, cyclesInputSchema]),
 });
 
-export const clientMessageSchema = v.variant('type', [joinSchema, startSchema, inputSchema]);
+export const setModeSchema = v.strictObject({
+  v: versionSchema,
+  type: v.literal('setMode'),
+  mode: v.picklist(['clicker', 'cycles']),
+});
+/** One of the speeds the rules offer; a number outside the list never reaches them. */
+export const setSpeedSchema = v.strictObject({
+  v: versionSchema,
+  type: v.literal('setSpeed'),
+  speed: v.picklist(SPEEDS),
+});
+export const addBotSchema = v.strictObject({ v: versionSchema, type: v.literal('addBot') });
+export const removeBotSchema = v.strictObject({ v: versionSchema, type: v.literal('removeBot') });
+/** The client noticed a gap in tick numbers and asks for the whole state again. */
+export const resyncSchema = v.strictObject({ v: versionSchema, type: v.literal('resync') });
+
+export const clientMessageSchema = v.variant('type', [
+  joinSchema,
+  startSchema,
+  inputSchema,
+  setModeSchema,
+  setSpeedSchema,
+  addBotSchema,
+  removeBotSchema,
+  resyncSchema,
+]);
 
 export type ClientMessage = v.InferOutput<typeof clientMessageSchema>;
 export type JoinMessage = v.InferOutput<typeof joinSchema>;

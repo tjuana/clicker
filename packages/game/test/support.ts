@@ -1,4 +1,7 @@
-import { type ClickerScore, emptyScore } from '../src/modes/clicker/state';
+import { type ClickerScore, type ClickerState, emptyScore } from '../src/modes/clicker/state';
+import type { CyclesState } from '../src/modes/cycles/state';
+import { apply } from '../src/room/apply';
+import type { Command } from '../src/room/commands';
 import { DEFAULT_CONFIG, type GameConfig } from '../src/room/config';
 import { createRoomState, type Player, type RoomState } from '../src/room/state';
 
@@ -21,6 +24,7 @@ export function player(overrides: Partial<Player> & { publicId: string }): Playe
     name: 'player',
     connectionIds: ['conn-1'],
     disconnectedAt: null,
+    bot: false,
     ...overrides,
   };
 }
@@ -32,4 +36,35 @@ export function score(overrides: Partial<ClickerScore> = {}): ClickerScore {
 
 export function room(overrides: Partial<RoomState> = {}): RoomState {
   return { ...createRoomState(), ...overrides };
+}
+
+/** The clicker's slice of a room, for tests that read scores: `modeState` is a union of modes. */
+export function clickerOf(state: RoomState): ClickerState {
+  if (state.mode !== 'clicker') throw new Error(`expected a clicker room, got ${state.mode}`);
+  return state.modeState as ClickerState;
+}
+
+/** The light cycles' slice of a room. */
+export function cyclesOf(state: RoomState): CyclesState {
+  if (state.mode !== 'cycles') throw new Error(`expected a cycles room, got ${state.mode}`);
+  return state.modeState as CyclesState;
+}
+
+/** A lobby with a host ("host", publicId 1) and nobody else. Every later publicId follows from 2. */
+export function lobbyWithHost(): RoomState {
+  return apply(
+    createRoomState(),
+    { type: 'join', playerId: 'host', connectionId: 'c-host', name: 'Host', hostKey: 'key' },
+    0,
+  ).state;
+}
+
+/** Runs commands one after another at the same moment and returns the last state. */
+export function run(
+  state: RoomState,
+  commands: Command[],
+  now = 0,
+  settings = config(),
+): RoomState {
+  return commands.reduce((current, command) => apply(current, command, now, settings).state, state);
 }
