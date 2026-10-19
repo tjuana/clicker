@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { browserStorage, type Memory } from '../audio/mute';
-import { createLatency, type Readout } from './latency';
+import { createLatency, type Readout, type Spot } from './latency';
 
 const KEY = 'clicker.turnLatency';
 
@@ -27,7 +27,7 @@ export function createLatencyView(storage: Memory | null) {
 
   return create<LatencyView>((set, get) => ({
     shown: read(),
-    readout: { server: null, screen: null },
+    readout: { server: null, screen: null, overshoot: null },
     toggle: () => {
       const shown = !get().shown;
       set({ shown });
@@ -51,13 +51,17 @@ export function turnSent(side: 'left' | 'right', now: number): void {
   tracker.sent(side, now);
 }
 
-/** The scene calls this on every frame: it costs a comparison unless a turn was just measured. */
-export function seenOnScreen(dir: number | null, now: number): void {
-  if (tracker.observeScreen(dir, now) !== null) publish();
+/**
+ * The scene calls this on every frame with where it drew the player's bike, so it takes numbers
+ * and costs a comparison unless a turn was just measured.
+ */
+export function seenOnScreen(dir: number | null, now: number, x: number, z: number): void {
+  if (tracker.observeScreen(dir, now, x, z) !== null) publish();
 }
 
-export function seenByServer(dir: number | null, now: number): void {
-  if (tracker.observeServer(dir, now) !== null) publish();
+/** `corner`: the cell the bike rode from in this message, if the message is a step from a known one. */
+export function seenByServer(dir: number | null, now: number, corner: Spot | null = null): void {
+  if (tracker.observeServer(dir, now, corner) !== null) publish();
 }
 
 export function forgetTurns(): void {

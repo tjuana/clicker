@@ -19,7 +19,7 @@ describe('how long a turn takes to show', () => {
 
   it('says nothing before a turn has been seen', () => {
     ride(0);
-    expect(latency.read()).toEqual({ server: null, screen: null });
+    expect(latency.read()).toEqual({ server: null, screen: null, overshoot: null });
   });
 
   it('measures a turn from its sending to each end where the new direction first shows', () => {
@@ -34,6 +34,8 @@ describe('how long a turn takes to show', () => {
     expect(latency.read()).toEqual({
       server: { last: 142, median: 142 },
       screen: { last: 318, median: 318 },
+      // Nobody said where the bike was seen, or where it turned: there is nothing to count.
+      overshoot: null,
     });
   });
 
@@ -177,9 +179,167 @@ describe('how long a turn takes to show', () => {
 
     latency.reset();
 
-    expect(latency.read()).toEqual({ server: null, screen: null });
+    expect(latency.read()).toEqual({ server: null, screen: null, overshoot: null });
     // The turn that was waiting is not there to be matched by whatever comes first.
     expect(latency.observeServer(2, 150)).toBeNull();
     expect(latency.observeServer(3, 200)).toBeNull();
+  });
+
+  /** A place on the field, in cells, on a straight going east (`dir` 0) or south (anything else). */
+  const spot = (dir: number, along: number): { x: number; z: number } =>
+    dir === 0 ? { x: along, z: 5.5 } : { x: 5.5, z: along };
+
+  /** The screen draws the player's bike pointing `dir` at `at`, as of `now`. */
+  const seenAt = (dir: number, at: { x: number; z: number }, now = 0): void => {
+    latency.observeScreen(dir, now, at.x, at.z);
+  };
+
+  describe('how many cells late the turn lands', () => {
+    it.each([
+      ['east', 0, { x: 10.3, z: 5.5 }, { x: 12.5, z: 5.5 }, 2.2],
+      ['south', 1, { x: 4.5, z: 10.2 }, { x: 4.5, z: 13.5 }, 3.3],
+      ['west', 2, { x: 20.4, z: 3.5 }, { x: 17.5, z: 3.5 }, 2.9],
+      ['north', 3, { x: 6.5, z: 20.2 }, { x: 6.5, z: 18.5 }, 1.7],
+    ])('counts them along the way the bike was going: %s', (_, dir, saw, corner, cells) => {
+      ride(dir);
+      seenAt(dir, saw);
+      latency.sent('right', 1_000);
+
+      latency.observeServer((dir + 1) & 3, 1_090, corner);
+
+      expect(latency.read().overshoot?.last).toBeCloseTo(cells, 9);
+      expect(latency.read().overshoot?.median).toBeCloseTo(cells, 9);
+    });
+
+    it('is one cell when the bike was seen at the middle of the cell before the corner', () => {
+      ride(0);
+      seenAt(0, { x: 10.5, z: 5.5 });
+      latency.sent('left', 1_000);
+
+      latency.observeServer(3, 1_100, { x: 11.5, z: 5.5 });
+
+      expect(latency.read().overshoot?.last).toBeCloseTo(1, 9);
+    });
+
+    it('is a little less than nothing when the corner was a hair behind what was seen', () => {
+      ride(0);
+      // Drawn just past the middle of its cell on the way to the next, and turned in that cell.
+      seenAt(0, { x: 10.7, z: 5.5 });
+      latency.sent('right', 1_000);
+
+      latency.observeServer(1, 1_100, { x: 10.5, z: 5.5 });
+
+      expect(latency.read().overshoot?.last).toBeCloseTo(-0.2, 9);
+    });
+
+    it('takes the place the bike was drawn at when the turn was sent, not one drawn after', () => {
+      ride(0);
+      seenAt(0, { x: 9.2, z: 5.5 }, 940);
+      seenAt(0, { x: 9.9, z: 5.5 }, 990);
+      latency.sent('right', 1_000);
+      // Frames after the press say nothing about where it was when the turn was sent.
+      seenAt(0, { x: 10.6, z: 5.5 }, 1_050);
+
+      latency.observeServer(1, 1_090, { x: 12.5, z: 5.5 });
+
+      expect(latency.read().overshoot?.last).toBeCloseTo(2.6, 9);
+    });
+
+    it('still gives the time when there was no corner to measure to, as from a full', () => {
+      ride(0);
+      seenAt(0, { x: 10.5, z: 5.5 });
+      latency.sent('right', 1_000);
+
+      expect(latency.observeServer(1, 1_090)).toBe(90);
+
+      expect(latency.read().server?.last).toBe(90);
+      expect(latency.read().overshoot).toBeNull();
+    });
+
+    it('still gives the time when no bike was on screen to see, and counts the next turn alone', () => {
+      ride(0);
+      latency.observeScreen(null, 900);
+      latency.sent('right', 1_000);
+      latency.observeServer(1, 1_090, { x: 12.5, z: 5.5 });
+
+      expect(latency.read().server?.last).toBe(90);
+      expect(latency.read().overshoot).toBeNull();
+
+      seenAt(1, { x: 5.5, z: 10.4 }, 1_200);
+      latency.sent('left', 1_300);
+      latency.observeServer(0, 1_400, { x: 5.5, z: 12.5 });
+      expect(latency.read().overshoot?.last).toBeCloseTo(2.1, 9);
+    });
+
+    it('leaves out a turn sent before the one ahead of it had shown: it is not on a straight', () => {
+      ride(0);
+      seenAt(0, { x: 10.3, z: 5.5 });
+      latency.sent('right', 1_000);
+      // The screen has not turned yet, so the second is sent with the bike still drawn going east
+      // while the server already has it going south.
+      seenAt(0, { x: 10.8, z: 5.5 }, 1_060);
+      latency.sent('right', 1_060);
+
+      latency.observeServer(1, 1_130, { x: 12.5, z: 5.5 });
+      latency.observeServer(2, 1_255, { x: 12.5, z: 7.5 });
+
+      expect(latency.read().server?.last).toBe(195);
+      expect(latency.read().overshoot).toEqual({
+        last: expect.closeTo(2.2, 9),
+        median: expect.closeTo(2.2, 9),
+      });
+    });
+
+    it('forgets the turn that was waiting when the bike died, and the place it was seen at', () => {
+      ride(0);
+      seenAt(0, { x: 10.3, z: 5.5 });
+      latency.sent('right', 1_000);
+      latency.observeServer(null, 1_100);
+      latency.observeScreen(null, 1_300);
+
+      // It comes back going north, and the first turn it makes is counted on its own.
+      latency.observeServer(3, 1_900);
+      seenAt(3, { x: 7.5, z: 12.2 }, 2_000);
+      latency.sent('right', 2_100);
+      expect(latency.observeServer(0, 2_220, { x: 7.5, z: 11.5 })).toBe(120);
+
+      // North is the way of falling z: from 12.2 to 11.5 is 0.7 of a cell along the way.
+      expect(latency.read().overshoot?.last).toBeCloseTo(0.7, 9);
+    });
+
+    it('does not carry the place a bike was seen at over its death into the next life', () => {
+      ride(0);
+      seenAt(0, { x: 10.3, z: 5.5 });
+      latency.observeScreen(null, 1_300);
+      latency.observeServer(null, 1_100);
+      latency.observeServer(0, 1_900);
+      // No frame has drawn the new life yet: there is nothing seen to measure from.
+      latency.sent('right', 2_000);
+
+      latency.observeServer(1, 2_100, { x: 3.5, z: 5.5 });
+
+      expect(latency.read().server?.last).toBe(100);
+      expect(latency.read().overshoot).toBeNull();
+    });
+
+    it('gives the median of the last ten, and the last one on its own', () => {
+      ride(0);
+      let dir = 0;
+      let at = 0;
+      // 0.1, 0.2, ... 1.2 cells: the first two fall out of the window of ten.
+      for (let k = 1; k <= WINDOW + 2; k += 1) {
+        at += 1_000;
+        const saw = 10.5;
+        seenAt(dir, spot(dir, saw), at - 10);
+        latency.sent(dir === 0 ? 'right' : 'left', at);
+        const next = dir === 0 ? 1 : 0;
+        latency.observeServer(next, at + 50, spot(dir, saw + k / 10));
+        dir = next;
+      }
+
+      // 0.3 to 1.2: the middle two are 0.7 and 0.8.
+      expect(latency.read().overshoot?.last).toBeCloseTo(1.2, 9);
+      expect(latency.read().overshoot?.median).toBeCloseTo(0.75, 9);
+    });
   });
 });

@@ -1,6 +1,6 @@
 import { type DeltaMessage, type FullMessage, PROTOCOL_VERSION } from '@clicker/protocol';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { turnSent, useLatencyView } from '../src/client/cycles/latency-store';
+import { seenOnScreen, turnSent, useLatencyView } from '../src/client/cycles/latency-store';
 import {
   clearCycles,
   feedCycles,
@@ -324,6 +324,81 @@ describe('timing a turn on its way in', () => {
 
     clearCycles();
 
-    expect(useLatencyView.getState().readout).toEqual({ server: null, screen: null });
+    expect(useLatencyView.getState().readout).toEqual({
+      server: null,
+      screen: null,
+      overshoot: null,
+    });
+  });
+});
+
+describe('counting the cells a turn lands late', () => {
+  beforeEach(() => {
+    clearCycles();
+    useClient.setState({ you: '1' });
+  });
+
+  /**
+   * The field is ten cells across and the bike rides east along its second row: cell 12 is at
+   * x 2.5, cell 13 at 3.5, cell 14 at 4.5, all at z 1.5. A turn south at cell 13 goes on to 23.
+   */
+  const east = (cell: number, t: number): DeltaMessage => ({
+    ...delta(t),
+    cells: [cell, 1],
+    heads: [1, cell, 0, 3, 0],
+  });
+  const southFrom = (cell: number, t: number): DeltaMessage => ({
+    ...delta(t),
+    cells: [cell, 1],
+    heads: [1, cell, 1, 3, 0],
+  });
+  const overshoot = () => useLatencyView.getState().readout.overshoot?.last;
+
+  it('is the way from where the bike was drawn to the cell it rode from when it turned', () => {
+    feedCycles(full(5), 0);
+    feedCycles(east(13, 6), 125);
+    // Drawn on its way to the middle of cell 13, which is where it turns, and pressed there.
+    seenOnScreen(0, 130, 3.1, 1.5);
+    turnSent('right', 140);
+
+    feedCycles(southFrom(23, 7), 250);
+
+    expect(overshoot()).toBeCloseTo(0.4, 9);
+  });
+
+  it('does not depend on how far the bike went in the new direction: a boost step is no different', () => {
+    feedCycles(full(5), 0);
+    feedCycles(east(13, 6), 125);
+    seenOnScreen(0, 130, 3.1, 1.5);
+    turnSent('right', 140);
+
+    // Two cells south in the one tick, from cell 13 to 33: the corner is still cell 13.
+    feedCycles(southFrom(33, 7), 250);
+
+    expect(overshoot()).toBeCloseTo(0.4, 9);
+  });
+
+  it('counts from the cell it rode from, not the one before, when the way up to it was boosted', () => {
+    feedCycles(full(5), 0);
+    // Two cells east in a tick, from 12 to 14.
+    feedCycles(east(14, 6), 125);
+    seenOnScreen(0, 130, 4.1, 1.5);
+    turnSent('right', 140);
+
+    feedCycles(southFrom(24, 7), 250);
+
+    expect(overshoot()).toBeCloseTo(0.4, 9);
+  });
+
+  it('gives the time but no cells when the change is first seen in a full, which has no step', () => {
+    feedCycles(full(5), 0);
+    seenOnScreen(0, 130, 2.9, 1.5);
+    turnSent('right', 140);
+
+    const [bike] = full(8).bikes;
+    feedCycles({ ...full(8), bikes: [{ ...(bike as NonNullable<typeof bike>), dir: 1 }] }, 380);
+
+    expect(useLatencyView.getState().readout.server?.last).toBe(240);
+    expect(overshoot()).toBeUndefined();
   });
 });
