@@ -1,5 +1,6 @@
 import { type ClientMessage, PROTOCOL_VERSION, parseServerMessage } from '@clicker/protocol';
 import PartySocket from 'partysocket';
+import { turnSent } from './cycles/latency-store';
 import { clearCycles, feedCycles, followPhase } from './cycles/store';
 import { hostKeyFor, playerId } from './room-link';
 import { useClient } from './store';
@@ -72,9 +73,9 @@ export function connect(roomId: string, name: string): Connection {
   });
 
   /** A lobby setting or a move: the previous error is stale the moment the player tries again. */
-  const command = (message: Record<string, unknown>) => {
+  const command = (message: Record<string, unknown>): boolean => {
     useClient.getState().clearError();
-    send({ v: PROTOCOL_VERSION, ...message });
+    return send({ v: PROTOCOL_VERSION, ...message });
   };
 
   return {
@@ -88,7 +89,12 @@ export function connect(roomId: string, name: string): Connection {
         useClient.getState().countClick();
       }
     },
-    turn: (side) => command({ type: 'input', input: { type: 'turn', side } }),
+    turn: (side) => {
+      // A turn that never left the socket has no trip to time.
+      if (command({ type: 'input', input: { type: 'turn', side } })) {
+        turnSent(side, performance.now());
+      }
+    },
     boost: () => command({ type: 'input', input: { type: 'boost' } }),
     setMode: (mode) => command({ type: 'setMode', mode }),
     setSpeed: (speed) => command({ type: 'setSpeed', speed }),

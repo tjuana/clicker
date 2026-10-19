@@ -8,6 +8,7 @@ import {
   RubberBar,
   slotOfId,
   TopFive,
+  TurnLatency,
   useBoostCharge,
 } from '../cycles/hud';
 import { useCycles } from '../cycles/store';
@@ -145,6 +146,7 @@ export function CyclesArena({
       }}
     >
       <CyclesBar />
+      <TurnLatency />
       <div data-testid="scene" style={{ position: 'relative', flex: 1, minHeight: 0 }}>
         <Suspense fallback={null}>
           <Cycles you={you} />

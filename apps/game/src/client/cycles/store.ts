@@ -1,5 +1,8 @@
 import type { DeltaMessage, FullMessage, SnapshotMessage } from '@clicker/protocol';
 import { create } from 'zustand';
+import { useClient } from '../store';
+import { centreOf } from './latency';
+import { forgetTurns, seenByServer } from './latency-store';
 import { applyDelta, type CyclesModel, fromFull } from './model';
 import { createTimeline, type Timeline } from './timeline';
 
@@ -37,6 +40,16 @@ export const useCycles = create<CyclesStore>(() => EMPTY);
 
 export function clearCycles(): void {
   useCycles.setState(EMPTY);
+  // The turns waiting belong to the round that is gone, and so do the figures.
+  forgetTurns();
+}
+
+/** The slot the player's own bike rides in this round, or -1: a spectator, or no `welcome` yet. */
+function ownSlot(model: CyclesModel): number {
+  const you = useClient.getState().you;
+  // At most twenty ids, once per message: cheaper than a reverse index kept in step with the map.
+  for (const [slot, id] of model.ids) if (id === you) return slot;
+  return -1;
 }
 
 type RoundEvents = DeltaMessage['events'];
@@ -87,6 +100,8 @@ export function feedCycles(message: FullMessage | DeltaMessage, now: number): 'r
     const timeline = sameRound ? running : createTimeline(model.tickMs);
     timeline.arrive({ tick: model.tick, walls, heads: model.heads, events: [], reset: true }, now);
     useCycles.setState({ model, timeline, askedAt: null, feed: sameRound ? feed : [] });
+    // A full is a place to stand, not a step: no cell was ridden from, so no corner.
+    seenByServer(model.heads.get(ownSlot(model))?.dir ?? null, now);
     return null;
   }
 
@@ -116,6 +131,16 @@ export function feedCycles(message: FullMessage | DeltaMessage, now: number): 'r
       reset: false,
     },
     now,
+  );
+  // The arrival time the timeline has just been given: the turn's trip ends when the message does.
+  // A turn is made before the step of its tick, so the cell the bike turned at is the one it rode
+  // from, however many cells (one, or two on a boost) it rode on in the new direction.
+  const mine = ownSlot(result.model);
+  const rodeFrom = model.heads.get(mine);
+  seenByServer(
+    result.model.heads.get(mine)?.dir ?? null,
+    now,
+    rodeFrom === undefined ? null : centreOf(rodeFrom.cell, model.side),
   );
   const lines: FeedItem[] = [];
   for (const event of result.events) {

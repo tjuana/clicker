@@ -1,9 +1,10 @@
-import { type CSSProperties, useRef } from 'react';
+import { type CSSProperties, useEffect, useRef } from 'react';
 import { useMuted } from '../audio/mute';
 import { secondsLeft, useServerClock } from '../clock';
 import { useClient } from '../store';
 import { strings } from '../strings';
 import { theme } from '../theme';
+import { useLatencyView } from './latency-store';
 import type { CyclesModel } from './model';
 import { type FeedItem, useCycles } from './store';
 
@@ -94,6 +95,71 @@ export function CyclesBar() {
       <span data-testid="hud-players" style={{ color: theme.muted }}>
         {strings.players}: {playerCount}
       </span>
+    </div>
+  );
+}
+
+/**
+ * How late the player's turns land, and how long they take to show: a muted row under the bar, in
+ * the flow rather than over the scene, where every corner is taken and a phone has no room to
+ * spare. The cells come first and bold, as the figure that says how the game feels; the times and
+ * the medians follow. At 390 px the three pieces fit one line with numbers of the usual size, and
+ * a larger one makes the last wrap onto a second line instead of running off the screen. `L`
+ * hides it and brings it back; it listens in every phase, so it works during the countdown too.
+ */
+export function TurnLatency() {
+  const shown = useLatencyView((state) => state.shown);
+  const toggle = useLatencyView((state) => state.toggle);
+  const { server, screen, overshoot } = useLatencyView((state) => state.readout);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.code !== 'KeyL' || event.repeat) return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      toggle();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [toggle]);
+
+  if (!shown) return null;
+  const text = strings.cycles.latency;
+  const num = (value: number | undefined): string =>
+    value === undefined ? text.none : String(Math.round(value));
+  // Rounded first, so a hair below nothing reads +0.0 rather than a minus in front of a zero.
+  const signed = (value: number | undefined): string => {
+    if (value === undefined) return text.none;
+    const tenths = Math.round(value * 10) / 10;
+    return `${tenths < 0 ? text.minus : text.plus}${Math.abs(tenths).toFixed(1)}`;
+  };
+  const anything = server !== null || screen !== null;
+
+  return (
+    <div
+      data-testid="turn-latency"
+      style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        columnGap: 8,
+        padding: '3px 10px',
+        fontSize: 11,
+        color: theme.muted,
+        fontVariantNumeric: 'tabular-nums',
+      }}
+    >
+      <strong style={{ color: theme.text }}>
+        {overshoot === null ? text.none : `${signed(overshoot.last)} ${text.late}`}
+      </strong>
+      <span>
+        {text.server} {num(server?.last)} · {text.screen} {num(screen?.last)}
+        {anything ? ` ${text.ms}` : ''}
+      </span>
+      {anything ? (
+        <span>
+          ({text.median} {signed(overshoot?.median)} / {num(server?.median)} / {num(screen?.median)}
+          )
+        </span>
+      ) : null}
     </div>
   );
 }

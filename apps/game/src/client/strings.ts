@@ -71,6 +71,17 @@ export const strings = {
     keys: 'A / D or arrows to turn, Space to boost',
     soundOn: 'Sound on',
     soundOff: 'Sound off',
+    // The turn-timing line: «+1.6 cells late  server 77 · screen 108 ms  (median +1.5 / 77 / 105)».
+    latency: {
+      late: 'cells late',
+      server: 'server',
+      screen: 'screen',
+      median: 'median',
+      ms: 'ms',
+      none: '\u2013',
+      plus: '+',
+      minus: '\u2212',
+    },
     nobodyScored: 'Nobody cut anyone off',
     howTo: {
       title: 'How to play',
