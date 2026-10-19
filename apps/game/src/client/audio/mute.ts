@@ -13,7 +13,7 @@ export interface Memory {
  * reached through `globalThis` because the tests compile this file without the DOM types, and in
  * the tests' runtime it is simply not there.
  */
-function browserStorage(): Memory | null {
+export function browserStorage(): Memory | null {
   try {
     return (globalThis as { localStorage?: Memory }).localStorage ?? null;
   } catch {

@@ -15,6 +15,7 @@ import {
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { seenOnScreen } from '../cycles/latency-store';
 import type { WallOp } from '../cycles/model';
 import { useCycles } from '../cycles/store';
 import type { Sample, Step, Timeline } from '../cycles/timeline';
@@ -372,6 +373,10 @@ function Field({ side, you }: { side: number; you: string | null }) {
           }
         }
       }
+      // The player's own bike, as drawn this frame: when the turn latency ends. The chase holds it
+      // while the bike is among those drawn, so nothing is looked up or allocated here.
+      const own = rig.ownSlot !== -1 && rig.chase.slot === rig.ownSlot;
+      seenOnScreen(own ? rig.chase.dir : null, now);
       bikes.mesh.count = shown;
       bikes.mesh.instanceMatrix.needsUpdate = true;
       if (bikes.mesh.instanceColor) bikes.mesh.instanceColor.needsUpdate = true;

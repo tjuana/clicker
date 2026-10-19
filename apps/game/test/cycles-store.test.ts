@@ -1,5 +1,6 @@
 import { type DeltaMessage, type FullMessage, PROTOCOL_VERSION } from '@clicker/protocol';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { turnSent, useLatencyView } from '../src/client/cycles/latency-store';
 import {
   clearCycles,
   feedCycles,
@@ -8,6 +9,7 @@ import {
   RESYNC_RETRY_MS,
   useCycles,
 } from '../src/client/cycles/store';
+import { useClient } from '../src/client/store';
 
 const full = (
   tick: number,
@@ -259,5 +261,69 @@ describe('a full in the middle of the round', () => {
 
     expect(useCycles.getState().feed).toEqual([]);
     expect(useCycles.getState().model?.tick).toBe(0);
+  });
+});
+
+describe('timing a turn on its way in', () => {
+  /** Tick t with the bike pointing `dir`, or with no bike at all. */
+  const facing = (t: number, dir: number | null): DeltaMessage => ({
+    ...delta(t),
+    heads: dir === null ? [] : [1, 12 + (t - 5), dir, 3, 0],
+  });
+
+  beforeEach(() => {
+    clearCycles();
+    useClient.setState({ you: '1' });
+  });
+
+  it('measures a turn up to the arrival of the first message that has the bike turned', () => {
+    feedCycles(full(5), 0);
+    feedCycles(facing(6, 0), 125);
+    turnSent('right', 140);
+
+    feedCycles(facing(7, 0), 250);
+    expect(useLatencyView.getState().readout.server).toBeNull();
+    feedCycles(facing(8, 1), 380);
+
+    expect(useLatencyView.getState().readout.server).toEqual({ last: 240, median: 240 });
+    // The scene has drawn nothing: it is the one to say when the screen has the turn.
+    expect(useLatencyView.getState().readout.screen).toBeNull();
+  });
+
+  it("does not take another rider's turn for the player's own", () => {
+    feedCycles(full(5), 0);
+    turnSent('right', 10);
+
+    feedCycles(
+      { ...delta(6), heads: [1, 13, 0, 3, 0, 2, 40, 1, 3, 0], cells: [13, 1, 40, 2] },
+      130,
+    );
+
+    expect(useLatencyView.getState().readout.server).toBeNull();
+  });
+
+  it('forgets a turn that was waiting when the bike died', () => {
+    feedCycles(full(5), 0);
+    turnSent('right', 100);
+    feedCycles({ ...facing(6, null), events: [{ type: 'died', slot: 1, by: null }] }, 130);
+
+    // It comes back, and the next turn is what the change is read as.
+    feedCycles(facing(7, 3), 1_900);
+    feedCycles(facing(8, 3), 2_025);
+    turnSent('right', 2_100);
+    feedCycles(facing(9, 0), 2_225);
+
+    expect(useLatencyView.getState().readout.server).toEqual({ last: 125, median: 125 });
+  });
+
+  it('starts over with the round', () => {
+    feedCycles(full(5), 0);
+    turnSent('right', 10);
+    feedCycles(facing(6, 1), 130);
+    expect(useLatencyView.getState().readout.server).not.toBeNull();
+
+    clearCycles();
+
+    expect(useLatencyView.getState().readout).toEqual({ server: null, screen: null });
   });
 });

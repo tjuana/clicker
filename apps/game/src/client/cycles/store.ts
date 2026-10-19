@@ -1,5 +1,7 @@
 import type { DeltaMessage, FullMessage, SnapshotMessage } from '@clicker/protocol';
 import { create } from 'zustand';
+import { useClient } from '../store';
+import { forgetTurns, seenByServer } from './latency-store';
 import { applyDelta, type CyclesModel, fromFull } from './model';
 import { createTimeline, type Timeline } from './timeline';
 
@@ -37,6 +39,16 @@ export const useCycles = create<CyclesStore>(() => EMPTY);
 
 export function clearCycles(): void {
   useCycles.setState(EMPTY);
+  // The turns waiting belong to the round that is gone, and so do the figures.
+  forgetTurns();
+}
+
+/** Which way the player's own bike points, or null when it has none: dead, or not in this round. */
+function ownDirection(model: CyclesModel): number | null {
+  const you = useClient.getState().you;
+  // At most twenty ids, once per message: cheaper than a reverse index kept in step with the map.
+  for (const [slot, id] of model.ids) if (id === you) return model.heads.get(slot)?.dir ?? null;
+  return null;
 }
 
 type RoundEvents = DeltaMessage['events'];
@@ -87,6 +99,7 @@ export function feedCycles(message: FullMessage | DeltaMessage, now: number): 'r
     const timeline = sameRound ? running : createTimeline(model.tickMs);
     timeline.arrive({ tick: model.tick, walls, heads: model.heads, events: [], reset: true }, now);
     useCycles.setState({ model, timeline, askedAt: null, feed: sameRound ? feed : [] });
+    seenByServer(ownDirection(model), now);
     return null;
   }
 
@@ -117,6 +130,8 @@ export function feedCycles(message: FullMessage | DeltaMessage, now: number): 'r
     },
     now,
   );
+  // The arrival time the timeline has just been given: the turn's trip ends when the message does.
+  seenByServer(ownDirection(result.model), now);
   const lines: FeedItem[] = [];
   for (const event of result.events) {
     if (event.type === 'died') {

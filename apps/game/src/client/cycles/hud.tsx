@@ -1,9 +1,11 @@
-import { type CSSProperties, useRef } from 'react';
+import { type CSSProperties, useEffect, useRef } from 'react';
 import { useMuted } from '../audio/mute';
 import { secondsLeft, useServerClock } from '../clock';
 import { useClient } from '../store';
 import { strings } from '../strings';
 import { theme } from '../theme';
+import { WINDOW } from './latency';
+import { useLatencyView } from './latency-store';
 import type { CyclesModel } from './model';
 import { type FeedItem, useCycles } from './store';
 
@@ -94,6 +96,60 @@ export function CyclesBar() {
       <span data-testid="hud-players" style={{ color: theme.muted }}>
         {strings.players}: {playerCount}
       </span>
+    </div>
+  );
+}
+
+/**
+ * How long the player's turns take to show, a muted row under the bar: in the flow rather than
+ * over the scene, where every corner is taken and a phone has no room to spare. It wraps in two
+ * pieces, the latest figures and the medians, so a narrow screen breaks it between them. `L`
+ * hides it and brings it back; it listens in every phase, so it works during the countdown too.
+ */
+export function TurnLatency() {
+  const shown = useLatencyView((state) => state.shown);
+  const toggle = useLatencyView((state) => state.toggle);
+  const { server, screen } = useLatencyView((state) => state.readout);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.code !== 'KeyL' || event.repeat) return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      toggle();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [toggle]);
+
+  if (!shown) return null;
+  const text = strings.cycles.latency;
+  const num = (value: number | undefined): string =>
+    value === undefined ? text.none : String(Math.round(value));
+  // The unit once per figure that has one; the medians in the bracket share the bracket's.
+  const ms = (value: number | undefined): string =>
+    value === undefined ? text.none : `${num(value)} ${text.ms}`;
+
+  return (
+    <div
+      data-testid="turn-latency"
+      style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        columnGap: 10,
+        padding: '3px 14px',
+        fontSize: 12,
+        color: theme.muted,
+        fontVariantNumeric: 'tabular-nums',
+      }}
+    >
+      <span>
+        {text.label}: {text.server} {ms(server?.last)} · {text.screen} {ms(screen?.last)}
+      </span>
+      {server === null && screen === null ? null : (
+        <span>
+          ({text.median} {WINDOW}: {num(server?.median)} / {num(screen?.median)})
+        </span>
+      )}
     </div>
   );
 }

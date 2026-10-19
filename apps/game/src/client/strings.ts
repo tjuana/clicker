@@ -71,6 +71,15 @@ export const strings = {
     keys: 'A / D or arrows to turn, Space to boost',
     soundOn: 'Sound on',
     soundOff: 'Sound off',
+    // The turn-timing line: «turn: server 142 ms · screen 318 ms (median of 10: 150 / 305)».
+    latency: {
+      label: 'turn',
+      server: 'server',
+      screen: 'screen',
+      median: 'median of',
+      ms: 'ms',
+      none: '\u2013',
+    },
     nobodyScored: 'Nobody cut anyone off',
     howTo: {
       title: 'How to play',
