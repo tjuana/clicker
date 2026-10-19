@@ -18,6 +18,7 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import type { WallOp } from '../cycles/model';
 import { useCycles } from '../cycles/store';
 import type { Sample, Step, Timeline } from '../cycles/timeline';
+import { createCycleGeometry } from './cycle-model';
 
 /** Twenty bikes with trails of at most 400 cells, and room for the cells a boost lays in passing. */
 const MAX_WALLS = 20 * 400 + 64;
@@ -64,6 +65,11 @@ const DIR_X = [1, 0, -1, 0];
 const DIR_Z = [0, 1, 0, -1];
 
 const THICK = 0.12;
+/**
+ * Lower than the bike, which stands about 0.9 tall: a wall as high as the bike swallowed it, since
+ * the trail runs right up to the head. In the films the wall streams out below the rider too.
+ */
+const WALL_HEIGHT = 0.42;
 const UP = new Vector3(0, 1, 0);
 
 /** Scratch objects, one set for the whole module: nothing in the frame loop allocates. */
@@ -128,14 +134,14 @@ function createWalls(side: number): Walls {
       const along = Math.abs(fx - x) + Math.abs(fz - z);
       rotation.setFromAxisAngle(UP, fz !== z ? Math.PI / 2 : 0);
       matrix.compose(
-        position.set((x + fx) / 2, 0.32, (z + fz) / 2),
+        position.set((x + fx) / 2, WALL_HEIGHT / 2, (z + fz) / 2),
         rotation,
-        scale.set(along + THICK, 0.64, THICK),
+        scale.set(along + THICK, WALL_HEIGHT, THICK),
       );
       trails.setMatrixAt(i, matrix);
       trails.setColorAt(i, WALL[(slot - 1) % WALL.length] as Color);
       matrix.compose(
-        position.set((x + fx) / 2, 0.66, (z + fz) / 2),
+        position.set((x + fx) / 2, WALL_HEIGHT + 0.02, (z + fz) / 2),
         rotation,
         scale.set(along + THICK + 0.02, 0.05, THICK + 0.02),
       );
@@ -271,11 +277,12 @@ function drawBike(
   const fz = Math.floor(from.cell / side) + 0.5;
   const tx = (end.cell % side) + 0.5;
   const tz = Math.floor(end.cell / side) + 0.5;
-  position.set(fx + (tx - fx) * sample.alpha, 0.5, fz + (tz - fz) * sample.alpha);
+  // The model stands on the floor itself, so the bike is placed at y = 0.
+  position.set(fx + (tx - fx) * sample.alpha, 0, fz + (tz - fz) * sample.alpha);
   matrix.compose(
     position,
     rotation.setFromAxisAngle(UP, (-end.dir * Math.PI) / 2),
-    scale.set(1.3, 0.5, 0.45).multiplyScalar(slot === rig.ownSlot ? OWN_SIZE : 1),
+    scale.setScalar(slot === rig.ownSlot ? OWN_SIZE : 1),
   );
   mesh.setMatrixAt(index, matrix);
   mesh.setColorAt(index, EDGE[(slot - 1) % EDGE.length] as Color);
@@ -299,8 +306,9 @@ function Field({ side, you }: { side: number; you: string | null }) {
   const rig = useMemo(createRig, []);
 
   const bikes = useMemo(() => {
-    const geometry = new BoxGeometry(1, 1, 1);
-    const material = new MeshBasicMaterial({ toneMapped: false });
+    const geometry = createCycleGeometry();
+    // Vertex colours carry each part's brightness; the instance colour, the slot's.
+    const material = new MeshBasicMaterial({ toneMapped: false, vertexColors: true });
     const mesh = new InstancedMesh(geometry, material, MAX_BIKES);
     mesh.frustumCulled = false;
     return { mesh, geometry, material };
