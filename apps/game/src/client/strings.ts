@@ -72,6 +72,19 @@ export const strings = {
     soundOn: 'Sound on',
     soundOff: 'Sound off',
     nobodyScored: 'Nobody cut anyone off',
+    howTo: {
+      title: 'How to play',
+      goal: 'Your bike leaves a wall of light. Make others ride into it; do not ride into anything yourself.',
+      rows: [
+        ['A / D  or  ← / →', 'Turn left or right, 90°. Two quick taps turn you around.'],
+        ['Space', 'Boost: double speed for a second, then a four-second wait.'],
+        ['Rubber', 'Right in front of a wall you get a moment to turn — the dashes at the bottom.'],
+        [
+          'Score',
+          'One point for every bike that crashes into your wall. Crash and you are back in two seconds.',
+        ],
+      ] as const,
+    },
   },
   cyclesResultsHeaders: {
     rank: '#',

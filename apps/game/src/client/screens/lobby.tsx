@@ -90,6 +90,7 @@ export function Lobby({
             : ` \u00b7 ${strings.speeds[speed]} (${speed} ${strings.cellsPerSecond})`}
         </p>
       )}
+      {mode === 'cycles' ? <HowToPlay /> : null}
       {/* One grey line, never two: side by side these two said the same thing twice. */}
       <p style={{ color: theme.muted, margin: 0 }}>
         {players.length === 1 ? strings.alone : strings.inviteHint}
@@ -125,5 +126,37 @@ export function Lobby({
         </LinkButton>
       </div>
     </Screen>
+  );
+}
+
+/**
+ * The rules in four lines, for everyone in the lobby: the controls hint during a round only says
+ * which keys, not what boost or rubber do, and a first round is too short to work that out.
+ */
+function HowToPlay() {
+  const how = strings.cycles.howTo;
+  return (
+    <section
+      data-testid="how-to-play"
+      style={{ background: theme.surface, borderRadius: 12, padding: '12px 14px' }}
+    >
+      <strong>{how.title}</strong>
+      <p style={{ margin: '6px 0 10px', color: theme.muted }}>{how.goal}</p>
+      <dl
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'max-content 1fr',
+          gap: '6px 14px',
+          margin: 0,
+        }}
+      >
+        {how.rows.map(([key, text]) => (
+          <div key={key} style={{ display: 'contents' }}>
+            <dt style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{key}</dt>
+            <dd style={{ margin: 0, color: theme.muted }}>{text}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   );
 }
