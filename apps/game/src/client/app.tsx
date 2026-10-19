@@ -4,9 +4,10 @@ import { roomIdFromPath, savedName, saveName, takeHostKeyFromHash } from './room
 import { Arena } from './screens/arena';
 import { CyclesArena } from './screens/cycles-arena';
 import { CyclesResults } from './screens/cycles-results';
+import type { RoomSettings } from './screens/host-settings';
 import { Join } from './screens/join';
 import { Landing } from './screens/landing';
-import { Lobby, type LobbySettings } from './screens/lobby';
+import { Lobby } from './screens/lobby';
 import { Results } from './screens/results';
 import { useClient } from './store';
 import { strings } from './strings';
@@ -74,7 +75,7 @@ function Room({ roomId, onLeave }: { roomId: string; onLeave: () => void }) {
   const click = useCallback(() => connectionRef.current?.click(), []);
   const turn = useCallback((side: 'left' | 'right') => connectionRef.current?.turn(side), []);
   const boost = useCallback(() => connectionRef.current?.boost(), []);
-  const settings = useMemo<LobbySettings>(
+  const settings = useMemo<RoomSettings>(
     () => ({
       setMode: (mode) => connectionRef.current?.setMode(mode),
       setSpeed: (speed) => connectionRef.current?.setSpeed(speed),
@@ -109,9 +110,9 @@ function Room({ roomId, onLeave }: { roomId: string; onLeave: () => void }) {
           <Arena onClick={click} />
         )
       ) : snapshot.mode === 'cycles' ? (
-        <CyclesResults onStart={start} onLeave={onLeave} />
+        <CyclesResults settings={settings} onStart={start} onLeave={onLeave} />
       ) : (
-        <Results onStart={start} onLeave={onLeave} />
+        <Results settings={settings} onStart={start} onLeave={onLeave} />
       )}
     </>
   );

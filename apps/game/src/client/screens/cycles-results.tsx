@@ -2,19 +2,31 @@ import { useClient } from '../store';
 import { strings } from '../strings';
 import { theme } from '../theme';
 import { Button, ErrorNote, LinkButton, Screen } from '../ui';
+import { HostSettings, type RoomSettings } from './host-settings';
 
 const head = { textAlign: 'left', color: theme.muted, padding: 8 } as const;
 
-export function CyclesResults({ onStart, onLeave }: { onStart: () => void; onLeave: () => void }) {
+export function CyclesResults({
+  settings,
+  onStart,
+  onLeave,
+}: {
+  settings: RoomSettings;
+  onStart: () => void;
+  onLeave: () => void;
+}) {
   const snapshot = useClient((state) => state.snapshot);
   const you = useClient((state) => state.you);
   const isHost = useClient((state) => state.isHost);
+  const playedSpeed = useClient((state) => state.playedSpeed);
   const error = useClient((state) => state.lastError);
   if (snapshot === null || snapshot.mode !== 'cycles') return null;
 
   const results = snapshot.data.results ?? [];
-  // A life is counted in ticks and a tick is one cell, so cells a second turn it into seconds.
-  const seconds = (ticks: number): string => (ticks / snapshot.data.speed).toFixed(1);
+  // A life is counted in ticks and a tick is one cell, so cells a second turn it into seconds. The
+  // speed of the round that was played, not the room's setting, which the host may change from here.
+  const speed = playedSpeed ?? snapshot.data.speed;
+  const seconds = (ticks: number): string => (ticks / speed).toFixed(1);
   const winners = results.filter((row) => row.rank === 1);
   const nobodyScored = winners.length > 0 && winners.every((row) => row.kills === 0);
 
@@ -75,6 +87,7 @@ export function CyclesResults({ onStart, onLeave }: { onStart: () => void; onLea
           </tbody>
         </table>
       </div>
+      {isHost ? <HostSettings snapshot={snapshot} settings={settings} /> : null}
       {isHost ? (
         <Button testId="start" onClick={onStart}>
           {strings.again}

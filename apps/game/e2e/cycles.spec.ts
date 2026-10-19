@@ -94,4 +94,25 @@ test('a light-cycle round against three bots ends with all four in the results',
   const names = await rows.locator('td:nth-child(2)').allTextContents();
   expect([...names].sort()).toEqual(RIDERS);
   await expect(page.getByTestId('winner')).toHaveText(/\S/);
+
+  // The host can change the room from here. The table is the round that was played: a life is
+  // counted in ticks, and the new speed must not turn the same ticks into other seconds.
+  const longest = rows.locator('td:nth-child(5)');
+  const before = await longest.allTextContents();
+  expect(before).toHaveLength(RIDERS.length);
+  await expect(page.getByTestId('speed-12')).toHaveAttribute('aria-pressed', 'true');
+  await page.getByTestId('speed-20').click();
+  await expect(page.getByTestId('speed-20')).toHaveAttribute('aria-pressed', 'true');
+  await expect(longest).toHaveText(before);
+
+  await expect(page.getByTestId('bots')).toHaveText(/3$/);
+  await page.getByTestId('add-bot').click();
+  await expect(page.getByTestId('bots')).toHaveText(/4$/);
+  // The table is not the next round's, so a new bot does not wipe it.
+  await expect(rows).toHaveCount(RIDERS.length);
+
+  // The other game is one click away; the results of this one mean nothing there, so the room
+  // goes back to the lobby.
+  await page.getByTestId('mode-clicker').click();
+  await expect(page.getByTestId('players')).toBeVisible();
 });

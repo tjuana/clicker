@@ -1,41 +1,13 @@
-import { SPEEDS } from '@clicker/game';
 import type { SnapshotMessage } from '@clicker/protocol';
-import { type ReactNode, useEffect } from 'react';
+import { useEffect } from 'react';
 import { hostKeyFor, hostLink, inviteLink } from '../room-link';
 import { useClient } from '../store';
 import { strings } from '../strings';
 import { theme } from '../theme';
-import { Button, Choice, CopyButton, ErrorNote, LinkButton, Screen, ShareLink } from '../ui';
+import { Button, CopyButton, ErrorNote, LinkButton, Screen, ShareLink } from '../ui';
+import { HostSettings, type RoomSettings } from './host-settings';
 
 type Mode = SnapshotMessage['mode'];
-type Speed = (typeof SPEEDS)[number];
-
-/** What the host can change before a round; a guest only reads the result. */
-export interface LobbySettings {
-  setMode: (mode: Mode) => void;
-  setSpeed: (speed: Speed) => void;
-  addBot: () => void;
-  removeBot: () => void;
-}
-
-const MODES = (['clicker', 'cycles'] as const).map((value) => ({
-  value,
-  label: strings.modes[value],
-}));
-const SPEED_OPTIONS = SPEEDS.map((value) => ({
-  value,
-  label: `${strings.speeds[value]} ${value}`,
-}));
-
-/** The label above a group of controls, in the same muted voice as the player list's. */
-function Setting({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <span style={{ color: theme.muted }}>{label}</span>
-      {children}
-    </div>
-  );
-}
 
 export function Lobby({
   roomId,
@@ -54,7 +26,7 @@ export function Lobby({
   you: string | null;
   /** `null` while the first snapshot hasn't arrived yet: we still show the player themselves. */
   snapshot: SnapshotMessage | null;
-  settings: LobbySettings;
+  settings: RoomSettings;
   onStart: () => void;
   onChangeName: () => void;
   onLeave: () => void;
@@ -63,7 +35,6 @@ export function Lobby({
   const players = snapshot?.players ?? [{ id: you ?? '', name, connected: true, bot: false }];
   const mode: Mode = snapshot?.mode ?? 'clicker';
   const speed = snapshot?.mode === 'cycles' ? snapshot.data.speed : null;
-  const bots = players.filter((player) => player.bot).length;
   const hostKey = hostKeyFor(roomId);
 
   // Pull the scene in while people are still waiting. The round lasts ten seconds, and
@@ -110,44 +81,7 @@ export function Lobby({
         </ul>
       </div>
       {isHost ? (
-        <>
-          <Setting label={strings.modeLabel}>
-            <Choice testId="mode" options={MODES} value={mode} onChoose={settings.setMode} />
-          </Setting>
-          {speed !== null ? (
-            <>
-              <Setting label={strings.speedLabel}>
-                <Choice
-                  testId="speed"
-                  options={SPEED_OPTIONS}
-                  value={speed}
-                  onChoose={settings.setSpeed}
-                />
-              </Setting>
-              <Setting label={`${strings.botsLabel}: ${bots}`}>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <Button
-                    testId="remove-bot"
-                    variant="secondary"
-                    onClick={settings.removeBot}
-                    disabled={bots === 0}
-                    style={{ flex: 1 }}
-                  >
-                    {strings.removeBot}
-                  </Button>
-                  <Button
-                    testId="add-bot"
-                    variant="secondary"
-                    onClick={settings.addBot}
-                    style={{ flex: 1 }}
-                  >
-                    {strings.addBot}
-                  </Button>
-                </div>
-              </Setting>
-            </>
-          ) : null}
-        </>
+        <HostSettings snapshot={snapshot} settings={settings} />
       ) : (
         <p data-testid="mode-summary" style={{ margin: 0 }}>
           {strings.modes[mode]}
