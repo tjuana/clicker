@@ -327,3 +327,13 @@ Recorded in English from here on; the sections above stay as written.
 - **The wire carries the pace.** `full` gains `tickMs` (the client places ticks in time with it),
   and the light-cycle snapshot's `data` gains `speed`. The protocol version stays 2: the light
   cycles have not been released, so no client of that version exists to be turned away.
+
+## Measuring turn latency (2026-10-19)
+
+The owner felt a delay between pressing a turn and seeing it. Before choosing a fix, the arena shows
+a readout under the top bar (the `L` key hides it): how many cells late a turn lands compared with
+where the player saw their bike when pressing, how long the turn took to reach the server, and how
+long until the screen showed it, each with a median of the last ten. Locally, at 8 cells a second,
+a turn lands about 0.8 cells late (up to 1.4); the number equals the screen time times the speed,
+and each extra 100 ms of round trip adds about 0.8 cells at that speed. The decision on
+client-side prediction is taken from these numbers measured over a real network.
