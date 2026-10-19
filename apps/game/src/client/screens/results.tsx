@@ -5,11 +5,20 @@ import { useClient } from '../store';
 import { strings } from '../strings';
 import { theme } from '../theme';
 import { Button, ErrorNote, LinkButton, Screen } from '../ui';
+import { HostSettings, type RoomSettings } from './host-settings';
 
 /** three.js is about a megabyte: the entry screens must not carry it. */
 const Race = lazy(() => import('../scene/race'));
 
-export function Results({ onStart, onLeave }: { onStart: () => void; onLeave: () => void }) {
+export function Results({
+  settings,
+  onStart,
+  onLeave,
+}: {
+  settings: RoomSettings;
+  onStart: () => void;
+  onLeave: () => void;
+}) {
   const snapshot = useClient((state) => state.snapshot);
   const you = useClient((state) => state.you);
   const isHost = useClient((state) => state.isHost);
@@ -76,6 +85,7 @@ export function Results({ onStart, onLeave }: { onStart: () => void; onLeave: ()
           ))}
         </tbody>
       </table>
+      {isHost ? <HostSettings snapshot={snapshot} settings={settings} /> : null}
       {isHost ? (
         <Button testId="start" onClick={onStart}>
           {strings.again}

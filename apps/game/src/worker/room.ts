@@ -44,7 +44,7 @@ export class Room extends Server<Env> {
   #state: RoomState = createRoomState();
   /** What the environment changes, if anything. Wins over the mode: a test round must be short in every mode. */
   #overrides: Partial<GameConfig> = {};
-  #config: GameConfig = configFor(this.#state.mode);
+  #config: GameConfig = configFor(this.#state.mode, undefined, this.#state.speed);
   #timer: ReturnType<typeof setInterval> | null = null;
   #ticker = new Ticker<ReturnType<typeof setInterval>>({
     now: () => Date.now(),
@@ -155,6 +155,12 @@ export class Room extends Server<Env> {
           connection,
         );
         return;
+      case 'setSpeed':
+        await this.#run(
+          { type: 'setSpeed', playerId: session.playerId, speed: incoming.speed },
+          connection,
+        );
+        return;
       case 'addBot':
       case 'removeBot':
       case 'start':
@@ -200,10 +206,12 @@ export class Room extends Server<Env> {
    */
   #apply(command: Command, source?: Connection<Session>, now = Date.now()): boolean {
     const applied = apply(this.#state, command, now, this.#config);
-    const modeChanged = applied.state.mode !== this.#state.mode;
+    // The pace belongs to the config as much as the mode does: the tick length follows it.
+    const configChanged =
+      applied.state.mode !== this.#state.mode || applied.state.speed !== this.#state.speed;
     const newSeat = seats(applied.state) > seats(this.#state);
     this.#state = applied.state;
-    if (modeChanged) this.#config = this.#configOf(applied.state);
+    if (configChanged) this.#config = this.#configOf(applied.state);
 
     let phaseChanged = false;
     for (const event of applied.events) {
@@ -269,7 +277,7 @@ export class Room extends Server<Env> {
 
   /** The base config belongs to the mode in play; what the environment sets wins over it. */
   #configOf(state: RoomState): GameConfig {
-    return { ...configFor(state.mode), ...this.#overrides };
+    return { ...configFor(state.mode, undefined, state.speed), ...this.#overrides };
   }
 
   /** Only for a mode without its own tick: the clicker has to show live scores. */

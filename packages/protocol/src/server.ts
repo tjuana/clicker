@@ -4,7 +4,10 @@ import {
   comparePublicIds,
   forEachCell,
   type RoomState,
+  SPEEDS,
+  type Speed,
   type TickChanges,
+  tickMsFor,
   toModeData,
 } from '@clicker/game';
 import * as v from 'valibot';
@@ -49,6 +52,8 @@ export const clickerDataSchema = v.strictObject({
 });
 
 export const cyclesDataSchema = v.strictObject({
+  /** Cells a second; the lobby shows it and the host changes it. */
+  speed: v.picklist(SPEEDS),
   results: v.nullable(
     v.array(
       v.strictObject({
@@ -98,6 +103,8 @@ export const fullSchema = v.strictObject({
   v: versionSchema,
   type: v.literal('full'),
   tick: v.number(),
+  /** Milliseconds between ticks: the client needs it to place a tick in time. */
+  tickMs: v.number(),
   side: v.number(),
   bikes: v.array(
     v.strictObject({
@@ -172,9 +179,10 @@ export function parseServerMessage(raw: string): ServerMessage | null {
   return result.success ? result.output : null;
 }
 
-function cyclesDataOf(state: CyclesState): v.InferOutput<typeof cyclesDataSchema> {
+function cyclesDataOf(state: CyclesState, speed: Speed): v.InferOutput<typeof cyclesDataSchema> {
   const { results } = state;
   return {
+    speed,
     results:
       results === null
         ? null
@@ -210,7 +218,11 @@ export function toSnapshot(state: RoomState, now: number): SnapshotMessage {
   if (state.mode === 'clicker') {
     return { ...common, mode: 'clicker', data: toModeData(state.modeState as ClickerState) };
   }
-  return { ...common, mode: 'cycles', data: cyclesDataOf(state.modeState as CyclesState) };
+  return {
+    ...common,
+    mode: 'cycles',
+    data: cyclesDataOf(state.modeState as CyclesState, state.speed),
+  };
 }
 
 /** `null` for a mode with no field, or a light-cycle room before its first round. */
@@ -222,6 +234,7 @@ export function toFull(state: RoomState): FullMessage | null {
     v: PROTOCOL_VERSION,
     type: 'full',
     tick: cycles.tick,
+    tickMs: tickMsFor(state.speed),
     side: cycles.side,
     bikes: cycles.bikes.map((bike) => {
       const trail: number[] = [];

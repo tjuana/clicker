@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { CYCLES_CONFIG } from '../src/modes/cycles';
+import { cyclesConfigFor, DEFAULT_SPEED } from '../src/modes/cycles';
 import { apply } from '../src/room/apply';
 import { configFor } from '../src/room/config';
 import type { RoomState } from '../src/room/state';
 import { clickerOf, cyclesOf, lobbyWithHost, run } from './support';
+
+/** A room that never chose a speed rides at the default one. */
+const RESPAWN_TICKS = cyclesConfigFor(DEFAULT_SPEED).respawnTicks;
 
 const CYCLES = configFor('cycles');
 
@@ -62,7 +65,7 @@ describe('a player who comes back to a living round', () => {
     ).state;
     expect(hostBike()?.kills).toBe(7);
 
-    next = steps(next, CYCLES_CONFIG.respawnTicks - 1, goAt + 4);
+    next = steps(next, RESPAWN_TICKS - 1, goAt + 4);
     expect(hostBike()?.alive).toBe(false);
     next = steps(next, 1, goAt + 100);
     expect(hostBike()?.alive).toBe(true);
@@ -175,7 +178,7 @@ describe('a person who is not connected when the host starts', () => {
     expect(state.players.guest?.connectionIds).toEqual([]);
 
     let next = state;
-    for (let i = 0; i < CYCLES_CONFIG.respawnTicks + 5; i += 1) {
+    for (let i = 0; i < RESPAWN_TICKS + 5; i += 1) {
       next = apply(next, { type: 'step' }, goAt + 1 + i, CYCLES).state;
       expect(livingIds(next)).not.toContain('2');
     }
@@ -199,7 +202,7 @@ describe('a person who is not connected when the host starts', () => {
       CYCLES,
     ).state;
 
-    for (let i = 0; i < CYCLES_CONFIG.respawnTicks - 1; i += 1) {
+    for (let i = 0; i < RESPAWN_TICKS - 1; i += 1) {
       next = apply(next, { type: 'step' }, goAt + 2 + i, CYCLES).state;
     }
     expect(livingIds(next)).not.toContain('2');

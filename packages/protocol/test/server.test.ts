@@ -212,6 +212,7 @@ describe('toSnapshot of a light-cycle room', () => {
     const snapshot = toSnapshot(state, 7);
 
     expect(snapshot.mode).toBe('cycles');
+    expect(snapshot.data).toMatchObject({ speed: 8 });
     expect(snapshot.players.map((player) => player.bot)).toEqual([false, true, true]);
     expect(parseServerMessage(JSON.stringify(snapshot))).toEqual(snapshot);
   });
@@ -224,25 +225,39 @@ describe('toSnapshot of a light-cycle room', () => {
     const snapshot = toSnapshot(over, 10_000_000);
 
     expect(snapshot.data).toEqual({
+      speed: 8,
       results: expect.arrayContaining([expect.objectContaining({ id: '1', name: 'Аня' })]),
     });
     expect((snapshot.data.results ?? []).map((row) => row.id).sort()).toEqual(['1', '2', '3']);
     expect(parseServerMessage(JSON.stringify(snapshot))).toEqual(snapshot);
   });
 
+  it('tells the clients the speed the host chose', () => {
+    const { state } = cyclesRoom(1, 2);
+    const chosen = { ...state, speed: 16 } as const;
+
+    expect(toSnapshot(chosen, 0).data).toMatchObject({ speed: 16 });
+  });
+
   it('shows no results while the round is on', () => {
-    expect(toSnapshot(cyclesRoom(1, 2).state, 0).data).toEqual({ results: null });
+    expect(toSnapshot(cyclesRoom(1, 2).state, 0).data).toEqual({ results: null, speed: 8 });
   });
 });
 
 describe('a snapshot is tied to its mode', () => {
   const clickerData = { scores: { '1': 0 }, results: null };
-  const cyclesData = { results: null };
+  const cyclesData = { results: null, speed: 8 };
 
   it('refuses a light-cycle snapshot that carries the clicker data', () => {
     const snapshot = toSnapshot(cyclesRoom(1, 2).state, 0);
 
     expect(parseServerMessage(JSON.stringify({ ...snapshot, data: clickerData }))).toBeNull();
+  });
+
+  it('refuses a light-cycle snapshot with no speed', () => {
+    const snapshot = toSnapshot(cyclesRoom(1, 2).state, 0);
+
+    expect(parseServerMessage(JSON.stringify({ ...snapshot, data: { results: null } }))).toBeNull();
   });
 
   it('refuses a clicker snapshot that carries the light-cycle data', () => {
@@ -270,6 +285,21 @@ describe('toFull', () => {
     expect(raw.length).toBeLessThan(MAX_SERVER_MESSAGE_BYTES);
     expect(parseServerMessage(raw)).toEqual(full);
     expect(full?.bikes).toHaveLength(20);
+  });
+
+  it('says how long a tick lasts, from the speed the host chose', () => {
+    const { state } = cyclesRoom(2, 3);
+
+    expect(toFull(state)?.tickMs).toBe(125);
+    expect(toFull({ ...state, speed: 16 })?.tickMs).toBe(62.5);
+  });
+
+  it('is refused by the parser without the tick length', () => {
+    const { tickMs: _tickMs, ...bare } = toFull(cyclesRoom(2, 3).state) as NonNullable<
+      ReturnType<typeof toFull>
+    >;
+
+    expect(parseServerMessage(JSON.stringify(bare))).toBeNull();
   });
 
   it('lists a trail from its oldest cell to the head', () => {

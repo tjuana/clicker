@@ -37,6 +37,8 @@ function handle(state: RoomState, command: Command, now: number, config: GameCon
       return step(state);
     case 'setMode':
       return setMode(state, command, now, config);
+    case 'setSpeed':
+      return setSpeed(state, command);
     case 'addBot':
       return addBot(state, command.playerId, now, config);
     case 'removeBot':
@@ -99,7 +101,7 @@ function setMode(
   let modeState = next.create(now | 0);
   const seated = Object.values(players).sort((a, b) => comparePublicIds(a.publicId, b.publicId));
   for (const player of seated) {
-    modeState = next.addPlayer(modeState, player.publicId, player.bot, now, config);
+    modeState = next.addPlayer(modeState, player.publicId, player.bot, now, config, state.speed);
   }
 
   // The results of the old mode mean nothing in the new one, so the room goes back to the lobby.
@@ -114,6 +116,15 @@ function setMode(
     },
     events: fromResults ? [{ type: 'phaseChanged', phase: 'lobby' }] : [],
   };
+}
+
+/** Only the light cycles have a pace; the same guard as every lobby setting, then the mode. */
+function setSpeed(state: RoomState, command: Extract<Command, { type: 'setSpeed' }>): ApplyResult {
+  const refused = lobbyHostOnly(state, command.playerId);
+  if (refused !== null) return refused;
+  if (state.mode !== 'cycles') return reject(state, command.playerId, 'not_supported');
+  if (command.speed === state.speed) return { state, events: [] };
+  return { state: { ...state, speed: command.speed }, events: [] };
 }
 
 function addBot(state: RoomState, playerId: string, now: number, config: GameConfig): ApplyResult {
@@ -135,7 +146,7 @@ function addBot(state: RoomState, playerId: string, now: number, config: GameCon
         bot: true,
       }),
       nextSeq: state.nextSeq + 1,
-      modeState: mode.addPlayer(state.modeState, publicId, true, now, config),
+      modeState: mode.addPlayer(state.modeState, publicId, true, now, config, state.speed),
     },
     events: [],
   };
@@ -188,7 +199,7 @@ function join(
       disconnectedAt: null,
     };
     // Whatever the mode keeps for them — a bike that left the field — is theirs to take back.
-    modeState = modeFor(state.mode).rejoin(state.modeState, existing.publicId);
+    modeState = modeFor(state.mode).rejoin(state.modeState, existing.publicId, state.speed);
   } else {
     if (isFull(state, config)) {
       return reject(state, command.playerId, 'room_full');
@@ -202,7 +213,14 @@ function join(
       bot: false,
     };
     nextSeq = state.nextSeq + 1;
-    modeState = modeFor(state.mode).addPlayer(state.modeState, publicId, false, now, config);
+    modeState = modeFor(state.mode).addPlayer(
+      state.modeState,
+      publicId,
+      false,
+      now,
+      config,
+      state.speed,
+    );
   }
 
   let hostKey = state.hostKey;
@@ -269,7 +287,7 @@ function step(state: RoomState): ApplyResult {
   const stepMode = modeFor(state.mode).step;
   if (state.phase !== 'running' || stepMode === null) return { state, events: [] };
 
-  const stepped = stepMode(state.modeState);
+  const stepped = stepMode(state.modeState, state.speed);
   return {
     state: { ...state, modeState: stepped.state },
     // The tick number comes from the state that was produced, so it cannot drift from it.
@@ -303,7 +321,7 @@ function start(state: RoomState, playerId: string, now: number, config: GameConf
       phase: 'countdown',
       round: { goAt, endsAt },
       notice: null,
-      modeState: mode.startRound(modeState, goAt, config),
+      modeState: mode.startRound(modeState, goAt, config, state.speed),
     },
     events: [{ type: 'phaseChanged', phase: 'countdown' }],
   };
@@ -326,6 +344,7 @@ function input(
     command.input,
     now,
     config,
+    state.speed,
   );
   // The mode returns the same reference when nothing changed — a refused click, for instance.
   // Keep that identity: callers rely on it to skip broadcasting a snapshot that is not new.

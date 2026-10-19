@@ -1,3 +1,4 @@
+import { SPEEDS } from '@clicker/game';
 import * as v from 'valibot';
 import { ID_PATTERN } from './ids';
 
@@ -60,6 +61,12 @@ export const setModeSchema = v.strictObject({
   type: v.literal('setMode'),
   mode: v.picklist(['clicker', 'cycles']),
 });
+/** One of the speeds the rules offer; a number outside the list never reaches them. */
+export const setSpeedSchema = v.strictObject({
+  v: versionSchema,
+  type: v.literal('setSpeed'),
+  speed: v.picklist(SPEEDS),
+});
 export const addBotSchema = v.strictObject({ v: versionSchema, type: v.literal('addBot') });
 export const removeBotSchema = v.strictObject({ v: versionSchema, type: v.literal('removeBot') });
 /** The client noticed a gap in tick numbers and asks for the whole state again. */
@@ -70,6 +77,7 @@ export const clientMessageSchema = v.variant('type', [
   startSchema,
   inputSchema,
   setModeSchema,
+  setSpeedSchema,
   addBotSchema,
   removeBotSchema,
   resyncSchema,

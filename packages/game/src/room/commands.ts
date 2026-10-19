@@ -1,4 +1,5 @@
 import type { ModeId, ModeInput } from '../modes';
+import type { Speed } from '../modes/cycles/config';
 import type { TickChanges } from '../modes/cycles/step';
 import type { Phase } from './state';
 
@@ -25,6 +26,7 @@ export type Command =
   | { type: 'tick' }
   | { type: 'step' }
   | { type: 'setMode'; playerId: string; mode: ModeId }
+  | { type: 'setSpeed'; playerId: string; speed: Speed }
   | { type: 'addBot'; playerId: string }
   | { type: 'removeBot'; playerId: string };
 

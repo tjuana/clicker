@@ -9,7 +9,7 @@ import {
   startRound,
   step,
 } from '.';
-import { CYCLES_CONFIG } from './config';
+import { type CyclesConfig, cyclesConfigFor, type Speed } from './config';
 import type { CyclesInput, CyclesState } from './state';
 import { emptyTrail } from './trail';
 
@@ -17,7 +17,8 @@ import { emptyTrail } from './trail';
  * Back to a lobby: the players and their slots stay, everything the round built goes. The
  * field is zeroed rather than dropped so its side still matches the cells the slots refer to.
  */
-function clear(state: CyclesState): CyclesState {
+function clear(state: CyclesState, speed: Speed): CyclesState {
+  const config: CyclesConfig = cyclesConfigFor(speed);
   return {
     ...state,
     field: new Uint16Array(state.side * state.side),
@@ -27,13 +28,13 @@ function clear(state: CyclesState): CyclesState {
       // An interrupted round forgives the ones who left it: the lobby seats everyone again.
       left: false,
       trail: emptyTrail(bike.trail.cells.length),
-      cap: CYCLES_CONFIG.trail,
-      rubber: CYCLES_CONFIG.rubber,
+      cap: config.trail,
+      rubber: config.rubber,
       regen: 0,
       boost: 0,
       cooldown: 0,
       turns: [],
-      respawnIn: CYCLES_CONFIG.respawnTicks,
+      respawnIn: config.respawnTicks,
       kills: 0,
       deaths: 0,
       life: 0,
@@ -46,17 +47,18 @@ function clear(state: CyclesState): CyclesState {
 
 export const cyclesMode: Mode<CyclesState, CyclesInput> = {
   create: createCyclesState,
-  addPlayer: (state, publicId, bot) => addPlayer(state, publicId, bot, CYCLES_CONFIG),
+  addPlayer: (state, publicId, bot, _now, _config, speed) =>
+    addPlayer(state, publicId, bot, cyclesConfigFor(speed)),
   removePlayers,
   // Light-cycle time is counted in ticks, so the wall-clock start of the round means nothing.
-  startRound: (state) => startRound(state, CYCLES_CONFIG),
-  applyInput: (state, publicId, input) =>
+  startRound: (state, _goAt, _config, speed) => startRound(state, cyclesConfigFor(speed)),
+  applyInput: (state, publicId, input, _now, _config, speed) =>
     input.type === 'turn' || input.type === 'boost'
-      ? applyInput(state, publicId, input, CYCLES_CONFIG)
+      ? applyInput(state, publicId, input, cyclesConfigFor(speed))
       : state,
   // Whoever joins has a connection, so is a person; a bot is never rejoined.
-  rejoin: (state, publicId) => addPlayer(state, publicId, false, CYCLES_CONFIG),
-  step: (state) => step(state, CYCLES_CONFIG),
+  rejoin: (state, publicId, speed) => addPlayer(state, publicId, false, cyclesConfigFor(speed)),
+  step: (state, speed) => step(state, cyclesConfigFor(speed)),
   abandon: leave,
   finish,
   clear,
