@@ -1,8 +1,8 @@
 # Clicker
 
-A multiplayer click race in the browser. The host opens a room and shares the link, everyone hammers
-one button for ten seconds, and whoever lands the most clicks wins. The server does the counting, so
-every player sees the same score and the same winner.
+Multiplayer games in the browser, for a team on a call. The host opens a room, shares the link and
+picks a game; the server runs it, so every player sees the same world and the same winner. Live at
+<https://clicker.vladislavrogoza.workers.dev>.
 
 It runs on Cloudflare's free tier: a Worker serves the client, and each room lives in a Durable
 Object that talks to players over WebSockets.
@@ -11,8 +11,15 @@ Object that talks to players over WebSockets.
 
 1. Open the game and create a room.
 2. Send the link to everyone else — the link is the invitation, and it cannot be guessed.
-3. The host presses Start: three seconds of countdown, then a ten second round.
-4. Most clicks wins. On a tie, whoever reached that score first.
+3. The host picks a game, and for the light cycles a speed and any bots; then presses Start.
+
+**Clicker** — three seconds of countdown, ten seconds of clicking. Most clicks wins; on a tie,
+whoever reached that score first.
+
+**Light cycles** — a neon arena in the spirit of *Tron*. Each bike leaves a wall of light; ride
+others into yours and stay clear of everything yourself. A / D or the arrows turn, Space boosts; a
+crash puts you back in two seconds. Three-minute rounds, up to twenty riders with bots, ranked by
+kills.
 
 ## Architecture
 
@@ -25,41 +32,37 @@ packages/protocol      wire format and snapshots       valibot
 packages/game          game rules                      plain TypeScript, no dependencies
 ```
 
-- **`packages/game`** — the rules, in two halves. `room/` owns what every game shares: players, the
-  host, round phases, deadlines, reconnects. `modes/clicker/` owns this game in particular: what an
-  input means, the click rate limit, the score, the tie-break. The room calls the mode through one
-  small set of functions and never mentions clicking. Pure throughout: time and config arrive as
-  parameters and state is never mutated, so the rules are covered by ordinary unit tests that run in
-  milliseconds.
+- **`packages/game`** — the rules, in two halves. `room/` owns what every game shares: players and
+  bots, the host and the settings, round phases, deadlines, reconnects. `modes/clicker/` and
+  `modes/cycles/` own one game each, behind one `Mode` interface. Pure throughout: time and config
+  arrive as parameters and state is never mutated, so the same rules run on the server and replay
+  exactly anywhere. Gates check that: a purity test bans ambient time, randomness and
+  non-deterministic maths, and growth tests count the operations on the hot path.
 - **`packages/protocol`** — what travels over the wire. Schemas validate everything incoming and the
   types are inferred from those same schemas. Snapshots are built here too: the secret `playerId` and
   `hostKey` never make it in.
 - **`apps/game/src/worker`** — a thin adapter. It accepts messages, hands them to the rules,
-  broadcasts snapshots ten times a second, drives phase changes with a Durable Object alarm and
-  persists state so a restart cannot lose the room.
-- **`apps/game/src/client`** — screens and the scene. It knows no rules: it sends intents and draws
-  whatever the server sent.
+  broadcasts snapshots, drives phase changes with a Durable Object alarm and persists state so a
+  restart cannot lose the room. A living mode is stepped by a clock-driven tick: the timer only wakes
+  the room, the elapsed time decides how many steps are owed, and each step goes to everyone as one
+  `delta`; a joiner gets the whole round as `full`.
+- **`apps/game/src/client`** — screens and the scenes. It knows no rules: it sends intents and draws
+  whatever the server sent. For the light cycles it keeps the round from `full` and `delta` and draws
+  it a tick behind, between two server steps, so motion is smooth.
 
 The client and the Worker are built into one application by `@cloudflare/vite-plugin` and ship as a
 single deploy.
 
 ### One base, many games
 
-The clicker is the first mode, not the only one. A second mode — a reaction test, a snake — needs a
-directory under `packages/game/src/modes/`, its own input and data schemas, and its own arena on the
-client. It does not need to touch the room, the message envelope or the lobby.
+A game is a directory under `packages/game/src/modes/` behind the `Mode` interface — derived from
+the clicker and the light cycles once both existed — plus its schemas in `packages/protocol` and its
+screens on the client. It does not touch the room, the message envelope or the lobby. Input travels
+as a generic `input` command only the mode interprets, and a protocol version (now 2) tells an old
+tab to reload instead of letting it misread a message in silence.
 
-What makes that hold: the room carries a `mode` field and a `modeState` slot it never looks inside,
-input travels as a generic `input` command that only the mode interprets, and a protocol version lets
-the server tell an old tab to reload instead of letting it misread a snapshot in silence.
-
-Two more seams are declared and deliberately not wired yet: a `private` message type, for a role or a
-hand only one connection may see, and a `tickMs` step for modes that must keep moving while nobody
-presses anything. Nothing sends a private message and nothing advances a tick today — the clicker
-needs neither, and the first mode that does will implement them.
-
-The mode *interface* is deliberately missing. It gets written when a second mode exists and can be
-derived from two implementations instead of guessed from one.
+What comes next is in [docs/superpowers/specs](docs/superpowers/specs/): proposals for a textured
+ring race and for the light cycles' visual upgrade.
 
 ### Rooms and access
 
@@ -85,11 +88,12 @@ pnpm --filter @clicker/app run deploy     # build and publish to Cloudflare
 
 | Part | State |
 |---|---|
-| Game rules (`packages/game`) | done, 60 tests |
-| Wire format (`packages/protocol`) | done, 32 tests |
-| Room server (`apps/game/src/worker`) | done, 15 integration tests in the Workers runtime |
-| Client, 3D scene, end-to-end tests, deploy | in progress |
+| Game rules (`packages/game`) | clicker and light cycles, 216 tests |
+| Wire format (`packages/protocol`) | version 2, 74 tests |
+| Room server and client (`apps/game`) | 199 tests, including integration tests in the Workers runtime |
+| End to end | a clicker round and a light-cycle round against bots, desktop and phone |
+| Deploy | every push to `main`, through Cloudflare Workers Builds |
 
-The full design is in the [spec](docs/superpowers/specs/2026-09-11-clicker-foundation-design.md),
+The designs are the [specs](docs/superpowers/specs/),
 the work itself in the [plans](docs/superpowers/plans/), and the rules for working on the code in
 [CLAUDE.md](CLAUDE.md).
