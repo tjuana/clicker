@@ -337,3 +337,24 @@ long until the screen showed it, each with a median of the last ten. Locally, at
 a turn lands about 0.8 cells late (up to 1.4); the number equals the screen time times the speed,
 and each extra 100 ms of round trip adds about 0.8 cells at that speed. The decision on
 client-side prediction is taken from these numbers measured over a real network.
+
+## Decisions made while building plan 9 (2026-10-25)
+
+The look of section 8 moved on; the design is in the
+[polish and walls design](2026-10-25-light-cycles-polish-and-walls-design.md), §2.
+
+- **The floor is a soft mirror** (drei's `MeshReflectorMaterial`, 512², blurred, weakly mixed), lit
+  by an ambient light that reaches nothing else, since every other material is unlit. It is mounted
+  at the canvas, not in the field that remounts between rounds: drei never disposes its targets.
+- **The grid is a shader** on its own plane (a line every two cells, one pixel at any distance,
+  fogged), on layer 1 so the mirror leaves it out. `GridHelper` is gone.
+- **A trail cell is one instance**, not a body and an edge strip: a shader patched into
+  `MeshBasicMaterial` draws a dark foot, a bright top that blooms, a rim at grazing angles and a
+  pulse running down the trail from the time each cell was laid. Uploads are partial — only the
+  instances a tick wrote.
+- **MSAA** (4 samples) in the composer's own target; the canvas's antialias never reached it.
+- Every brightness figure lives in `scene/look.ts`; the owner's eye is still the judge.
+- The arena re-renders when what it shows changes, not on every message or clock tick (274 renders
+  in seven seconds of a round before, 4 after), and its keys are listened for from the first frame
+  the controls are enabled. The soundtrack looks 1.5 s ahead while the tab is hidden.
+- Measured: 120 fps (the display's cap) with 20 participants on the M2 in a real window.
