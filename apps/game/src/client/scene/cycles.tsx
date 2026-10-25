@@ -4,12 +4,14 @@ import {
   type Camera,
   type Color,
   type Fog,
+  HalfFloatType,
   InstancedMesh,
   Matrix4,
   MeshBasicMaterial,
   Quaternion,
   Vector2,
   Vector3,
+  WebGLRenderTarget,
 } from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
@@ -171,20 +173,34 @@ function Field({ side, tickMs, you }: { side: number; tickMs: number; you: strin
 
   // Bloom keys on brightness: see BIKE_LEVEL. Its figures are in look.ts.
   // The size here is a placeholder: the effect below sets the real one, and again on every resize.
-  const composer = useMemo(() => {
-    const chain = new EffectComposer(gl);
+  // The composer renders into its own target, which the canvas's antialias flag does not reach:
+  // without samples here every edge stair-steps. Half float keeps the bloom's brightness past 1.
+  const { composer, bloom } = useMemo(() => {
+    const target = new WebGLRenderTarget(1, 1, { type: HalfFloatType, samples: 4 });
+    const chain = new EffectComposer(gl, target);
     chain.addPass(new RenderPass(scene, camera));
-    chain.addPass(
-      new UnrealBloomPass(new Vector2(256, 256), BLOOM.strength, BLOOM.radius, BLOOM.threshold),
+    const pass = new UnrealBloomPass(
+      new Vector2(256, 256),
+      BLOOM.strength,
+      BLOOM.radius,
+      BLOOM.threshold,
     );
-    return chain;
+    chain.addPass(pass);
+    return { composer: chain, bloom: pass };
   }, [gl, scene, camera]);
 
   useEffect(() => {
     composer.setSize(size.width, size.height);
   }, [composer, size]);
 
-  useEffect(() => () => composer.dispose(), [composer]);
+  // The composer disposes its two targets and copy pass, not the passes added to it.
+  useEffect(
+    () => () => {
+      bloom.dispose();
+      composer.dispose();
+    },
+    [composer, bloom],
+  );
   useEffect(() => () => walls.dispose(), [walls]);
   useEffect(
     () => () => {
