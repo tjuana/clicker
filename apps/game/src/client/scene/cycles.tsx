@@ -211,6 +211,10 @@ function Field({ side, tickMs, you }: { side: number; tickMs: number; you: strin
     [bikes],
   );
 
+  // R3F runs frame callbacks in ascending priority, and drei's reflector renders the floor's
+  // mirror at priority 0. The scene is therefore brought up to date at -1, before the mirror
+  // looks at it, and only drawn at 1 (a positive priority is also what stops R3F rendering by
+  // itself). Done in one callback at 1, the reflection showed the previous frame's arena.
   useFrame((_, delta) => {
     const { model, timeline } = useCycles.getState();
     const now = performance.now();
@@ -259,8 +263,12 @@ function Field({ side, tickMs, you }: { side: number; tickMs: number; you: strin
 
       pointCamera(rig, camera, side, delta, fog);
     }
-    composer.render(delta);
-  }, 1);
+    // The reflector reads the camera's world matrix, which is otherwise refreshed only inside the
+    // render that comes after it.
+    camera.updateMatrixWorld();
+  }, -1);
+
+  useFrame((_, delta) => composer.render(delta), 1);
 
   return (
     <>
