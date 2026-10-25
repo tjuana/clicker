@@ -3,6 +3,7 @@ import { useSound } from '../audio/use-sound';
 import { secondsLeft, useServerClock } from '../clock';
 import {
   CyclesBar,
+  EnergyBar,
   KillFeed,
   MuteButton,
   RubberBar,
@@ -19,6 +20,8 @@ import { Button, CountdownOverlay } from '../ui';
 
 /** three.js is about a megabyte: the entry screens must not carry it. */
 const Cycles = lazy(() => import('../scene/cycles'));
+
+const WALL_KEYS = new Set(['KeyW', 'ArrowUp']);
 
 const TURN_KEYS: Record<string, 'left' | 'right'> = {
   KeyA: 'left',
@@ -83,6 +86,45 @@ function BoostButton({ onBoost, disabled }: { onBoost: () => void; disabled: boo
   );
 }
 
+/** Held, not tapped: the wall is laid for exactly as long as a finger is on it. */
+function WallButton({ onWall, disabled }: { onWall: (on: boolean) => void; disabled: boolean }) {
+  return (
+    <button
+      type="button"
+      data-testid="wall"
+      aria-label={strings.cycles.wall}
+      disabled={disabled}
+      onPointerDown={(event) => {
+        // Keeps the release coming here even when the finger slides off the button.
+        event.currentTarget.setPointerCapture(event.pointerId);
+        onWall(true);
+      }}
+      onPointerUp={() => onWall(false)}
+      onPointerCancel={() => onWall(false)}
+      onLostPointerCapture={() => onWall(false)}
+      onContextMenu={(event) => event.preventDefault()}
+      style={{
+        // none, not manipulation: a held finger must not scroll or start a long-press menu.
+        touchAction: 'none',
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
+        flex: 'none',
+        width: 76,
+        height: 84,
+        padding: 0,
+        borderRadius: 16,
+        border: `2px solid ${theme.gold}`,
+        background: theme.surface,
+        color: theme.goldBright,
+        fontWeight: 600,
+        cursor: 'pointer',
+      }}
+    >
+      {strings.cycles.wall}
+    </button>
+  );
+}
+
 /** Reads the clock itself: ten times a second is for the digits, not for the whole arena. */
 function Countdown({ goAt }: { goAt: number }) {
   const now = useServerClock();
@@ -92,13 +134,17 @@ function Countdown({ goAt }: { goAt: number }) {
 export function CyclesArena({
   onTurn,
   onBoost,
+  onWall,
 }: {
   onTurn: (side: 'left' | 'right') => void;
   onBoost: () => void;
+  onWall: (on: boolean) => void;
 }) {
   const snapshot = useClient((state) => state.snapshot);
   const you = useClient((state) => state.you);
   const running = snapshot?.phase === 'running';
+  // A boolean, like headGone: the arena must not follow the model or the data it comes from.
+  const walls = snapshot?.mode === 'cycles' && snapshot.data.walls === 'button';
   // A boolean and not the model: the model is a new object on every message, and the arena would
   // re-render on each one for a flag that changes once per round.
   const headGone = useCycles(
@@ -117,9 +163,23 @@ export function CyclesArena({
   useEffect(() => {
     if (!running) return;
 
-    const onKey = (event: KeyboardEvent): void => {
+    // The wall key is held, not pressed: `held` makes every release and every loss of focus say
+    // "off" exactly once, and never when the key was not down.
+    let held = false;
+    const wall = (on: boolean): void => {
+      if (held === on) return;
+      held = on;
+      onWall(on);
+    };
+
+    const onDown = (event: KeyboardEvent): void => {
       // One press, one move: a held key repeats by itself and would flood the turn queue.
       if (event.repeat || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (walls && WALL_KEYS.has(event.code)) {
+        event.preventDefault();
+        wall(true);
+        return;
+      }
       const side = TURN_KEYS[event.code];
       if (side === undefined && event.code !== 'Space') return;
       // Arrows and Space scroll the page unless told otherwise.
@@ -128,9 +188,26 @@ export function CyclesArena({
       else turn(side);
     };
 
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [running, turn, onBoost]);
+    const onUp = (event: KeyboardEvent): void => {
+      if (WALL_KEYS.has(event.code)) wall(false);
+    };
+    const onHidden = (): void => {
+      if (document.visibilityState === 'hidden') wall(false);
+    };
+    const onBlur = (): void => wall(false);
+
+    window.addEventListener('keydown', onDown);
+    window.addEventListener('keyup', onUp);
+    window.addEventListener('blur', onBlur);
+    document.addEventListener('visibilitychange', onHidden);
+    return () => {
+      wall(false);
+      window.removeEventListener('keydown', onDown);
+      window.removeEventListener('keyup', onUp);
+      window.removeEventListener('blur', onBlur);
+      document.removeEventListener('visibilitychange', onHidden);
+    };
+  }, [running, walls, turn, onBoost, onWall]);
 
   if (snapshot === null) return null;
   const round = snapshot.round;
@@ -174,6 +251,7 @@ export function CyclesArena({
             </strong>
           ) : null}
           <RubberBar />
+          <EnergyBar />
         </div>
       </div>
       <div
@@ -194,6 +272,7 @@ export function CyclesArena({
           {strings.cycles.turnLeft}
         </Button>
         <BoostButton onBoost={onBoost} disabled={!running} />
+        {walls ? <WallButton onWall={onWall} disabled={!running} /> : null}
         <Button
           testId="turn-right"
           variant="secondary"
@@ -205,7 +284,7 @@ export function CyclesArena({
         </Button>
       </div>
       <p style={{ color: theme.muted, margin: 0, padding: '0 12px 8px', textAlign: 'center' }}>
-        {strings.cycles.keys}
+        {walls ? strings.cycles.keysWithWall : strings.cycles.keys}
       </p>
 
       {snapshot.phase === 'countdown' && round !== null ? <Countdown goAt={round.goAt} /> : null}

@@ -51,6 +51,9 @@ export const strings = {
   speedLabel: 'Speed',
   speeds: { 8: 'Slow', 12: 'Normal', 16: 'Fast', 20: 'Insane' },
   cellsPerSecond: 'cells/s',
+  wallsLabel: 'Walls',
+  walls: { always: 'Always', button: 'On a key' },
+  wallsSummary: 'walls on a key',
   botsLabel: 'Bots',
   addBot: '+ bot',
   removeBot: '\u2212 bot',
@@ -69,6 +72,9 @@ export const strings = {
     turnLeft: 'Left',
     turnRight: 'Right',
     keys: 'A / D or arrows to turn, Space to boost',
+    keysWithWall: 'A / D or arrows to turn, Space to boost, hold W or \u2191 to lay a wall',
+    wall: 'Wall',
+    energy: 'Energy',
     soundOn: 'Sound on',
     soundOff: 'Sound off',
     // The turn-timing line: «+1.6 cells late  server 77 · screen 108 ms  (median +1.5 / 77 / 105)».
@@ -86,6 +92,11 @@ export const strings = {
     howTo: {
       title: 'How to play',
       goal: 'Your bike leaves a wall of light. Make others ride into it; do not ride into anything yourself.',
+      // Shown after the boost row when the walls are on a key.
+      wallRow: [
+        'W  or  \u2191',
+        'Hold to lay a wall. It spends energy; the bar fills again while you ride without one.',
+      ] as const,
       rows: [
         ['A / D  or  ← / →', 'Turn left or right, 90°. Two quick taps turn you around.'],
         ['Space', 'Boost: double speed for a second, then a four-second wait.'],

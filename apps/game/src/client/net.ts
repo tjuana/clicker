@@ -12,8 +12,10 @@ export interface Connection {
   click: () => void;
   turn: (side: 'left' | 'right') => void;
   boost: () => void;
+  wall: (on: boolean) => void;
   setMode: (mode: Message<'setMode'>['mode']) => void;
   setSpeed: (speed: Message<'setSpeed'>['speed']) => void;
+  setWalls: (walls: Message<'setWalls'>['walls']) => void;
   addBot: () => void;
   removeBot: () => void;
   close: () => void;
@@ -96,8 +98,10 @@ export function connect(roomId: string, name: string): Connection {
       }
     },
     boost: () => command({ type: 'input', input: { type: 'boost' } }),
+    wall: (on) => command({ type: 'input', input: { type: 'wall', on } }),
     setMode: (mode) => command({ type: 'setMode', mode }),
     setSpeed: (speed) => command({ type: 'setSpeed', speed }),
+    setWalls: (walls) => command({ type: 'setWalls', walls }),
     addBot: () => command({ type: 'addBot' }),
     removeBot: () => command({ type: 'removeBot' }),
     close: () => {

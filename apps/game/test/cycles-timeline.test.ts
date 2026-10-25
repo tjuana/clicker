@@ -8,7 +8,20 @@ const DELAY_MS = renderDelay(TICK_MS);
 
 function head(cell: number): Map<number, Head> {
   return new Map([
-    [1, { slot: 1, cell, dir: 0, rubber: 3, cooldown: 0, energy: 80, cap: 80, lit: true }],
+    [
+      1,
+      {
+        slot: 1,
+        cell,
+        dir: 0,
+        rubber: 3,
+        cooldown: 0,
+        energy: 80,
+        cap: 80,
+        lit: true,
+        drawn: true,
+      },
+    ],
   ]);
 }
 
