@@ -18,7 +18,7 @@ const idSchema = v.pipe(v.string(), v.regex(ID_PATTERN));
 const versionSchema = v.literal(PROTOCOL_VERSION);
 
 /** Control characters and bidi overrides (U+202A–U+202E, U+2066–U+2069). */
-const FORBIDDEN_NAME_CHARS = /[\p{Cc}‪-‮⁦-⁩]/u;
+const FORBIDDEN_NAME_CHARS = /[\p{Cc}\u202A-\u202E\u2066-\u2069]/u;
 
 /** The name is stored trimmed and its length is counted in code points. */
 const nameSchema = v.pipe(

@@ -97,7 +97,7 @@ describe('parseClientMessage', () => {
   });
 
   it('accepts a ZWJ emoji sequence in a name', () => {
-    const name = '👨‍👩‍👧';
+    const name = '👨\u200D👩\u200D👧';
 
     expect(
       parseClientMessage(encode({ v: PROTOCOL_VERSION, type: 'join', playerId, name })).ok,

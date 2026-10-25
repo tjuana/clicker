@@ -46,7 +46,7 @@ there is no scratch project; the tests of each task are the prototype.
 **Files:** `packages/protocol/src/client.ts`, a new test beside the purity test (`packages/game/test/source-text.test.ts`, which already reads files with `node:fs`).
 
 - [ ] The test walks every git-tracked `*.ts`, `*.tsx`, `*.md`, `*.json`, `*.jsonc` file under `packages/`, `apps/game/src`, `apps/game/test`, `apps/game/e2e`, `docs/` and `.claude/` (`git ls-files` through `node:child_process`, or a directory walk that skips `node_modules` and `dist`) and fails, naming file and line, on any raw U+0000–U+0008, U+000B, U+000C, U+000E–U+001F, U+007F, U+200B–U+200F, U+202A–U+202E, U+2066–U+2069 or U+FEFF. The test's own source writes every one of them as an escape.
-- [ ] Watch it fail on `client.ts:21` today, then write the regex as `/[\p{Cc}‪-‮⁦-⁩]/u` and watch it pass; the protocol's name tests stay green.
+- [ ] Watch it fail on `client.ts:21` today, then write the regex as `/[\p{Cc}\u202A-\u202E\u2066-\u2069]/u` and watch it pass; the protocol's name tests stay green.
 - [ ] Commit: `test: fail the build on invisible characters in source`.
 
 ### Task 1: The light cycles' settings as one object, and `setWalls` (engine)
