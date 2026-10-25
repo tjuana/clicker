@@ -80,3 +80,37 @@ describe('when a bot wants its wall', () => {
     expect((step(alone, button).state.bikes[0] as Bike).lit).toBe(false);
   });
 });
+
+describe('a bot that has run out of energy', () => {
+  it('does not light on every unit it regrows: its wall comes in runs, never dots', () => {
+    // No lookahead, so the bot keeps its course instead of steering around the rival it rides by.
+    const config = { ...button, botLookahead: 0 };
+    // The seed is chosen so that the bot's one in thirty wander never takes it away from the rival.
+    let state = arena(
+      130,
+      [
+        { x: 5, y: 60, dir: 0, bot: true, lit: false, energy: 0 },
+        // Rides beside it at the same pace, so a rival stays within reach the whole way.
+        { x: 2, y: 63, dir: 0, lit: false },
+      ],
+      config,
+    );
+    state = { ...state, seed: 8 };
+    // A wall is laid in a tick when the trail grows; `lit` is already false again by then if
+    // that tick spent the last unit.
+    const lit: boolean[] = [];
+    for (let tick = 0; tick < 100; tick += 1) {
+      const before = (state.bikes[0] as Bike).trail.size;
+      state = step(state, config).state;
+      lit.push((state.bikes[0] as Bike).trail.size > before);
+    }
+
+    const runs = lit
+      .join(',')
+      .split('false')
+      .map((chunk) => chunk.split(',').filter((flag) => flag === 'true').length)
+      .filter((length) => length > 0);
+    expect(runs.length).toBeGreaterThan(0);
+    expect(Math.min(...runs)).toBeGreaterThanOrEqual(button.energyTicks / 4);
+  });
+});

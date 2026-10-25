@@ -129,7 +129,12 @@ export function wantsWall(
   bikes: Bike[],
   config: CyclesConfig,
 ): boolean {
-  if (config.walls !== 'button' || bike.energy <= 0) return false;
+  if (config.walls !== 'button') return false;
+  // Hysteresis: a bot that lit keeps its wall while it has energy, but one that is dark lights
+  // only with a reserve (a quarter of a life's store, a second). Gating on empty alone relights
+  // the tick one unit regrows and lays a wall of single dots, which is the pattern the fresh-press
+  // rule stops people from making.
+  if (bike.energy <= 0 || (!bike.lit && bike.energy < config.energyTicks / 4)) return false;
   const top = Math.max(0, bike.y - WALL_RADIUS);
   const bottom = Math.min(side - 1, bike.y + WALL_RADIUS);
   const left = Math.max(0, bike.x - WALL_RADIUS);
