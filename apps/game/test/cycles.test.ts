@@ -516,7 +516,21 @@ describe('walls on a key in a running light-cycle room', () => {
     return undefined;
   };
 
+  // The suite's round is 200 ms, a handful of ticks at the fastest speed: whether a press, two lit
+  // ticks, a release and a refill all fit in it would be a race against the clock. This room is
+  // given a long round instead, read when the room is made, so the test waits only for messages.
   it('lights the bike and spends its energy while the key is held, and refills it after', async () => {
+    const mutableEnv = env as unknown as { ROUND_MS: string };
+    const original = mutableEnv.ROUND_MS;
+    mutableEnv.ROUND_MS = '5000';
+    try {
+      await holdAndRelease();
+    } finally {
+      mutableEnv.ROUND_MS = original;
+    }
+  });
+
+  async function holdAndRelease(): Promise<void> {
     const host = await lightCycleLobby(generateId(), 1);
     const welcome = host.received.find(isWelcome);
     host.send({ type: 'setWalls', walls: 'button' });
@@ -557,5 +571,6 @@ describe('walls on a key in a running light-cycle room', () => {
       const head = mineIn(message);
       return head !== undefined && !head.lit && head.energy > floor;
     });
-  });
+    host.close();
+  }
 });
