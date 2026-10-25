@@ -28,10 +28,11 @@ function play(
   state: CyclesState,
   ticks: number,
   check?: (state: CyclesState) => void,
+  rules = config,
 ): CyclesState {
   let current = state;
   for (let tick = 0; tick < ticks; tick += 1) {
-    current = step(current, config).state;
+    current = step(current, rules).state;
     check?.(current);
   }
   return current;
@@ -209,6 +210,17 @@ describe('bots', () => {
     let deaths = 0;
     for (let seed = 1; seed <= 30; seed += 1)
       deaths += play(botRound(1, seed), 3600).bikes[0]?.deaths ?? 0;
+    expect(deaths).toBeLessThanOrEqual(30);
+  });
+
+  it('rarely dies alone with walls on a key either, where it never lights them', () => {
+    const button = cyclesConfig({ walls: 'button' });
+    let deaths = 0;
+    for (let seed = 1; seed <= 30; seed += 1) {
+      let state = createCyclesState(seed);
+      state = addPlayer(state, 'bot-0', true, button);
+      deaths += play(startRound(state, button), 3600, undefined, button).bikes[0]?.deaths ?? 0;
+    }
     expect(deaths).toBeLessThanOrEqual(30);
   });
 });

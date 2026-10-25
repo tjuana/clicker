@@ -1,4 +1,4 @@
-import { decide } from './bot';
+import { decide, wantsWall } from './bot';
 import type { CyclesConfig } from './config';
 import { pickSpawn, type Spot } from './spawn';
 import { type Bike, type CyclesState, DX, DY } from './state';
@@ -300,6 +300,11 @@ export function step(
       const decided = decide(work.field, work.side, bike, config, seed);
       seed = decided.seed;
       if (decided.turn !== null) bike.turns.push(decided.turn);
+    }
+    // Decided once per tick, before the substeps, and from the field as the tick found it. Draws
+    // nothing from the seed, so the bots' other choices are the same as they were.
+    if (bike.bot && config.walls === 'button') {
+      bike.lit = wantsWall(work.field, work.side, bike, work.bikes, config);
     }
     const turn = bike.turns.shift();
     if (turn !== undefined) bike.dir = turn === 'left' ? (bike.dir + 3) & 3 : (bike.dir + 1) & 3;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { addPlayer, createCyclesState, startRound } from '../src/modes/cycles';
-import { decide } from '../src/modes/cycles/bot';
+import { decide, wantsWall } from '../src/modes/cycles/bot';
 import { clearance } from '../src/modes/cycles/spawn';
 import type { Bike } from '../src/modes/cycles/state';
 import { step } from '../src/modes/cycles/step';
@@ -117,5 +117,44 @@ describe('the respawn search', () => {
       return tally.touches;
     };
     expect(growth(work)).toBeLessThan(LINEAR * 2);
+  });
+});
+
+describe('a bot’s wish for a wall', () => {
+  const button = cyclesConfig({ walls: 'button' });
+
+  /** A bot in the middle of a field of `side`, with `rivals` bikes whose heads are all in the window. */
+  function crowd(side: number, rivals: number) {
+    const middle = Math.floor(side / 2);
+    return arena(
+      side,
+      [
+        { x: middle, y: middle, dir: 0, bot: true },
+        // Rivals far from the window, so that only the scan of the window, not a hit, is measured.
+        ...Array.from({ length: rivals }, (_, i) => ({ x: 1 + i, y: 1, dir: 0 })),
+      ],
+      button,
+    );
+  }
+
+  it('reads the same number of cells on a field ten times larger', () => {
+    const work = (size: number) => {
+      const side = size === 100 ? 40 : 400;
+      const state = crowd(side, 1);
+      const tally: Tally = { touches: 0 };
+      wantsWall(counted(state.field, tally), side, state.bikes[0] as Bike, state.bikes, button);
+      return tally.touches;
+    };
+    expect(growth(work)).toBeLessThan(2);
+  });
+
+  it('touches the same number of bikes when there are ten times as many', () => {
+    const work = (size: number) => {
+      const state = crowd(60, size === 100 ? 2 : 20);
+      const tally: Tally = { touches: 0 };
+      wantsWall(state.field, 60, state.bikes[0] as Bike, counted(state.bikes, tally), button);
+      return tally.touches;
+    };
+    expect(growth(work)).toBeLessThan(2);
   });
 });
