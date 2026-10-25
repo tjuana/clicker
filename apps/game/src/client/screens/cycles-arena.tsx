@@ -83,6 +83,12 @@ function BoostButton({ onBoost, disabled }: { onBoost: () => void; disabled: boo
   );
 }
 
+/** Reads the clock itself: ten times a second is for the digits, not for the whole arena. */
+function Countdown({ goAt }: { goAt: number }) {
+  const now = useServerClock();
+  return <CountdownOverlay seconds={secondsLeft(goAt, now)} veil={0.45} />;
+}
+
 export function CyclesArena({
   onTurn,
   onBoost,
@@ -90,7 +96,6 @@ export function CyclesArena({
   onTurn: (side: 'left' | 'right') => void;
   onBoost: () => void;
 }) {
-  const now = useServerClock();
   const snapshot = useClient((state) => state.snapshot);
   const you = useClient((state) => state.you);
   const running = snapshot?.phase === 'running';
@@ -207,9 +212,7 @@ export function CyclesArena({
         {strings.cycles.keys}
       </p>
 
-      {snapshot.phase === 'countdown' && round !== null ? (
-        <CountdownOverlay seconds={secondsLeft(round.goAt, now)} veil={0.45} />
-      ) : null}
+      {snapshot.phase === 'countdown' && round !== null ? <Countdown goAt={round.goAt} /> : null}
     </div>
   );
 }
