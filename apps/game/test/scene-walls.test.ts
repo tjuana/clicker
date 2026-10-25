@@ -160,6 +160,39 @@ describe('the walls', () => {
 
     expect(walls.mesh.count).toBe(6);
     expect(fresh.mesh.count).toBe(6);
-    for (let i = 0; i < 6; i += 1) expect(instance(walls, i)).toEqual(instance(fresh, i));
+    // Dates are left out: a cell held before keeps its own, by design.
+    for (let i = 0; i < 6; i += 1) {
+      expect(instance(walls, i).matrix).toEqual(instance(fresh, i).matrix);
+      expect(instance(walls, i).colour).toEqual(instance(fresh, i).colour);
+    }
+  });
+
+  it('keeps the pulse of a cell it already holds when a full of the same round arrives', () => {
+    const walls = createWalls(SIDE, TICK_MS);
+    walls.lay([put(10, 1), put(30, 2)], 1, false);
+    walls.lay([put(11, 1, 10)], 2, false);
+    // A boost lays two cells in one tick, a stall none: counting cells back would misdate all of it.
+    walls.lay([put(12, 1, 11), put(13, 1, 12)], 3, false);
+    walls.lay([put(14, 1, 13)], 4, false);
+    const live = [0, 1, 2, 3, 4, 5].map((i) => instance(walls, i).laid);
+    expect(live).toEqual([0.125, 0.125, 0.25, 0.375, 0.375, 0.5]);
+
+    // The same round's full at tick 7: cell 30 now belongs to slot 3, cell 40 is new to this client.
+    walls.lay(
+      [
+        put(10, 1),
+        put(11, 1, 10),
+        put(12, 1, 11),
+        put(13, 1, 12),
+        put(14, 1, 13),
+        put(40, 1, 14),
+        put(30, 3),
+      ],
+      7,
+      true,
+    );
+    expect([0, 1, 2, 3, 4, 5, 6].map((i) => instance(walls, i).laid)).toEqual([
+      0.125, 0.25, 0.375, 0.375, 0.5, 0.875, 0.875,
+    ]);
   });
 });

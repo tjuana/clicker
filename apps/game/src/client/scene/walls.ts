@@ -118,6 +118,7 @@ diffuseColor.rgb *= body * (1.0 + ${glsl(RIM)} * rim + ${glsl(PULSE)} * pulse) +
 
   const instanceOf = new Map<number, number>();
   const cellAt = new Int32Array(MAX_WALLS);
+  const slotAt = new Int32Array(MAX_WALLS);
   let count = 0;
 
   // Every index written since the last flush, so the flush can upload those instances alone. No
@@ -139,6 +140,7 @@ diffuseColor.rgb *= body * (1.0 + ${glsl(RIM)} * rim + ${glsl(PULSE)} * pulse) +
       instanceOf.set(cell, i);
       cellAt[i] = cell;
     }
+    slotAt[i] = slot;
     const x = (cell % side) + 0.5;
     const z = Math.floor(cell / side) + 0.5;
     const fx = from < 0 ? x : (from % side) + 0.5;
@@ -171,6 +173,7 @@ diffuseColor.rgb *= body * (1.0 + ${glsl(RIM)} * rim + ${glsl(PULSE)} * pulse) +
       laid.setX(i, laid.getX(last));
       const moved = cellAt[last] as number;
       cellAt[i] = moved;
+      slotAt[i] = slotAt[last] as number;
       instanceOf.set(moved, i);
       touch(i);
     }
@@ -181,16 +184,28 @@ diffuseColor.rgb *= body * (1.0 + ${glsl(RIM)} * rim + ${glsl(PULSE)} * pulse) +
   // Scratch for a reset: how many cells each slot lays, then how many are dated so far.
   const trailLength = new Map<number, number>();
   const dated = new Map<number, number>();
+  // What a reset finds already laid, by cell: its date and its owner. A reset is rare (a join, a
+  // resync), so these maps growing once per reset is fine; the per-tick path never touches them.
+  const heldDate = new Map<number, number>();
+  const heldSlot = new Map<number, number>();
 
   return {
     mesh,
     lay: (ops, tick, reset) => {
       if (reset) {
+        heldDate.clear();
+        heldSlot.clear();
+        for (const [cell, i] of instanceOf) {
+          heldDate.set(cell, laid.getX(i));
+          heldSlot.set(cell, slotAt[i] as number);
+        }
         instanceOf.clear();
         count = 0;
         // fromFull emits each trail consecutively, oldest first: the k-th of n cells of a slot was
         // laid n - 1 - k ticks ago. Dating them all alike would make a late joiner's whole field
-        // pulse in unison for good.
+        // pulse in unison for good. Counting back is wrong for a cell this client already holds, though:
+        // a boost lays two cells in a tick and a stall none, so it would re-date everything behind
+        // a boost a second early. A cell kept by the same bike keeps the date it was laid with.
         trailLength.clear();
         dated.clear();
         for (const op of ops) {
@@ -204,7 +219,8 @@ diffuseColor.rgb *= body * (1.0 + ${glsl(RIM)} * rim + ${glsl(PULSE)} * pulse) +
           const k = dated.get(op.slot) ?? 0;
           dated.set(op.slot, k + 1);
           const n = trailLength.get(op.slot) as number;
-          put(op.cell, op.slot, op.from, ((tick - (n - 1 - k)) * tickMs) / 1000);
+          const kept = heldSlot.get(op.cell) === op.slot ? heldDate.get(op.cell) : undefined;
+          put(op.cell, op.slot, op.from, kept ?? ((tick - (n - 1 - k)) * tickMs) / 1000);
         }
         return;
       }
