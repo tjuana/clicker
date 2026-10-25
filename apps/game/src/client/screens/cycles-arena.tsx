@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef } from 'react';
 import { useSound } from '../audio/use-sound';
 import { secondsLeft, useServerClock } from '../clock';
 import {
@@ -88,6 +88,14 @@ function BoostButton({ onBoost, disabled }: { onBoost: () => void; disabled: boo
 
 /** Held, not tapped: the wall is laid for exactly as long as a finger is on it. */
 function WallButton({ onWall, disabled }: { onWall: (on: boolean) => void; disabled: boolean }) {
+  // A release arrives twice: pointerup, then lostpointercapture as the capture lets go. The wire
+  // should carry one, so the button remembers whether it is down.
+  const down = useRef(false);
+  const release = (): void => {
+    if (!down.current) return;
+    down.current = false;
+    onWall(false);
+  };
   return (
     <button
       type="button"
@@ -97,11 +105,12 @@ function WallButton({ onWall, disabled }: { onWall: (on: boolean) => void; disab
       onPointerDown={(event) => {
         // Keeps the release coming here even when the finger slides off the button.
         event.currentTarget.setPointerCapture(event.pointerId);
+        down.current = true;
         onWall(true);
       }}
-      onPointerUp={() => onWall(false)}
-      onPointerCancel={() => onWall(false)}
-      onLostPointerCapture={() => onWall(false)}
+      onPointerUp={release}
+      onPointerCancel={release}
+      onLostPointerCapture={release}
       onContextMenu={(event) => event.preventDefault()}
       style={{
         // none, not manipulation: a held finger must not scroll or start a long-press menu.

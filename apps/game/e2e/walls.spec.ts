@@ -12,12 +12,31 @@ const energyOf = async (page: Page): Promise<number | null> => {
 };
 
 /**
+ * What this tab sent about the wall, read off the socket: `on` and `off`, in order. Letting go
+ * changes nothing on screen that a crash could not also change (a death refills the bar too), so
+ * the wire is where the release is seen; the refill itself is held in the room's workerd test.
+ */
+function wallsSent(page: Page): string[] {
+  const sent: string[] = [];
+  page.on('websocket', (socket) => {
+    // Vite's own hot-reload socket is not ours.
+    if (!socket.url().includes('/parties/')) return;
+    socket.on('framesent', ({ payload }) => {
+      const input = (JSON.parse(String(payload)) as { input?: { type: string; on?: boolean } })
+        .input;
+      if (input?.type === 'wall') sent.push(input.on === true ? 'on' : 'off');
+    });
+  });
+  return sent;
+}
+
+/**
  * One rider, three bots, walls on a key, in a live round. Resolves once the bar shows full energy,
  * with that figure.
  *
  * One page on purpose, as in cycles.spec.ts. The round is ten seconds because playwright.config.ts
- * starts the server with ROUND_MS; a bike that is never turned meets the arena's edge a few
- * seconds in, so everything that follows has to fit in the first of them.
+ * starts the server with ROUND_MS. Nothing here waits on the bike surviving: the first lit tick
+ * lowers the bar at once, and everything after that is read off the wire.
  */
 async function startWallsOnAKey(page: Page): Promise<number> {
   await page.goto('/');
@@ -50,53 +69,46 @@ async function startWallsOnAKey(page: Page): Promise<number> {
   return full;
 }
 
-/** Waits for the bar to leave `from` on the side `falls` says, and returns where it got to. */
-async function barMovesFrom(page: Page, from: number, falls: boolean): Promise<number> {
-  let reached = from;
+/** Waits for the bar to fall below `from`: the first lit tick has reached the screen. */
+async function barFallsFrom(page: Page, from: number): Promise<void> {
   await expect
     .poll(async () => {
       const now = await energyOf(page);
-      if (now !== null) reached = now;
-      return now !== null && (falls ? now < from : now > from);
+      return now !== null && now < from;
     })
     .toBe(true);
-  return reached;
 }
 
 async function endOfRound(page: Page) {
-  // The round was not lost to a crash on the way: a death gives a full bar back, which would
-  // make "the bar rose" true for the wrong reason.
-  await expect(page.getByTestId('hud-deaths')).toContainText('0');
   const results = page.getByTestId('results');
   await expect(results).toBeVisible();
   await expect(results.locator('tbody tr')).toHaveCount(RIDERS.length);
 }
 
-test('holding W lays a wall and spends energy; letting go refills it', async ({ page }) => {
+test('holding W lays a wall and spends energy; letting go says so', async ({ page }) => {
+  const sent = wallsSent(page);
   const full = await startWallsOnAKey(page);
 
   await page.keyboard.down('KeyW');
-  const spent = await barMovesFrom(page, full, true);
+  await barFallsFrom(page, full);
   await page.keyboard.up('KeyW');
-  // A tick or two may still arrive before the release does; the bar stops falling, then rises.
-  const floor = (await energyOf(page)) ?? spent;
-  await barMovesFrom(page, floor, false);
+  await expect.poll(() => sent).toEqual(['on', 'off']);
 
   await endOfRound(page);
 });
 
-test('holding the Wall button lays a wall and spends energy; letting go refills it', async ({
+test('holding the Wall button lays a wall and spends energy; letting go says so', async ({
   page,
 }) => {
+  const sent = wallsSent(page);
   const full = await startWallsOnAKey(page);
 
   const wall = page.getByTestId('wall');
   await wall.hover();
   await page.mouse.down();
-  const spent = await barMovesFrom(page, full, true);
+  await barFallsFrom(page, full);
   await page.mouse.up();
-  const floor = (await energyOf(page)) ?? spent;
-  await barMovesFrom(page, floor, false);
+  await expect.poll(() => sent).toEqual(['on', 'off']);
 
   await endOfRound(page);
 });
