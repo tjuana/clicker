@@ -12,13 +12,17 @@ export {
   type CyclesConfig,
   type CyclesEvent,
   type CyclesResultRow,
+  type CyclesSettings,
   type CyclesState,
   cyclesConfigFor,
+  DEFAULT_CYCLES_SETTINGS,
   DEFAULT_SPEED,
   forEachCell,
   SPEEDS,
   type Speed,
   type TickChanges,
+  WALL_MODES,
+  type WallMode,
 } from './modes/cycles';
 export { type ApplyResult, apply } from './room/apply';
 export type {
@@ -36,6 +40,6 @@ export {
   tickMsFor,
 } from './room/config';
 export { nextDeadline } from './room/deadline';
-export { abortRound, syncConnections } from './room/recovery';
+export { abortRound, syncConnections, upgradeStored } from './room/recovery';
 export type { Notice, Phase, Player, RoomState, Round } from './room/state';
 export { createRoomState } from './room/state';

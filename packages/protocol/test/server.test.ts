@@ -1,6 +1,7 @@
 import {
   apply,
   type Command,
+  type CyclesState,
   configFor,
   createRoomState,
   type GameEvent,
@@ -8,6 +9,7 @@ import {
   type RoomState,
   syncConnections,
   type TickChanges,
+  upgradeStored,
 } from '@clicker/game';
 import { describe, expect, it } from 'vitest';
 import { PROTOCOL_VERSION } from '../src/client';
@@ -118,7 +120,10 @@ describe('toSnapshot', () => {
     const { bot: _bot, ...legacy } = playedRoom().players['secret-1'] as Player;
     const stored = { ...playedRoom(), players: { 'secret-1': legacy as Player } };
 
-    const snapshot = toSnapshot(syncConnections(stored, { 'secret-1': ['conn-9'] }, 0), 42);
+    const snapshot = toSnapshot(
+      syncConnections(upgradeStored(stored), { 'secret-1': ['conn-9'] }, 0),
+      42,
+    );
 
     expect(snapshot.players).toEqual([{ id: '1', name: 'Аня', connected: true, bot: false }]);
     expect(parseServerMessage(JSON.stringify(snapshot))).toEqual(snapshot);
@@ -212,7 +217,7 @@ describe('toSnapshot of a light-cycle room', () => {
     const snapshot = toSnapshot(state, 7);
 
     expect(snapshot.mode).toBe('cycles');
-    expect(snapshot.data).toMatchObject({ speed: 8 });
+    expect(snapshot.data).toMatchObject({ speed: 8, walls: 'always' });
     expect(snapshot.players.map((player) => player.bot)).toEqual([false, true, true]);
     expect(parseServerMessage(JSON.stringify(snapshot))).toEqual(snapshot);
   });
@@ -226,6 +231,7 @@ describe('toSnapshot of a light-cycle room', () => {
 
     expect(snapshot.data).toEqual({
       speed: 8,
+      walls: 'always',
       results: expect.arrayContaining([expect.objectContaining({ id: '1', name: 'Аня' })]),
     });
     expect((snapshot.data.results ?? []).map((row) => row.id).sort()).toEqual(['1', '2', '3']);
@@ -234,24 +240,46 @@ describe('toSnapshot of a light-cycle room', () => {
 
   it('tells the clients the speed the host chose', () => {
     const { state } = cyclesRoom(1, 2);
-    const chosen = { ...state, speed: 16 } as const;
+    const chosen = { ...state, settings: { speed: 16, walls: 'always' } } as const;
 
     expect(toSnapshot(chosen, 0).data).toMatchObject({ speed: 16 });
   });
 
+  it('tells the clients how the host wants the walls laid', () => {
+    const { state } = cyclesRoom(1, 2);
+    const chosen = { ...state, settings: { speed: 8, walls: 'button' } } as const;
+
+    const snapshot = toSnapshot(chosen, 0);
+
+    expect(snapshot.data).toMatchObject({ walls: 'button' });
+    expect(parseServerMessage(JSON.stringify(snapshot))).toEqual(snapshot);
+  });
+
   it('shows no results while the round is on', () => {
-    expect(toSnapshot(cyclesRoom(1, 2).state, 0).data).toEqual({ results: null, speed: 8 });
+    expect(toSnapshot(cyclesRoom(1, 2).state, 0).data).toEqual({
+      results: null,
+      speed: 8,
+      walls: 'always',
+    });
   });
 });
 
 describe('a snapshot is tied to its mode', () => {
   const clickerData = { scores: { '1': 0 }, results: null };
-  const cyclesData = { results: null, speed: 8 };
+  const cyclesData = { results: null, speed: 8, walls: 'always' };
 
   it('refuses a light-cycle snapshot that carries the clicker data', () => {
     const snapshot = toSnapshot(cyclesRoom(1, 2).state, 0);
 
     expect(parseServerMessage(JSON.stringify({ ...snapshot, data: clickerData }))).toBeNull();
+  });
+
+  it('refuses a light-cycle snapshot with no walls', () => {
+    const snapshot = toSnapshot(cyclesRoom(1, 2).state, 0);
+
+    expect(
+      parseServerMessage(JSON.stringify({ ...snapshot, data: { results: null, speed: 8 } })),
+    ).toBeNull();
   });
 
   it('refuses a light-cycle snapshot with no speed', () => {
@@ -287,11 +315,18 @@ describe('toFull', () => {
     expect(full?.bikes).toHaveLength(20);
   });
 
+  it('carries each bike energy, its capacity and whether its wall is lit', () => {
+    const { state } = cyclesRoom(2, 3);
+    const bike = toFull(state)?.bikes[0];
+    const own = (state.modeState as CyclesState).bikes[0];
+    expect(bike).toMatchObject({ energy: own?.energy, cap: own?.energyCap, lit: own?.lit });
+  });
+
   it('says how long a tick lasts, from the speed the host chose', () => {
     const { state } = cyclesRoom(2, 3);
 
     expect(toFull(state)?.tickMs).toBe(125);
-    expect(toFull({ ...state, speed: 16 })?.tickMs).toBe(62.5);
+    expect(toFull({ ...state, settings: { speed: 16, walls: 'always' } })?.tickMs).toBe(62.5);
   });
 
   it('is refused by the parser without the tick length', () => {
@@ -310,9 +345,9 @@ describe('toFull', () => {
     const alive = (full?.bikes ?? []).filter((bike) => bike.alive);
     expect(alive.length).toBeGreaterThan(0);
     for (const bike of alive) {
-      // Heads are 5-tuples; searching the flat list for the slot could land on a rubber or a cooldown.
+      // Heads are 8-tuples; searching the flat list for the slot could land on a rubber or a cooldown.
       let at = 0;
-      while (delta.heads[at] !== bike.slot) at += 5;
+      while (delta.heads[at] !== bike.slot) at += 8;
       // The head the tick reported is the last cell of the trail, and every cell borders the next.
       expect(bike.trail.at(-1)).toBe(delta.heads[at + 1]);
       for (let i = 1; i < bike.trail.length; i += 1) {
@@ -374,7 +409,7 @@ describe('toDelta', () => {
     expect(delta.cells).toEqual(changes.cells);
     expect(delta.heads).toEqual(changes.heads);
     expect(delta.heads.length).toBeGreaterThan(0);
-    expect(delta.heads.length % 5).toBe(0);
+    expect(delta.heads.length % 8).toBe(0);
     expect(parseServerMessage(JSON.stringify(delta))).toEqual(delta);
   });
 
@@ -401,5 +436,28 @@ describe('the new error code', () => {
         JSON.stringify({ v: PROTOCOL_VERSION, type: 'error', code: 'not_supported' }),
       ),
     ).not.toBeNull();
+  });
+});
+
+describe('an error frame read by a tab of another version', () => {
+  it('reads bad_version whatever the version of the frame says', () => {
+    const raw = JSON.stringify({ v: 99, type: 'error', code: 'bad_version' });
+
+    expect(parseServerMessage(raw)).toEqual({
+      v: PROTOCOL_VERSION,
+      type: 'error',
+      code: 'bad_version',
+    });
+  });
+
+  it('still refuses every other frame of a foreign version', () => {
+    for (const frame of [
+      { v: 99, type: 'error', code: 'not_host' },
+      { v: 99, type: 'error', code: 'bad_version', extra: 1 },
+      { v: 'x', type: 'error', code: 'bad_version' },
+      { v: 99, type: 'welcome', you: '1', isHost: true },
+    ]) {
+      expect(parseServerMessage(JSON.stringify(frame))).toBeNull();
+    }
   });
 });

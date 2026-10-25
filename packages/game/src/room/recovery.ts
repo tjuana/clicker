@@ -1,5 +1,5 @@
 import { modeFor } from '../modes';
-import { DEFAULT_SPEED } from '../modes/cycles/config';
+import { type CyclesSettings, DEFAULT_CYCLES_SETTINGS } from '../modes/cycles/config';
 import type { Player, RoomState } from './state';
 
 /**
@@ -14,8 +14,30 @@ export function abortRound(state: RoomState): RoomState {
     phase: 'lobby',
     round: null,
     notice: 'round_aborted',
-    modeState: modeFor(state.mode).clear(state.modeState, state.speed),
+    modeState: modeFor(state.mode).clear(state.modeState, state.settings),
   };
+}
+
+/**
+ * What storage hands back was written by an older build and may lack what this one reads: the
+ * room's settings (a speed alone, or nothing) and the players' bot flag. It runs first thing
+ * after the read, because everything after it, `abortRound` included, trusts the shape.
+ */
+export function upgradeStored(state: RoomState): RoomState {
+  const stored = state as Omit<RoomState, 'settings'> & {
+    settings?: CyclesSettings;
+    speed?: CyclesSettings['speed'];
+  };
+  const settings: CyclesSettings = stored.settings ?? {
+    ...DEFAULT_CYCLES_SETTINGS,
+    speed: stored.speed ?? DEFAULT_CYCLES_SETTINGS.speed,
+  };
+  const players: Record<string, Player> = {};
+  for (const [playerId, player] of Object.entries(state.players)) {
+    const old: Omit<Player, 'bot'> & { bot?: boolean } = player;
+    players[playerId] = { ...player, bot: old.bot === true };
+  }
+  return { ...state, players, settings };
 }
 
 /**
@@ -27,25 +49,19 @@ export function syncConnections(
   live: Record<string, string[]>,
   now: number,
 ): RoomState {
-  // Same for the speed: a room stored before it existed reads as the default.
-  const speed = (state as Omit<RoomState, 'speed'> & { speed?: RoomState['speed'] }).speed;
   const players: Record<string, Player> = {};
-  for (const [playerId, stored] of Object.entries(state.players)) {
-    // What storage hands back was written by an older build and may lack the flag. Every stored
-    // room passes through here when the object starts, so this is where it becomes a boolean.
-    const player: Omit<Player, 'bot'> & { bot?: boolean } = stored;
+  for (const [playerId, player] of Object.entries(state.players)) {
     // A bot has no connection to recount; counting it as disconnected would expire it.
-    if (player.bot === true) {
-      players[playerId] = stored;
+    if (player.bot) {
+      players[playerId] = player;
       continue;
     }
     const connectionIds = live[playerId] ?? [];
     players[playerId] = {
       ...player,
-      bot: false,
       connectionIds,
       disconnectedAt: connectionIds.length > 0 ? null : (player.disconnectedAt ?? now),
     };
   }
-  return { ...state, players, speed: speed ?? DEFAULT_SPEED };
+  return { ...state, players };
 }

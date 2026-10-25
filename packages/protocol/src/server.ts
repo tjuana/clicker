@@ -1,14 +1,15 @@
 import {
   type ClickerState,
+  type CyclesSettings,
   type CyclesState,
   comparePublicIds,
   forEachCell,
   type RoomState,
   SPEEDS,
-  type Speed,
   type TickChanges,
   tickMsFor,
   toModeData,
+  WALL_MODES,
 } from '@clicker/game';
 import * as v from 'valibot';
 import { PROTOCOL_VERSION } from './client';
@@ -54,6 +55,8 @@ export const clickerDataSchema = v.strictObject({
 export const cyclesDataSchema = v.strictObject({
   /** Cells a second; the lobby shows it and the host changes it. */
   speed: v.picklist(SPEEDS),
+  /** Whether a wall is always laid or only while its player holds a key. */
+  walls: v.picklist(WALL_MODES),
   results: v.nullable(
     v.array(
       v.strictObject({
@@ -119,6 +122,9 @@ export const fullSchema = v.strictObject({
       rubber: v.number(),
       boost: v.number(),
       cooldown: v.number(),
+      energy: v.number(),
+      cap: v.number(),
+      lit: v.boolean(),
       respawnIn: v.number(),
     }),
   ),
@@ -131,7 +137,7 @@ export const deltaSchema = v.strictObject({
   t: v.number(),
   /** Flat pairs: cell, what it holds after the tick (0 = empty). Apply in any order. */
   cells: v.array(v.number()),
-  /** Flat 5-tuples for every living bike: slot, head cell, direction, rubber left, boost cooldown left. */
+  /** Flat 8-tuples for every living bike: slot, head cell, direction, rubber left, boost cooldown left, energy, energy capacity, lit (1 or 0). */
   heads: v.array(v.number()),
   events: v.array(eventSchema),
 });
@@ -147,6 +153,13 @@ export const errorSchema = v.strictObject({
   v: versionSchema,
   type: v.literal('error'),
   code: errorCodeSchema,
+});
+
+/** What the server says to a tab of another version, read whatever version the frame carries. */
+const staleTabSchema = v.strictObject({
+  v: v.number(),
+  type: v.literal('error'),
+  code: v.literal('bad_version'),
 });
 
 export const serverMessageSchema = v.variant('type', [
@@ -176,13 +189,21 @@ export function parseServerMessage(raw: string): ServerMessage | null {
   }
 
   const result = v.safeParse(serverMessageSchema, data);
-  return result.success ? result.output : null;
+  if (result.success) return result.output;
+  // The one frame a tab of any version must understand: it is how an out-of-date tab learns to
+  // reload instead of sitting blank. The frame is handed on as this build's own.
+  const stale = v.safeParse(staleTabSchema, data);
+  return stale.success ? { v: PROTOCOL_VERSION, type: 'error', code: 'bad_version' } : null;
 }
 
-function cyclesDataOf(state: CyclesState, speed: Speed): v.InferOutput<typeof cyclesDataSchema> {
+function cyclesDataOf(
+  state: CyclesState,
+  settings: CyclesSettings,
+): v.InferOutput<typeof cyclesDataSchema> {
   const { results } = state;
   return {
-    speed,
+    speed: settings.speed,
+    walls: settings.walls,
     results:
       results === null
         ? null
@@ -221,7 +242,7 @@ export function toSnapshot(state: RoomState, now: number): SnapshotMessage {
   return {
     ...common,
     mode: 'cycles',
-    data: cyclesDataOf(state.modeState as CyclesState, state.speed),
+    data: cyclesDataOf(state.modeState as CyclesState, state.settings),
   };
 }
 
@@ -234,7 +255,7 @@ export function toFull(state: RoomState): FullMessage | null {
     v: PROTOCOL_VERSION,
     type: 'full',
     tick: cycles.tick,
-    tickMs: tickMsFor(state.speed),
+    tickMs: tickMsFor(state.settings.speed),
     side: cycles.side,
     bikes: cycles.bikes.map((bike) => {
       const trail: number[] = [];
@@ -250,6 +271,9 @@ export function toFull(state: RoomState): FullMessage | null {
         rubber: bike.rubber,
         boost: bike.boost,
         cooldown: bike.cooldown,
+        energy: bike.energy,
+        cap: bike.energyCap,
+        lit: bike.lit,
         respawnIn: bike.respawnIn,
       };
     }),

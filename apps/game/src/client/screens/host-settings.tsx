@@ -1,4 +1,4 @@
-import { SPEEDS } from '@clicker/game';
+import { SPEEDS, WALL_MODES } from '@clicker/game';
 import type { SnapshotMessage } from '@clicker/protocol';
 import type { ReactNode } from 'react';
 import { strings } from '../strings';
@@ -7,11 +7,13 @@ import { Button, Choice } from '../ui';
 
 type Mode = SnapshotMessage['mode'];
 type Speed = (typeof SPEEDS)[number];
+type Walls = (typeof WALL_MODES)[number];
 
 /** What the host can change between rounds, in the lobby and again on the results; a guest only reads. */
 export interface RoomSettings {
   setMode: (mode: Mode) => void;
   setSpeed: (speed: Speed) => void;
+  setWalls: (walls: Walls) => void;
   addBot: () => void;
   removeBot: () => void;
 }
@@ -24,6 +26,8 @@ const SPEED_OPTIONS = SPEEDS.map((value) => ({
   value,
   label: `${strings.speeds[value]} ${value}`,
 }));
+
+const WALL_OPTIONS = WALL_MODES.map((value) => ({ value, label: strings.walls[value] }));
 
 /** The label above a group of controls, in the same muted voice as the player list's. */
 function Setting({
@@ -58,6 +62,7 @@ export function HostSettings({
 }) {
   const mode: Mode = snapshot?.mode ?? 'clicker';
   const speed = snapshot?.mode === 'cycles' ? snapshot.data.speed : null;
+  const walls = snapshot?.mode === 'cycles' ? snapshot.data.walls : null;
   const bots = snapshot?.players.filter((player) => player.bot).length ?? 0;
 
   return (
@@ -73,6 +78,14 @@ export function HostSettings({
               options={SPEED_OPTIONS}
               value={speed}
               onChoose={settings.setSpeed}
+            />
+          </Setting>
+          <Setting label={strings.wallsLabel}>
+            <Choice
+              testId="walls"
+              options={WALL_OPTIONS}
+              value={walls ?? 'always'}
+              onChoose={settings.setWalls}
             />
           </Setting>
           <Setting testId="bots" label={`${strings.botsLabel}: ${bots}`}>

@@ -755,7 +755,7 @@ git commit -m "refactor(game): split the rules into a room and a game mode"
 **Важно:** `FORBIDDEN_NAME_CHARS` и весь `nameSchema` переносятся из текущего файла как есть — их правка в эту задачу не входит. В блоке ниже невидимые символы диапазонов могли исказиться при копировании; верная форма строки ровно та, что уже лежит в репозитории:
 
 ```ts
-const FORBIDDEN_NAME_CHARS = /[\p{Cc}‪-‮⁦-⁩]/u;
+const FORBIDDEN_NAME_CHARS = /[\p{Cc}\u202A-\u202E\u2066-\u2069]/u;
 ```
 
 ```ts
@@ -774,7 +774,7 @@ const idSchema = v.pipe(v.string(), v.regex(ID_PATTERN));
 const versionSchema = v.literal(PROTOCOL_VERSION);
 
 /** Control characters and bidi overrides (U+202A–U+202E, U+2066–U+2069). */
-const FORBIDDEN_NAME_CHARS = /[\p{Cc}‪-‮⁦-⁩]/u;
+const FORBIDDEN_NAME_CHARS = /[\p{Cc}\u202A-\u202E\u2066-\u2069]/u;
 
 /** The name is stored trimmed and its length is counted in code points. */
 const nameSchema = v.pipe(

@@ -33,6 +33,12 @@ export const SLOT_COLOURS = [
 export const WALL_LEVEL = 0.3;
 /** Past the bloom threshold, so the bikes glow while the walls do not. */
 export const BIKE_LEVEL = 1.25;
+/**
+ * A bike that is not laying its wall: dark enough not to glow, bright enough to still be seen. The
+ * brightest part (GLOW = 1) of the brightest slot colour (a 0xff channel, so 1.0) comes to
+ * 1.0 * 0.45 = 0.45, below BLOOM.threshold 0.6, so an unlit bike gives no bloom at all.
+ */
+export const DIM_LEVEL = 0.45;
 
 /** The wall's top band is this much brighter than its body: the edge that blooms. */
 export const TOP = 4.0;

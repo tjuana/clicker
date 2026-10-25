@@ -8,10 +8,14 @@ import { emptyTrail } from './trail';
 export {
   CYCLES_CONFIG,
   type CyclesConfig,
+  type CyclesSettings,
   cyclesConfigFor,
+  DEFAULT_CYCLES_SETTINGS,
   DEFAULT_SPEED,
   SPEEDS,
   type Speed,
+  WALL_MODES,
+  type WallMode,
 } from './config';
 export {
   type Bike,
@@ -48,6 +52,11 @@ function newBike(slot: number, publicId: string, bot: boolean, config: CyclesCon
     deaths: 0,
     life: 0,
     longest: 0,
+    held: false,
+    lit: config.walls === 'always',
+    energy: config.energyTicks,
+    energyCap: config.energyTicks,
+    energyRegen: 0,
   };
 }
 
@@ -62,7 +71,16 @@ export function addPlayer(
   if (position !== undefined && existing !== undefined) {
     // Coming back after leaving: the same slot, and the usual wait before riding again.
     if (!existing.left) return state;
-    return withBike(state, position, { ...existing, left: false, respawnIn: config.respawnTicks });
+    // The key is forgotten: a release sent while the socket was down never arrived, and the
+    // next press is ignored by a bike that believes it is still held. A bike that never left
+    // returned above, so a second tab cannot take its wall away.
+    return withBike(state, position, {
+      ...existing,
+      left: false,
+      respawnIn: config.respawnTicks,
+      held: false,
+      lit: config.walls === 'always',
+    });
   }
   const bike = newBike(state.bikes.length + 1, publicId, bot, config);
   return {
@@ -150,7 +168,23 @@ export function applyInput(
 ): CyclesState {
   const position = state.index[publicId];
   const bike = position === undefined ? undefined : state.bikes[position];
-  if (position === undefined || bike === undefined || !bike.alive) return state;
+  if (position === undefined || bike === undefined) return state;
+
+  if (input.type === 'wall') {
+    if (config.walls === 'always') return state;
+    // A dead bike still remembers the key, but nothing lights until it is placed again.
+    if (!bike.alive)
+      return bike.held === input.on
+        ? state
+        : withBike(state, position, { ...bike, held: input.on });
+    if (input.on) {
+      if (bike.held) return state;
+      return withBike(state, position, { ...bike, held: true, lit: bike.energy > 0 });
+    }
+    if (!bike.held && !bike.lit) return state;
+    return withBike(state, position, { ...bike, held: false, lit: false });
+  }
+  if (!bike.alive) return state;
 
   if (input.type === 'turn') {
     if (bike.turns.length >= config.turnQueue) return state;

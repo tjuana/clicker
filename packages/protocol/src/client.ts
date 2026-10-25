@@ -1,4 +1,4 @@
-import { SPEEDS } from '@clicker/game';
+import { SPEEDS, WALL_MODES } from '@clicker/game';
 import * as v from 'valibot';
 import { ID_PATTERN } from './ids';
 
@@ -8,9 +8,10 @@ export const MAX_NAME_LENGTH = 20;
 /**
  * Bumped when the wire format changes in a way an old client cannot read. 2: players[] in the
  * snapshot gained a required `bot`, which a strict version-1 client rejects; it now gets
- * `bad_version` and reloads instead of silently dropping every snapshot.
+ * `bad_version` and reloads instead of silently dropping every snapshot. 3: the light-cycle
+ * snapshot's `data` gained a required `walls`, which a strict version-2 client rejects.
  */
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 
 const encoder = new TextEncoder();
 
@@ -18,7 +19,7 @@ const idSchema = v.pipe(v.string(), v.regex(ID_PATTERN));
 const versionSchema = v.literal(PROTOCOL_VERSION);
 
 /** Control characters and bidi overrides (U+202A–U+202E, U+2066–U+2069). */
-const FORBIDDEN_NAME_CHARS = /[\p{Cc}‪-‮⁦-⁩]/u;
+const FORBIDDEN_NAME_CHARS = /[\p{Cc}\u202A-\u202E\u2066-\u2069]/u;
 
 /** The name is stored trimmed and its length is counted in code points. */
 const nameSchema = v.pipe(
@@ -34,10 +35,11 @@ const nameSchema = v.pipe(
 /** The clicker's input. What it means is the mode's business, not the room's. */
 export const clickerInputSchema = v.strictObject({ type: v.literal('click') });
 
-/** The light cycles' input: a turn to a side, or a boost. */
+/** The light cycles' input: a turn to a side, a boost, or the wall key going down or up. */
 export const cyclesInputSchema = v.variant('type', [
   v.strictObject({ type: v.literal('turn'), side: v.picklist(['left', 'right']) }),
   v.strictObject({ type: v.literal('boost') }),
+  v.strictObject({ type: v.literal('wall'), on: v.boolean() }),
 ]);
 
 export const joinSchema = v.strictObject({
@@ -67,6 +69,12 @@ export const setSpeedSchema = v.strictObject({
   type: v.literal('setSpeed'),
   speed: v.picklist(SPEEDS),
 });
+/** How the light cycles lay their walls; a value outside the list never reaches the rules. */
+export const setWallsSchema = v.strictObject({
+  v: versionSchema,
+  type: v.literal('setWalls'),
+  walls: v.picklist(WALL_MODES),
+});
 export const addBotSchema = v.strictObject({ v: versionSchema, type: v.literal('addBot') });
 export const removeBotSchema = v.strictObject({ v: versionSchema, type: v.literal('removeBot') });
 /** The client noticed a gap in tick numbers and asks for the whole state again. */
@@ -78,6 +86,7 @@ export const clientMessageSchema = v.variant('type', [
   inputSchema,
   setModeSchema,
   setSpeedSchema,
+  setWallsSchema,
   addBotSchema,
   removeBotSchema,
   resyncSchema,

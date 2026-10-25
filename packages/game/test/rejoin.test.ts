@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { cyclesConfigFor, DEFAULT_SPEED } from '../src/modes/cycles';
+import { cyclesConfigFor, DEFAULT_CYCLES_SETTINGS } from '../src/modes/cycles';
 import { apply } from '../src/room/apply';
 import { configFor } from '../src/room/config';
 import type { RoomState } from '../src/room/state';
 import { clickerOf, cyclesOf, lobbyWithHost, run } from './support';
 
 /** A room that never chose a speed rides at the default one. */
-const RESPAWN_TICKS = cyclesConfigFor(DEFAULT_SPEED).respawnTicks;
+const RESPAWN_TICKS = cyclesConfigFor(DEFAULT_CYCLES_SETTINGS).respawnTicks;
 
 const CYCLES = configFor('cycles');
 

@@ -135,8 +135,9 @@ count. A complexity test holds it to that.
   `speed` is handed now — the second setting is the moment to stop passing them one by one. A room
   stored before it reads as `{ speed: stored or 8, walls: 'always' }`.
 - The snapshot's light-cycle `data` gains `walls`. `full` gains each bike's energy, capacity and
-  whether its wall is lit; each `heads` entry gains energy and capacity (seven numbers). The schemas
-  are strict, so the version goes to 3 and an old tab is sent to reload.
+  whether its wall is lit; each `heads` entry gains energy, capacity and lit (eight numbers — see
+  "Decisions made while building plan 10"). The schemas are strict, so the version goes to 3 and an
+  old tab is sent to reload.
 
 ### 3.4 Client
 
@@ -170,3 +171,40 @@ count. A complexity test holds it to that.
 The neon look for the lobby and results screens; effects (crash debris from the Kenney kit, boost
 streak, derez respawn); environment and better bikes; the turn-delay fix for the light cycles,
 which waits on real-network numbers from the readout.
+
+## Decisions made while building plan 10 (2026-10-26)
+
+- **`heads` entries are eight numbers**: slot, head, direction, rubber, boost cooldown, energy,
+  capacity, lit. Without `lit` a client cannot tell a respawned bike in button mode (never lit) from
+  one that stalled at its spawn, and the scene needs it to dim the bike.
+- **A trail can have gaps.** The client joins two consecutive trail cells with a wall only when they
+  are neighbours, and draws a wall only where the rules still hold the cell after the delta; the
+  scene also refuses to stretch a wall to a cell that is not a neighbour.
+- **A held key does not light the wall at respawn**: a respawned bike is unlit, and lighting takes a
+  fresh press, the same rule as after running empty.
+- A lit bike keeps its progress towards the next unit of energy; regeneration counts every living
+  unlit bike once per tick, a stalled one included.
+- Bots in button mode light their wall while a rival's head is within four cells either way, read
+  from the field (at most 81 reads, whatever the field or the head count). Alone, a bot never lights
+  it and so practically never dies: none in thirty rounds, against 22 in always mode.
+- The hold button on screen sends one release: pointer capture delivers two (pointerup, then
+  lostpointercapture).
+- Found on the way: the name filter's regex held raw bidi characters, against CLAUDE.md. They are
+  escapes now, and a test fails the build on any invisible character in tracked source.
+
+What plan 10's review changed:
+
+- **A room stored by the build before is upgraded first**, before a round it was in the middle of
+  is aborted: a light-cycle room stored mid-round with only a `speed` would otherwise have thrown on
+  every start, for good.
+- **A rider who comes back starts with the key up**: the room cannot know what happened to the key
+  while the socket was down.
+- **Bots relight only with a second of energy** and keep the wall while they have any: lighting on
+  every unit that regrew laid one cell every other tick, the dotted wall the fresh-press rule keeps
+  people from laying.
+- **The client holds the wall while any of its sources is down** — W, ↑ or the button — and a key
+  held through the countdown lights the wall when the round goes live.
+- **A `bad_version` error is readable by a tab of any version.**
+- The invisible-character test covers every tracked text file.
+- Known and left: a `full` can draw an unlit bike's head when it happens to sit next to its own
+  last wall cell, until its next move.

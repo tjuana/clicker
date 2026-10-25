@@ -36,6 +36,9 @@ function bike(
     rubber: 3,
     boost: 0,
     cooldown: 0,
+    energy: 80,
+    cap: 80,
+    lit: true,
     respawnIn: 0,
     ...overrides,
   };
@@ -87,10 +90,39 @@ describe('fromFull', () => {
       [2, '2'],
     ]);
     expect([...model.heads.values()]).toEqual([
-      { slot: 1, cell: at(2, 1), dir: 0, rubber: 2, cooldown: 7 },
+      {
+        slot: 1,
+        cell: at(2, 1),
+        dir: 0,
+        rubber: 2,
+        cooldown: 7,
+        energy: 80,
+        cap: 80,
+        lit: true,
+        drawn: true,
+      },
     ]);
     expect(model.kills.get(1)).toBe(3);
     expect(model.deaths.get(2)).toBe(4);
+  });
+});
+
+describe('fromFull with gaps in a trail', () => {
+  it('joins only neighbours, and leaves a bare head undrawn', () => {
+    const { model, walls } = fromFull(
+      fullOf([bike(1, [at(1, 1), at(2, 1), at(5, 1), at(8, 1)], { lit: false })]),
+    );
+    expect(walls).toEqual([
+      { kind: 'put', cell: at(1, 1), slot: 1, from: -1 },
+      { kind: 'put', cell: at(2, 1), slot: 1, from: at(1, 1) },
+      { kind: 'put', cell: at(5, 1), slot: 1, from: -1 },
+    ]);
+    expect(model.heads.get(1)?.drawn).toBe(false);
+  });
+
+  it('draws a lone lit head, and nothing for a lone bare one', () => {
+    expect(fromFull(fullOf([bike(1, [at(3, 3)])])).walls).toHaveLength(1);
+    expect(fromFull(fullOf([bike(1, [at(3, 3)], { lit: false })])).walls).toEqual([]);
   });
 });
 
@@ -100,7 +132,7 @@ describe('applyDelta', () => {
   it('lays one wall for one step, joined to the previous head, and moves the head', () => {
     const result = advance(
       start(),
-      deltaOf(6, { cells: [at(3, 1), 1], heads: [1, at(3, 1), 0, 3, 0] }),
+      deltaOf(6, { cells: [at(3, 1), 1], heads: [1, at(3, 1), 0, 3, 0, 80, 80, 1] }),
     );
 
     expect(result.walls).toEqual([{ kind: 'put', cell: at(3, 1), slot: 1, from: at(2, 1) }]);
@@ -111,7 +143,7 @@ describe('applyDelta', () => {
   it('lays the middle cell too when a boost carries the head two cells', () => {
     const result = advance(
       start(),
-      deltaOf(6, { cells: [at(3, 1), 1, at(4, 1), 1], heads: [1, at(4, 1), 0, 3, 28] }),
+      deltaOf(6, { cells: [at(3, 1), 1, at(4, 1), 1], heads: [1, at(4, 1), 0, 3, 28, 80, 80, 1] }),
     );
 
     expect(result.walls).toEqual([
@@ -125,7 +157,7 @@ describe('applyDelta', () => {
 
     const { walls } = advance(
       model,
-      deltaOf(6, { cells: [at(4, 4), 1, at(4, 5), 1], heads: [1, at(4, 5), 1, 3, 28] }),
+      deltaOf(6, { cells: [at(4, 4), 1, at(4, 5), 1], heads: [1, at(4, 5), 1, 3, 28, 80, 80, 1] }),
     );
 
     expect(walls).toEqual([
@@ -134,10 +166,22 @@ describe('applyDelta', () => {
     ]);
   });
 
+  it('draws nothing for a bike that is not laying a wall: it only lifts the cell it left', () => {
+    const model = fromFull(fullOf([bike(1, [at(2, 1)], { lit: false })])).model;
+
+    const result = advance(
+      model,
+      deltaOf(6, { cells: [at(2, 1), 0], heads: [1, at(3, 1), 0, 3, 0, 80, 80, 0] }),
+    );
+
+    expect(result.walls).toEqual([{ kind: 'lift', cell: at(2, 1) }]);
+    expect(result.model.heads.get(1)).toMatchObject({ cell: at(3, 1), drawn: false });
+  });
+
   it('lays nothing for a bike that stalled, and lifts the tail the rules freed', () => {
     const result = advance(
       start(),
-      deltaOf(6, { cells: [at(1, 1), 0], heads: [1, at(2, 1), 0, 2, 0] }),
+      deltaOf(6, { cells: [at(1, 1), 0], heads: [1, at(2, 1), 0, 2, 0, 80, 80, 1] }),
     );
 
     expect(result.walls).toEqual([{ kind: 'lift', cell: at(1, 1) }]);
@@ -153,7 +197,7 @@ describe('applyDelta', () => {
       model,
       deltaOf(6, {
         cells: [at(1, 1), 0, at(2, 1), 0, at(3, 1), 0, at(8, 6), 2],
-        heads: [2, at(8, 6), 3, 3, 0],
+        heads: [2, at(8, 6), 3, 3, 0, 80, 80, 1],
         events: [{ type: 'died', slot: 1, by: 2 }],
       }),
     );
@@ -178,7 +222,7 @@ describe('applyDelta', () => {
       model,
       deltaOf(6, {
         cells: [at(5, 5), 1, at(6, 5), 1],
-        heads: [1, at(6, 5), 0, 3, 0],
+        heads: [1, at(6, 5), 0, 3, 0, 80, 80, 1],
         events: [{ type: 'respawned', slot: 1 }],
       }),
     );
@@ -197,7 +241,7 @@ describe('applyDelta', () => {
       model,
       deltaOf(6, {
         cells: [at(5, 5), 1],
-        heads: [1, at(5, 5), 0, 3, 0],
+        heads: [1, at(5, 5), 0, 3, 0, 80, 80, 1],
         events: [{ type: 'respawned', slot: 1 }],
       }),
     );
@@ -221,17 +265,30 @@ describe('applyDelta', () => {
   });
 });
 
+/** A small seeded generator, so the recorded round is the same on every run. */
+function seeded(seed: number): () => number {
+  let state = seed;
+  return () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 2 ** 32;
+  };
+}
+
 /**
  * A round the real rules played, in the form it would go over the wire. The client has to end up
  * with exactly the walls the rules have, after every single tick: a wall too many or too few is
  * a trail drawn through a bike or a gap in a barrier.
  */
-function record(ticks: number): {
+function record(
+  ticks: number,
+  walls: 'always' | 'button' = 'always',
+): {
   full: FullMessage;
   deltas: DeltaMessage[];
   fields: Uint16Array[];
 } {
   const config = configFor('cycles', DEFAULT_CONFIG, 20);
+  const random = seeded(7);
   let state: RoomState = createRoomState();
   const run = (command: Command, now: number) => {
     const result = apply(state, command, now, config);
@@ -241,6 +298,7 @@ function record(ticks: number): {
   run({ type: 'join', playerId: 'host', connectionId: 'c', name: 'Host', hostKey: 'k' }, 0);
   run({ type: 'setMode', playerId: 'host', mode: 'cycles' }, 0);
   run({ type: 'setSpeed', playerId: 'host', speed: 20 }, 0);
+  run({ type: 'setWalls', playerId: 'host', walls }, 0);
   for (let bot = 0; bot < 7; bot += 1) run({ type: 'addBot', playerId: 'host' }, 0);
   run({ type: 'start', playerId: 'host' }, 0);
   run({ type: 'tick' }, config.countdownMs);
@@ -257,6 +315,17 @@ function record(ticks: number): {
     if (tick % 9 === 4) {
       const side = tick % 2 === 0 ? 'left' : 'right';
       run({ type: 'input', playerId: 'host', input: { type: 'turn', side } }, config.countdownMs);
+    }
+    if (walls === 'button') {
+      // The rider presses and lets go of the wall key at random, so lit and bare stretches mix.
+      const roll = random();
+      if (roll < 0.15 || roll > 0.85) {
+        const input = { type: 'wall', on: roll < 0.5 } as const;
+        run({ type: 'input', playerId: 'host', input }, config.countdownMs);
+      } else if (roll > 0.8) {
+        const side = roll > 0.82 ? 'left' : 'right';
+        run({ type: 'input', playerId: 'host', input: { type: 'turn', side } }, config.countdownMs);
+      }
     }
     for (const event of run({ type: 'step' }, config.countdownMs)) {
       if (event.type !== 'stepped') continue;
@@ -320,6 +389,59 @@ describe('replaying a recorded round', () => {
         }
       }
       expect(walls.size).toBe(live);
+    });
+  });
+});
+
+describe('replaying a recorded round with walls on a key', () => {
+  const ticks = 400;
+  const { full, deltas, fields } = record(ticks, 'button');
+
+  it('is a round worth replaying: bikes light up, go bare and die', () => {
+    const lit = deltas.flatMap((delta) => {
+      const flags: number[] = [];
+      for (let i = 0; i < delta.heads.length; i += 8) flags.push(delta.heads[i + 7] as number);
+      return flags;
+    });
+    expect(lit).toContain(0);
+    expect(lit).toContain(1);
+    expect(deltas.flatMap((delta) => delta.events).some((e) => e.type === 'died')).toBe(true);
+  });
+
+  it("draws only real walls, and every real wall but a bike's own head cell", () => {
+    const start = fromFull(full);
+    const drawn = new Map<number, number>();
+    holdWalls(drawn, start.walls, start.model.side);
+    let model = start.model;
+
+    deltas.forEach((delta, index) => {
+      const result = advance(model, delta);
+      holdWalls(drawn, result.walls, model.side);
+      const before = model.heads;
+      model = result.model;
+
+      const field = fields[index] as Uint16Array;
+      const headCells = new Set([...model.heads.values()].map((head) => head.cell));
+      for (const head of model.heads.values()) {
+        // A bike that moved without laying a wall leaves nothing under its head, unless the cell
+        // it left is still a wall of its own for the head to continue. Judged from the rules'
+        // lit flag, not from the model's `drawn`, which is what is under test.
+        const prev = before.get(head.slot);
+        if (head.lit || prev === undefined || prev.cell === head.cell) continue;
+        if (drawn.has(head.cell) && drawn.get(prev.cell) !== head.slot) {
+          expect(drawn.has(head.cell), `bare head ${head.cell} after tick ${delta.t}`).toBe(false);
+        }
+      }
+      for (const [cell, slot] of drawn) {
+        if (field[cell] !== slot) {
+          expect(field[cell], `drawn cell ${cell} after tick ${delta.t}`).toBe(slot);
+        }
+      }
+      for (let cell = 0; cell < field.length; cell += 1) {
+        const slot = field[cell] as number;
+        if (slot === 0 || drawn.get(cell) === slot || headCells.has(cell)) continue;
+        expect(drawn.get(cell), `cell ${cell} of slot ${slot} after tick ${delta.t}`).toBe(slot);
+      }
     });
   });
 });

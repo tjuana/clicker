@@ -104,3 +104,49 @@ export function decide(
   }
   return { turn: best, seed: current };
 }
+
+/**
+ * How far from its head a bot looks for a rival, in cells each way: a 9 × 9 window. About a
+ * second's ride at the default speed, enough to light a wall before a head-on pass but not so
+ * wide that bots spend their energy on rivals they will never meet. A constant, so the cost of
+ * the question stays put as the field and the crowd grow.
+ */
+const WALL_RADIUS = 4;
+
+/**
+ * Whether a bot lays its wall this tick: only while it has energy and a rival's head is close.
+ * Bots have no key, so none of the fresh-press rule people live under applies to them.
+ *
+ * Reads the field window, not the bikes: a cell holding a slot `s` is a head when `bikes[s - 1]`
+ * is alive and stands exactly there. That relies on `bikes` being ordered by slot with slot `n`
+ * at index `n - 1`, which `addPlayer` and `startRound` guarantee. At most 81 cells and one
+ * lookup per occupied cell, whatever the field or the number of bikes.
+ */
+export function wantsWall(
+  field: Uint16Array,
+  side: number,
+  bike: Bike,
+  bikes: Bike[],
+  config: CyclesConfig,
+): boolean {
+  if (config.walls !== 'button') return false;
+  // Hysteresis: a bot that lit keeps its wall while it has energy, but one that is dark lights
+  // only with a reserve (a quarter of a life's store, a second). Gating on empty alone relights
+  // the tick one unit regrows and lays a wall of single dots, which is the pattern the fresh-press
+  // rule stops people from making.
+  if (bike.energy <= 0 || (!bike.lit && bike.energy < config.energyTicks / 4)) return false;
+  const top = Math.max(0, bike.y - WALL_RADIUS);
+  const bottom = Math.min(side - 1, bike.y + WALL_RADIUS);
+  const left = Math.max(0, bike.x - WALL_RADIUS);
+  const right = Math.min(side - 1, bike.x + WALL_RADIUS);
+  for (let y = top; y <= bottom; y += 1) {
+    for (let x = left; x <= right; x += 1) {
+      const cell = y * side + x;
+      const slot = field[cell] ?? 0;
+      if (slot === 0 || slot === bike.slot) continue;
+      const other = bikes[slot - 1];
+      if (other?.alive && other.y * side + other.x === cell) return true;
+    }
+  }
+  return false;
+}

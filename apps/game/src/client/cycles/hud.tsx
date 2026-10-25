@@ -352,6 +352,47 @@ export function RubberBar() {
   );
 }
 
+/** Energy: how much wall the bike can still lay, as a bar. Shown only when walls are on a key. */
+export function EnergyBar() {
+  const model = useCycles((state) => state.model);
+  const you = useClient((state) => state.you);
+  const button = useClient(
+    (state) => state.snapshot?.mode === 'cycles' && state.snapshot.data.walls === 'button',
+  );
+  if (!button || model === null) return null;
+  const head = model.heads.get(slotOfId(model, you));
+  if (head === undefined) return null;
+
+  return (
+    <div
+      data-testid="energy"
+      data-energy={head.energy}
+      data-cap={head.cap}
+      style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, color: theme.muted }}
+    >
+      {strings.cycles.energy}
+      <span
+        style={{
+          width: 140,
+          height: 8,
+          borderRadius: 4,
+          background: theme.border,
+          overflow: 'hidden',
+        }}
+      >
+        <span
+          style={{
+            display: 'block',
+            height: '100%',
+            width: `${head.cap > 0 ? Math.min(100, (head.energy / head.cap) * 100) : 0}%`,
+            background: head.lit ? theme.goldBright : theme.gold,
+          }}
+        />
+      </span>
+    </div>
+  );
+}
+
 /** How far the boost has recharged, 0…1, from the cooldown left. */
 export function useBoostCharge(): number {
   const model = useCycles((state) => state.model);

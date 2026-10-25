@@ -8,7 +8,7 @@ import {
 } from '../src/modes/cycles/config';
 import { apply } from '../src/room/apply';
 import { configFor, DEFAULT_CONFIG } from '../src/room/config';
-import { abortRound, syncConnections } from '../src/room/recovery';
+import { abortRound, upgradeStored } from '../src/room/recovery';
 import { createRoomState, type RoomState } from '../src/room/state';
 import { cyclesOf, lobbyWithHost, run } from './support';
 
@@ -36,23 +36,28 @@ describe('the speeds a host can choose', () => {
 describe('cyclesConfigFor', () => {
   it('lasts a boost one second, a respawn two and a cooldown four at any speed', () => {
     for (const speed of SPEEDS) {
-      const config = cyclesConfigFor(speed);
+      const config = cyclesConfigFor({ speed, walls: 'always' });
       expect(config.boostTicks).toBe(speed);
       expect(config.boostCooldownTicks).toBe(speed * 4);
       expect(config.respawnTicks).toBe(speed * 2);
       expect(config.rubberRegenTicks).toBe(speed);
     }
-    expect(cyclesConfigFor(8).respawnTicks).toBe(16);
-    expect(cyclesConfigFor(20).respawnTicks).toBe(40);
+    expect(cyclesConfigFor({ speed: 8, walls: 'always' }).respawnTicks).toBe(16);
+    expect(cyclesConfigFor({ speed: 20, walls: 'always' }).respawnTicks).toBe(40);
   });
 
   it('leaves everything that is not a duration as it is', () => {
     const { rubber, trail, killBonus, turnQueue } = CYCLES_CONFIG;
-    expect(cyclesConfigFor(8)).toMatchObject({ rubber, trail, killBonus, turnQueue });
+    expect(cyclesConfigFor({ speed: 8, walls: 'always' })).toMatchObject({
+      rubber,
+      trail,
+      killBonus,
+      turnQueue,
+    });
   });
 
   it('is the existing twenty-cells-a-second config at twenty', () => {
-    expect(cyclesConfigFor(20)).toEqual(CYCLES_CONFIG);
+    expect(cyclesConfigFor({ speed: 20, walls: 'always' })).toEqual(CYCLES_CONFIG);
   });
 });
 
@@ -74,7 +79,7 @@ describe('configFor and the speed', () => {
 
 describe('setSpeed', () => {
   it('starts a room at the default speed', () => {
-    expect(createRoomState().speed).toBe(DEFAULT_SPEED);
+    expect(createRoomState().settings.speed).toBe(DEFAULT_SPEED);
   });
 
   it('lets the host choose in the lobby', () => {
@@ -84,7 +89,7 @@ describe('setSpeed', () => {
       0,
     );
 
-    expect(state.speed).toBe(16);
+    expect(state.settings.speed).toBe(16);
     expect(events).toEqual([]);
   });
 
@@ -93,7 +98,8 @@ describe('setSpeed', () => {
     expect(over.phase).toBe('results');
 
     expect(
-      apply(over, { type: 'setSpeed', playerId: 'host', speed: 12 }, 10_000_000).state.speed,
+      apply(over, { type: 'setSpeed', playerId: 'host', speed: 12 }, 10_000_000).state.settings
+        .speed,
     ).toBe(12);
   });
 
@@ -104,7 +110,7 @@ describe('setSpeed', () => {
 
     const guest = apply(lobby, { type: 'setSpeed', playerId: 'guest', speed: 20 }, 0);
     expect(guest.events).toEqual([{ type: 'rejected', playerId: 'guest', code: 'not_host' }]);
-    expect(guest.state.speed).toBe(DEFAULT_SPEED);
+    expect(guest.state.settings.speed).toBe(DEFAULT_SPEED);
 
     const stranger = apply(lobby, { type: 'setSpeed', playerId: 'nobody', speed: 20 }, 0);
     expect(stranger.events).toEqual([{ type: 'rejected', playerId: 'nobody', code: 'not_joined' }]);
@@ -119,14 +125,14 @@ describe('setSpeed', () => {
     const result = apply(live, { type: 'setSpeed', playerId: 'host', speed: 20 }, now);
 
     expect(result.events).toEqual([{ type: 'rejected', playerId: 'host', code: 'wrong_phase' }]);
-    expect(result.state.speed).toBe(live.speed);
+    expect(result.state.settings.speed).toBe(live.settings.speed);
   });
 
   it('is not supported by the clicker', () => {
     const result = apply(lobbyWithHost(), { type: 'setSpeed', playerId: 'host', speed: 16 }, 0);
 
     expect(result.events).toEqual([{ type: 'rejected', playerId: 'host', code: 'not_supported' }]);
-    expect(result.state.speed).toBe(DEFAULT_SPEED);
+    expect(result.state.settings.speed).toBe(DEFAULT_SPEED);
   });
 
   it('survives a trip through the clicker and back', () => {
@@ -137,7 +143,7 @@ describe('setSpeed', () => {
       { type: 'setMode', playerId: 'host', mode: 'cycles' },
     ]);
 
-    expect(back.speed).toBe(16);
+    expect(back.settings.speed).toBe(16);
     expect(cyclesOf(back).bikes[0]?.respawnIn).toBe(32);
   });
 });
@@ -184,16 +190,16 @@ describe('the rules at the chosen speed', () => {
 
 describe('a room stored before the speed existed', () => {
   it('reads as the default speed', () => {
-    const { speed: _speed, ...legacy } = cyclesLobby();
+    const { settings: _settings, ...legacy } = cyclesLobby();
 
-    const synced = syncConnections(legacy as RoomState, { host: ['c-host'] }, 0);
+    const synced = upgradeStored(legacy as unknown as RoomState);
 
-    expect(synced.speed).toBe(DEFAULT_SPEED);
+    expect(synced.settings.speed).toBe(DEFAULT_SPEED);
   });
 
   it('keeps a speed that was stored', () => {
     const stored = run(cyclesLobby(), [{ type: 'setSpeed', playerId: 'host', speed: 12 }]);
 
-    expect(syncConnections(stored, { host: ['c-host'] }, 0).speed).toBe(12);
+    expect(upgradeStored(stored).settings.speed).toBe(12);
   });
 });

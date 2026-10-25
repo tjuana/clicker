@@ -16,7 +16,16 @@ function replay(field: Uint16Array, changes: TickChanges): Uint16Array {
 function livingHeads(state: CyclesState): number[] {
   return state.bikes.flatMap((bike) =>
     bike.alive
-      ? [bike.slot, bike.y * state.side + bike.x, bike.dir, bike.rubber, bike.cooldown]
+      ? [
+          bike.slot,
+          bike.y * state.side + bike.x,
+          bike.dir,
+          bike.rubber,
+          bike.cooldown,
+          bike.energy,
+          bike.energyCap,
+          bike.lit ? 1 : 0,
+        ]
       : [],
   );
 }
@@ -83,7 +92,7 @@ describe('what a tick reports', () => {
 
     const { changes } = step(state, config);
 
-    const [slot1, , , rubber1, cooldown1, slot2, , , rubber2, cooldown2] = changes.heads;
+    const [slot1, , , rubber1, cooldown1, , , , slot2, , , rubber2, cooldown2] = changes.heads;
     expect([slot1, slot2]).toEqual([1, 2]);
     expect(rubber1).toBeLessThan(config.rubber);
     expect(cooldown1).toBeGreaterThan(0);

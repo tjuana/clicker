@@ -98,6 +98,27 @@ describe('the walls', () => {
     expect(lengths[0]).toBe(lengths[1]);
   });
 
+  it('draws a put whose from is not its neighbour as a put with no from', () => {
+    // Plan 9's review: a from four cells away drew a 7-cell bar. Cell 14 is in row 0, so a far
+    // from on the same row, in another row, or diagonal is not a neighbour either.
+    for (const far of [10, SIDE * 3 + 14, SIDE + 15, 14]) {
+      const walls = createWalls(SIDE, TICK_MS);
+      walls.lay([put(14, 1, far)], 1, false);
+      const bare = createWalls(SIDE, TICK_MS);
+      bare.lay([put(14, 1)], 1, false);
+      expect(instance(walls, 0).matrix).toEqual(instance(bare, 0).matrix);
+    }
+  });
+
+  it('still joins a put to a neighbour in the next row or beside it', () => {
+    const walls = createWalls(SIDE, TICK_MS);
+    walls.lay([put(14, 1, 13), put(SIDE + 14, 1, 14)], 1, false);
+    const bare = createWalls(SIDE, TICK_MS);
+    bare.lay([put(14, 1), put(SIDE + 14, 1)], 1, false);
+    expect(instance(walls, 0).matrix).not.toEqual(instance(bare, 0).matrix);
+    expect(instance(walls, 1).matrix).not.toEqual(instance(bare, 1).matrix);
+  });
+
   it('clears the previous walls on a reset', () => {
     const walls = createWalls(SIDE, TICK_MS);
     walls.lay([put(1, 1), put(2, 1, 1), put(3, 1, 2)], 1, false);

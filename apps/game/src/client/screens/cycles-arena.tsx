@@ -1,8 +1,9 @@
-import { lazy, Suspense, useCallback, useEffect } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef } from 'react';
 import { useSound } from '../audio/use-sound';
 import { secondsLeft, useServerClock } from '../clock';
 import {
   CyclesBar,
+  EnergyBar,
   KillFeed,
   MuteButton,
   RubberBar,
@@ -12,6 +13,7 @@ import {
   useBoostCharge,
 } from '../cycles/hud';
 import { useCycles } from '../cycles/store';
+import { createWallKeys } from '../cycles/wall-keys';
 import { useClient } from '../store';
 import { strings } from '../strings';
 import { theme } from '../theme';
@@ -19,6 +21,8 @@ import { Button, CountdownOverlay } from '../ui';
 
 /** three.js is about a megabyte: the entry screens must not carry it. */
 const Cycles = lazy(() => import('../scene/cycles'));
+
+const WALL_KEYS = new Set(['KeyW', 'ArrowUp']);
 
 const TURN_KEYS: Record<string, 'left' | 'right'> = {
   KeyA: 'left',
@@ -83,6 +87,54 @@ function BoostButton({ onBoost, disabled }: { onBoost: () => void; disabled: boo
   );
 }
 
+/** Held, not tapped: the wall is laid for exactly as long as a finger is on it. */
+function WallButton({ onWall, disabled }: { onWall: (on: boolean) => void; disabled: boolean }) {
+  // A release arrives twice: pointerup, then lostpointercapture as the capture lets go. The wire
+  // should carry one, so the button remembers whether it is down.
+  const down = useRef(false);
+  const release = (): void => {
+    if (!down.current) return;
+    down.current = false;
+    onWall(false);
+  };
+  return (
+    <button
+      type="button"
+      data-testid="wall"
+      aria-label={strings.cycles.wall}
+      disabled={disabled}
+      onPointerDown={(event) => {
+        // Keeps the release coming here even when the finger slides off the button.
+        event.currentTarget.setPointerCapture(event.pointerId);
+        down.current = true;
+        onWall(true);
+      }}
+      onPointerUp={release}
+      onPointerCancel={release}
+      onLostPointerCapture={release}
+      onContextMenu={(event) => event.preventDefault()}
+      style={{
+        // none, not manipulation: a held finger must not scroll or start a long-press menu.
+        touchAction: 'none',
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
+        flex: 'none',
+        width: 76,
+        height: 84,
+        padding: 0,
+        borderRadius: 16,
+        border: `2px solid ${theme.gold}`,
+        background: theme.surface,
+        color: theme.goldBright,
+        fontWeight: 600,
+        cursor: 'pointer',
+      }}
+    >
+      {strings.cycles.wall}
+    </button>
+  );
+}
+
 /** Reads the clock itself: ten times a second is for the digits, not for the whole arena. */
 function Countdown({ goAt }: { goAt: number }) {
   const now = useServerClock();
@@ -92,13 +144,17 @@ function Countdown({ goAt }: { goAt: number }) {
 export function CyclesArena({
   onTurn,
   onBoost,
+  onWall,
 }: {
   onTurn: (side: 'left' | 'right') => void;
   onBoost: () => void;
+  onWall: (on: boolean) => void;
 }) {
   const snapshot = useClient((state) => state.snapshot);
   const you = useClient((state) => state.you);
   const running = snapshot?.phase === 'running';
+  // A boolean, like headGone: the arena must not follow the model or the data it comes from.
+  const walls = snapshot?.mode === 'cycles' && snapshot.data.walls === 'button';
   // A boolean and not the model: the model is a new object on every message, and the arena would
   // re-render on each one for a flag that changes once per round.
   const headGone = useCycles(
@@ -113,13 +169,41 @@ export function CyclesArena({
     [blip, onTurn],
   );
 
-  // Everything an input needs is known before the early return: hooks run on every render.
+  // The wall is held by any of W, the up arrow and the button; the set outlives the effects below
+  // so a key already down when the round goes live is still counted.
+  const keys = useRef(createWallKeys());
+  const runningRef = useRef(running);
+  runningRef.current = running;
+  const onWallRef = useRef(onWall);
+  onWallRef.current = onWall;
+  // Nothing is sent before the round is live: a key held through the countdown is sent at go.
+  const say = useCallback((changed: boolean): void => {
+    if (changed && runningRef.current) onWallRef.current(keys.current.held());
+  }, []);
+  const button = useCallback(
+    (on: boolean): void => say(on ? keys.current.press('button') : keys.current.release('button')),
+    [say],
+  );
+
   useEffect(() => {
     if (!running) return;
+    if (keys.current.held()) onWallRef.current(true);
+    return () => {
+      if (keys.current.held()) onWallRef.current(false);
+    };
+  }, [running]);
 
-    const onKey = (event: KeyboardEvent): void => {
+  // Everything an input needs is known before the early return: hooks run on every render.
+  useEffect(() => {
+    const onDown = (event: KeyboardEvent): void => {
       // One press, one move: a held key repeats by itself and would flood the turn queue.
       if (event.repeat || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (walls && WALL_KEYS.has(event.code)) {
+        event.preventDefault();
+        say(keys.current.press(event.code));
+        return;
+      }
+      if (!runningRef.current) return;
       const side = TURN_KEYS[event.code];
       if (side === undefined && event.code !== 'Space') return;
       // Arrows and Space scroll the page unless told otherwise.
@@ -128,9 +212,25 @@ export function CyclesArena({
       else turn(side);
     };
 
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [running, turn, onBoost]);
+    const onUp = (event: KeyboardEvent): void => {
+      if (WALL_KEYS.has(event.code)) say(keys.current.release(event.code));
+    };
+    const onHidden = (): void => {
+      if (document.visibilityState === 'hidden') say(keys.current.clear());
+    };
+    const onBlur = (): void => say(keys.current.clear());
+
+    window.addEventListener('keydown', onDown);
+    window.addEventListener('keyup', onUp);
+    window.addEventListener('blur', onBlur);
+    document.addEventListener('visibilitychange', onHidden);
+    return () => {
+      window.removeEventListener('keydown', onDown);
+      window.removeEventListener('keyup', onUp);
+      window.removeEventListener('blur', onBlur);
+      document.removeEventListener('visibilitychange', onHidden);
+    };
+  }, [walls, turn, onBoost, say]);
 
   if (snapshot === null) return null;
   const round = snapshot.round;
@@ -174,6 +274,7 @@ export function CyclesArena({
             </strong>
           ) : null}
           <RubberBar />
+          <EnergyBar />
         </div>
       </div>
       <div
@@ -194,6 +295,7 @@ export function CyclesArena({
           {strings.cycles.turnLeft}
         </Button>
         <BoostButton onBoost={onBoost} disabled={!running} />
+        {walls ? <WallButton onWall={button} disabled={!running} /> : null}
         <Button
           testId="turn-right"
           variant="secondary"
@@ -205,7 +307,7 @@ export function CyclesArena({
         </Button>
       </div>
       <p style={{ color: theme.muted, margin: 0, padding: '0 12px 8px', textAlign: 'center' }}>
-        {strings.cycles.keys}
+        {walls ? strings.cycles.keysWithWall : strings.cycles.keys}
       </p>
 
       {snapshot.phase === 'countdown' && round !== null ? <Countdown goAt={round.goAt} /> : null}

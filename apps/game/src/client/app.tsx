@@ -75,10 +75,12 @@ function Room({ roomId, onLeave }: { roomId: string; onLeave: () => void }) {
   const click = useCallback(() => connectionRef.current?.click(), []);
   const turn = useCallback((side: 'left' | 'right') => connectionRef.current?.turn(side), []);
   const boost = useCallback(() => connectionRef.current?.boost(), []);
+  const wall = useCallback((on: boolean) => connectionRef.current?.wall(on), []);
   const settings = useMemo<RoomSettings>(
     () => ({
       setMode: (mode) => connectionRef.current?.setMode(mode),
       setSpeed: (speed) => connectionRef.current?.setSpeed(speed),
+      setWalls: (walls) => connectionRef.current?.setWalls(walls),
       addBot: () => connectionRef.current?.addBot(),
       removeBot: () => connectionRef.current?.removeBot(),
     }),
@@ -105,7 +107,7 @@ function Room({ roomId, onLeave }: { roomId: string; onLeave: () => void }) {
         />
       ) : snapshot.phase === 'countdown' || snapshot.phase === 'running' ? (
         snapshot.mode === 'cycles' ? (
-          <CyclesArena onTurn={turn} onBoost={boost} />
+          <CyclesArena onTurn={turn} onBoost={boost} onWall={wall} />
         ) : (
           <Arena onClick={click} />
         )

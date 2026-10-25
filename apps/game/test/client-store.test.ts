@@ -17,6 +17,7 @@ function cycles(phase: Phase, speed: 8 | 12 | 16 | 20, goAt = 1_000): SnapshotMe
     notice: null,
     data: {
       speed,
+      walls: 'always',
       results:
         phase === 'results'
           ? [{ id: '1', name: 'Anna', kills: 1, deaths: 0, longest: 24, rank: 1 }]

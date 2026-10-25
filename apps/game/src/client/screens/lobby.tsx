@@ -35,6 +35,7 @@ export function Lobby({
   const players = snapshot?.players ?? [{ id: you ?? '', name, connected: true, bot: false }];
   const mode: Mode = snapshot?.mode ?? 'clicker';
   const speed = snapshot?.mode === 'cycles' ? snapshot.data.speed : null;
+  const walls = snapshot?.mode === 'cycles' ? snapshot.data.walls : null;
   const hostKey = hostKeyFor(roomId);
 
   // Pull the scene in while people are still waiting. The round lasts ten seconds, and
@@ -88,9 +89,10 @@ export function Lobby({
           {speed === null
             ? ''
             : ` \u00b7 ${strings.speeds[speed]} (${speed} ${strings.cellsPerSecond})`}
+          {walls === 'button' ? ` \u00b7 ${strings.wallsSummary}` : ''}
         </p>
       )}
-      {mode === 'cycles' ? <HowToPlay /> : null}
+      {mode === 'cycles' ? <HowToPlay onKey={walls === 'button'} /> : null}
       {/* One grey line, never two: side by side these two said the same thing twice. */}
       <p style={{ color: theme.muted, margin: 0 }}>
         {players.length === 1 ? strings.alone : strings.inviteHint}
@@ -133,8 +135,10 @@ export function Lobby({
  * The rules in four lines, for everyone in the lobby: the controls hint during a round only says
  * which keys, not what boost or rubber do, and a first round is too short to work that out.
  */
-function HowToPlay() {
+function HowToPlay({ onKey }: { onKey: boolean }) {
   const how = strings.cycles.howTo;
+  // The wall key belongs right after the boost, which is the other thing a finger does.
+  const rows = onKey ? [...how.rows.slice(0, 2), how.wallRow, ...how.rows.slice(2)] : how.rows;
   return (
     <section
       data-testid="how-to-play"
@@ -150,7 +154,7 @@ function HowToPlay() {
           margin: 0,
         }}
       >
-        {how.rows.map(([key, text]) => (
+        {rows.map(([key, text]) => (
           <div key={key} style={{ display: 'contents' }}>
             <dt style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{key}</dt>
             <dd style={{ margin: 0, color: theme.muted }}>{text}</dd>

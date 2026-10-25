@@ -1,8 +1,8 @@
-import { decide } from './bot';
+import { decide, wantsWall } from './bot';
 import type { CyclesConfig } from './config';
 import { pickSpawn, type Spot } from './spawn';
 import { type Bike, type CyclesState, DX, DY } from './state';
-import { copyTrail, dropOldest, forEachCell, oldestCell, pushNewest } from './trail';
+import { copyTrail, dropNewest, dropOldest, forEachCell, oldestCell, pushNewest } from './trail';
 
 export type CyclesEvent =
   | { type: 'died'; slot: number; by: number | null }
@@ -21,9 +21,11 @@ export interface TickChanges {
   /** Flat pairs: cell, what it holds after the tick (0 = empty). Each cell appears once. */
   cells: number[];
   /**
-   * Flat 5-tuples for every bike alive after the tick, in slot order: slot, head cell, direction,
-   * rubber left, boost cooldown left. The last two are not derivable from the cells: a client
-   * that only has `full` and these deltas has no other way to draw the HUD.
+   * Flat 8-tuples for every bike alive after the tick, in slot order: slot, head cell, direction,
+   * rubber left, boost cooldown left, energy, energy capacity, lit (1 or 0). Everything after the
+   * direction is not derivable from the cells: a client that only has `full` and these deltas has
+   * no other way to draw the HUD, and `lit` is the only way to tell a bike that is not laying a
+   * wall from one that has not moved yet.
    */
   heads: number[];
   events: CyclesEvent[];
@@ -52,6 +54,11 @@ export function place(work: Work, bike: Bike, spot: Spot): void {
   bike.cap = work.config.trail;
   bike.rubber = work.config.rubber;
   bike.regen = 0;
+  bike.energy = work.config.energyTicks;
+  bike.energyCap = work.config.energyTicks;
+  bike.energyRegen = 0;
+  // Bots never press a key, and a held key does not carry over a death: lighting takes a press.
+  bike.lit = work.config.walls === 'always';
   bike.boost = 0;
   bike.turns = [];
   bike.life = 0;
@@ -82,7 +89,15 @@ function kill(work: Work, bike: Bike, by: number | null): void {
   const killer = work.bikes[by - 1];
   if (killer === undefined) return;
   killer.kills += 1;
-  killer.cap = Math.min(work.config.trailMax, killer.cap + work.config.killBonus);
+  if (work.config.walls === 'button') {
+    killer.energyCap = Math.min(
+      work.config.energyMaxTicks,
+      killer.energyCap + work.config.energyKillTicks,
+    );
+    killer.energy = Math.min(killer.energyCap, killer.energy + work.config.energyKillTicks);
+  } else {
+    killer.cap = Math.min(work.config.trailMax, killer.cap + work.config.killBonus);
+  }
 }
 
 const ADVANCE = 0;
@@ -113,6 +128,8 @@ function substep(work: Work, movers: Bike[]): void {
 
   const targets = new Int32Array(count);
   const tails = new Int32Array(count);
+  /** 1 when the cell a mover gives up is its head: it is not laying a wall. */
+  const vacatesHead = new Uint8Array(count);
   const fates = new Uint8Array(count);
   const blockers = new Int32Array(count);
   const tailOwner = new Map<number, number>();
@@ -123,8 +140,15 @@ function substep(work: Work, movers: Bike[]): void {
     const y = bike.y + (DY[bike.dir as 0] ?? 0);
     const target = x >= 0 && y >= 0 && x < side && y < side ? y * side + x : -1;
     targets[i] = target;
-    // Only a full trail gives up its oldest cell; a growing one keeps it.
-    const tail = bike.trail.size >= bike.cap ? oldestCell(bike.trail) : -1;
+    // A bike without a wall gives up the cell it stands on; a lit one only gives up its oldest
+    // cell, and only when the trail is full — a growing one keeps it.
+    let tail = -1;
+    if (!bike.lit) {
+      tail = bike.y * side + bike.x;
+      vacatesHead[i] = 1;
+    } else if (bike.trail.size >= bike.cap) {
+      tail = oldestCell(bike.trail);
+    }
     tails[i] = tail;
     if (tail >= 0) tailOwner.set(tail, i);
     if (target >= 0) {
@@ -139,7 +163,12 @@ function substep(work: Work, movers: Bike[]): void {
     if (target < 0) return true;
     if (field[target] === 0) return false;
     const owner = tailOwner.get(target);
-    return owner === undefined || fates[owner] !== ADVANCE;
+    if (owner === undefined || fates[owner] !== ADVANCE) return true;
+    // Taking the cell the other is leaving is fine unless the other is leaving it for ours:
+    // that is a swap, two bikes passing through each other. Both stall instead. This reads
+    // only targets, never fates, so it needs no pass of its own.
+    const mover = movers[i] as Bike;
+    return vacatesHead[owner] === 1 && targets[owner] === mover.y * side + mover.x;
   };
 
   const queue: number[] = [];
@@ -191,7 +220,9 @@ function substep(work: Work, movers: Bike[]): void {
   for (let i = 0; i < count; i += 1) {
     const tail = tails[i] ?? -1;
     if (fates[i] !== ADVANCE || tail < 0) continue;
-    dropOldest((movers[i] as Bike).trail);
+    // Without a wall the tail is the head, which is the newest cell, not the oldest.
+    if (vacatesHead[i] === 1) dropNewest((movers[i] as Bike).trail);
+    else dropOldest((movers[i] as Bike).trail);
     field[tail] = 0;
     work.touched.add(tail);
   }
@@ -199,6 +230,10 @@ function substep(work: Work, movers: Bike[]): void {
     if (fates[i] !== ADVANCE) continue;
     const bike = movers[i] as Bike;
     const target = targets[i] ?? 0;
+    if (work.config.walls === 'button' && bike.lit) {
+      bike.energy -= 1;
+      if (bike.energy <= 0) bike.lit = false;
+    }
     field[target] = bike.slot;
     pushNewest(bike.trail, target);
     bike.x = target % side;
@@ -266,6 +301,11 @@ export function step(
       seed = decided.seed;
       if (decided.turn !== null) bike.turns.push(decided.turn);
     }
+    // Decided once per tick, before the substeps, and from the field as the tick found it. Draws
+    // nothing from the seed, so the bots' other choices are the same as they were.
+    if (bike.bot && config.walls === 'button') {
+      bike.lit = wantsWall(work.field, work.side, bike, work.bikes, config);
+    }
     const turn = bike.turns.shift();
     if (turn !== undefined) bike.dir = turn === 'left' ? (bike.dir + 3) & 3 : (bike.dir + 1) & 3;
     if (bike.boost === config.boostTicks) work.events.push({ type: 'boost', slot: bike.slot });
@@ -284,6 +324,15 @@ export function step(
     if (bike.boost > 0) bike.boost -= 1;
     if (bike.cooldown > 0) bike.cooldown -= 1;
     if (bike.alive) bike.life += 1;
+    // Once per tick, not per substep, so a boost does not refill twice as fast. A lit bike keeps
+    // its progress towards the next unit rather than losing it each time the key is pressed.
+    if (config.walls === 'button' && bike.alive && !bike.lit) {
+      bike.energyRegen += 1;
+      if (bike.energyRegen >= config.energyRegenTicks) {
+        bike.energyRegen = 0;
+        bike.energy = Math.min(bike.energyCap, bike.energy + 1);
+      }
+    }
   }
 
   const cells: number[] = [];
@@ -291,7 +340,16 @@ export function step(
   const heads: number[] = [];
   for (const bike of work.bikes) {
     if (bike.alive) {
-      heads.push(bike.slot, bike.y * work.side + bike.x, bike.dir, bike.rubber, bike.cooldown);
+      heads.push(
+        bike.slot,
+        bike.y * work.side + bike.x,
+        bike.dir,
+        bike.rubber,
+        bike.cooldown,
+        bike.energy,
+        bike.energyCap,
+        bike.lit ? 1 : 0,
+      );
     }
   }
 

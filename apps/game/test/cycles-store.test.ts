@@ -34,6 +34,9 @@ const full = (
       rubber: 3,
       boost: 0,
       cooldown: 0,
+      energy: 80,
+      cap: 80,
+      lit: true,
       respawnIn: 0,
     },
   ],
@@ -45,7 +48,7 @@ const delta = (t: number): DeltaMessage => ({
   type: 'delta',
   t,
   cells: [12 + (t - 5), 1],
-  heads: [1, 12 + (t - 5), 0, 3, 0],
+  heads: [1, 12 + (t - 5), 0, 3, 0, 80, 80, 1],
   events: [],
 });
 
@@ -295,7 +298,11 @@ describe('timing a turn on its way in', () => {
     turnSent('right', 10);
 
     feedCycles(
-      { ...delta(6), heads: [1, 13, 0, 3, 0, 2, 40, 1, 3, 0], cells: [13, 1, 40, 2] },
+      {
+        ...delta(6),
+        heads: [1, 13, 0, 3, 0, 80, 80, 1, 2, 40, 1, 3, 0, 80, 80, 1],
+        cells: [13, 1, 40, 2],
+      },
       130,
     );
 
@@ -345,12 +352,12 @@ describe('counting the cells a turn lands late', () => {
   const east = (cell: number, t: number): DeltaMessage => ({
     ...delta(t),
     cells: [cell, 1],
-    heads: [1, cell, 0, 3, 0],
+    heads: [1, cell, 0, 3, 0, 80, 80, 1],
   });
   const southFrom = (cell: number, t: number): DeltaMessage => ({
     ...delta(t),
     cells: [cell, 1],
-    heads: [1, cell, 1, 3, 0],
+    heads: [1, cell, 1, 3, 0, 80, 80, 1],
   });
   const overshoot = () => useLatencyView.getState().readout.overshoot?.last;
 

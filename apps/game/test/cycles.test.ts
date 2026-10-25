@@ -1,7 +1,7 @@
-import { runInDurableObject } from 'cloudflare:test';
+import { abortAllDurableObjects, runInDurableObject } from 'cloudflare:test';
 import { env } from 'cloudflare:workers';
 import type { CyclesState, RoomState } from '@clicker/game';
-import { generateId } from '@clicker/protocol';
+import { generateId, type SnapshotMessage } from '@clicker/protocol';
 import { describe, expect, it, vi } from 'vitest';
 import {
   type Client,
@@ -54,7 +54,16 @@ function replay(full: Full, deltas: Delta[]): { field: number[]; heads: number[]
   for (const bike of full.bikes) {
     for (const cell of bike.trail) field[cell] = bike.slot;
     if (bike.alive) {
-      heads.push([bike.slot, bike.trail.at(-1) ?? -1, bike.dir, bike.rubber, bike.cooldown]);
+      heads.push([
+        bike.slot,
+        bike.trail.at(-1) ?? -1,
+        bike.dir,
+        bike.rubber,
+        bike.cooldown,
+        bike.energy,
+        bike.cap,
+        bike.lit ? 1 : 0,
+      ]);
     }
   }
   let tick = full.tick;
@@ -65,7 +74,7 @@ function replay(full: Full, deltas: Delta[]): { field: number[]; heads: number[]
       field[delta.cells[i] as number] = delta.cells[i + 1] as number;
     }
     heads = [];
-    for (let i = 0; i < delta.heads.length; i += 5) heads.push(delta.heads.slice(i, i + 5));
+    for (let i = 0; i < delta.heads.length; i += 8) heads.push(delta.heads.slice(i, i + 8));
   }
   return { field, heads };
 }
@@ -83,7 +92,7 @@ describe('a light-cycle room over websocket', () => {
       'Bot 3',
     ]);
     expect(snapshot.players.filter((player) => !player.bot)).toHaveLength(1);
-    expect(snapshot.data).toEqual({ results: null, speed: 20 });
+    expect(snapshot.data).toEqual({ results: null, speed: 20, walls: 'always' });
   });
 
   it('answers not_supported to a bot in the clicker', async () => {
@@ -137,6 +146,9 @@ describe('a light-cycle room over websocket', () => {
         bike.dir,
         bike.rubber,
         bike.cooldown,
+        bike.energy,
+        bike.energyCap,
+        bike.lit ? 1 : 0,
       ]);
     expect(seen.heads).toEqual(heads);
   });
@@ -316,6 +328,7 @@ describe('a light-cycle room over websocket', () => {
     expect(over.mode).toBe('cycles');
     expect(over.data).toEqual({
       speed: 20,
+      walls: 'always',
       results: expect.arrayContaining([expect.objectContaining({ id: '1', name: 'Аня' })]),
     });
     const before = host.received.filter(isDelta).length;
@@ -405,7 +418,41 @@ describe('the speed of a light-cycle room', () => {
     const roomId = generateId();
     await lightCycleLobby(roomId, 0, 12);
 
-    await vi.waitFor(async () => expect((await storedState(roomId))?.speed).toBe(12));
+    await vi.waitFor(async () => expect((await storedState(roomId))?.settings.speed).toBe(12));
+  });
+
+  it('wakes up a room the build before stored mid-round, and starts it again', async () => {
+    const roomId = generateId();
+    await lightCycleLobby(roomId, 1, 8);
+    await vi.waitFor(async () => expect((await storedState(roomId))?.settings.speed).toBe(8));
+    const stub = env.Room.get(env.Room.idFromName(roomId));
+    // The shape the previous build left behind: the speed on the room, no settings, bikes without
+    // the wall fields, a round that was running.
+    await runInDurableObject(stub, async (_instance, state) => {
+      const { settings: _settings, ...stored } = (await state.storage.get<RoomState>(
+        'state',
+      )) as RoomState;
+      const modeState = stored.modeState as CyclesState;
+      const bikes = modeState.bikes.map(
+        ({ held: _h, lit: _l, energy: _e, energyCap: _c, energyRegen: _r, ...bike }) => bike,
+      );
+      await state.storage.put('state', {
+        ...stored,
+        speed: 8,
+        phase: 'running',
+        round: { goAt: 0, endsAt: Date.now() + 600_000 },
+        modeState: { ...modeState, bikes },
+      });
+    });
+    await abortAllDurableObjects();
+
+    const returning = await connect(roomId);
+    returning.send({ type: 'join', playerId: generateId(), name: 'Боря' });
+    const snapshot = await returning.waitFor(isSnapshot);
+
+    expect(snapshot.phase).toBe('lobby');
+    expect(snapshot.notice).toBe('round_aborted');
+    expect((await storedState(roomId))?.settings).toEqual({ speed: 8, walls: 'always' });
   });
 
   it('makes the room tick at the new pace, not the one the room was created with', async () => {
@@ -433,4 +480,131 @@ describe('the speed of a light-cycle room', () => {
     clicker.send({ type: 'setSpeed', speed: 8 });
     expect((await clicker.waitFor(isError)).code).toBe('not_supported');
   });
+});
+
+describe('the walls of a light-cycle room', () => {
+  /** The snapshot where the room's walls read `walls`; the lobby is rebuilt after a mode change. */
+  const seen = (client: Client, walls: 'always' | 'button') =>
+    client.waitFor(
+      (message): message is SnapshotMessage =>
+        isSnapshot(message) && message.mode === 'cycles' && message.data.walls === walls,
+    );
+
+  it('are laid always until the host says otherwise', async () => {
+    const host = await lightCycleLobby(generateId(), 0);
+
+    await seen(host, 'always');
+  });
+
+  it('follow the host, reach every client and are stored with the room', async () => {
+    const roomId = generateId();
+    const host = await lightCycleLobby(roomId, 0);
+    const guest = await connect(roomId);
+    guest.send({ type: 'join', playerId: generateId(), name: 'Боря' });
+    await guest.waitFor(isWelcome);
+
+    host.send({ type: 'setWalls', walls: 'button' });
+
+    await seen(host, 'button');
+    await seen(guest, 'button');
+    await vi.waitFor(async () =>
+      expect((await storedState(roomId))?.settings).toEqual({ speed: 20, walls: 'button' }),
+    );
+  });
+
+  it('keep the pace of the room: only a new speed changes the tick', async () => {
+    const host = await lightCycleLobby(generateId(), 1, 16);
+    host.send({ type: 'setWalls', walls: 'button' });
+    host.send({ type: 'start' });
+
+    expect((await host.waitFor(isFull)).tickMs).toBe(62.5);
+  });
+
+  it('answer not_host to a guest and not_supported to the clicker', async () => {
+    const roomId = generateId();
+    await lightCycleLobby(roomId, 0);
+    const guest = await connect(roomId);
+    guest.send({ type: 'join', playerId: generateId(), name: 'Боря' });
+    await guest.waitFor(isWelcome);
+
+    guest.send({ type: 'setWalls', walls: 'button' });
+    expect((await guest.waitFor(isError)).code).toBe('not_host');
+
+    const clicker = await connect(generateId());
+    clicker.send({ type: 'join', playerId: generateId(), name: 'Аня', hostKey: generateId() });
+    await clicker.waitFor(isWelcome);
+    clicker.send({ type: 'setWalls', walls: 'button' });
+    expect((await clicker.waitFor(isError)).code).toBe('not_supported');
+  });
+});
+
+describe('walls on a key in a running light-cycle room', () => {
+  /** The 8-number head of one slot in a delta, or undefined when that bike is not in it. */
+  const headOf = (delta: Delta, slot: number) => {
+    for (let i = 0; i < delta.heads.length; i += 8) {
+      if (delta.heads[i] === slot) {
+        const [, , , , , energy, cap, lit] = delta.heads.slice(i, i + 8);
+        return { energy: energy as number, cap: cap as number, lit: lit === 1 };
+      }
+    }
+    return undefined;
+  };
+
+  // The suite's round is 200 ms, a handful of ticks at the fastest speed: whether a press, two lit
+  // ticks, a release and a refill all fit in it would be a race against the clock. This room is
+  // given a long round instead, read when the room is made, so the test waits only for messages.
+  it('lights the bike and spends its energy while the key is held, and refills it after', async () => {
+    const mutableEnv = env as unknown as { ROUND_MS: string };
+    const original = mutableEnv.ROUND_MS;
+    mutableEnv.ROUND_MS = '5000';
+    try {
+      await holdAndRelease();
+    } finally {
+      mutableEnv.ROUND_MS = original;
+    }
+  });
+
+  async function holdAndRelease(): Promise<void> {
+    const host = await lightCycleLobby(generateId(), 1);
+    const welcome = host.received.find(isWelcome);
+    host.send({ type: 'setWalls', walls: 'button' });
+    await host.waitFor(
+      (message): message is Snapshot =>
+        isSnapshot(message) && message.mode === 'cycles' && message.data.walls === 'button',
+    );
+    host.send({ type: 'start' });
+    const full = await host.waitFor(isFull);
+    const mine = full.bikes.find((bike) => bike.id === welcome?.you);
+    if (mine === undefined) throw new Error('the host has no bike');
+    const slot = mine.slot;
+    // Nobody holds a key yet, so the bike rides bare at full energy.
+    expect(mine.lit).toBe(false);
+    await host.waitFor(isRunning);
+
+    host.send({ type: 'input', input: { type: 'wall', on: true } });
+    const mineIn = (delta: Delta) => headOf(delta, slot);
+    const spending: number[] = [];
+    // Two lit ticks in a row, each with less energy than the one before.
+    await vi.waitFor(() => {
+      spending.length = 0;
+      for (const delta of host.received.filter(isDelta)) {
+        const head = mineIn(delta);
+        if (head?.lit === true) spending.push(head.energy);
+      }
+      expect(spending.length).toBeGreaterThanOrEqual(2);
+    });
+    expect(spending[0]).toBeLessThan(mine.cap);
+    for (let i = 1; i < spending.length; i += 1) {
+      expect(spending[i]).toBe((spending[i - 1] as number) - 1);
+    }
+
+    host.send({ type: 'input', input: { type: 'wall', on: false } });
+    const floor = spending.at(-1) as number;
+    await host.waitFor((message): message is Delta => {
+      if (!isDelta(message)) return false;
+      const head = mineIn(message);
+      return head !== undefined && !head.lit && head.energy > floor;
+    });
+    host.close();
+  }
 });

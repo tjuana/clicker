@@ -20,6 +20,12 @@ export function dropOldest(trail: Trail): void {
   trail.size -= 1;
 }
 
+/** Drops the newest cell of a trail the caller owns. O(1): only the size shrinks. */
+export function dropNewest(trail: Trail): void {
+  if (trail.size === 0) return;
+  trail.size -= 1;
+}
+
 /** Appends the newest cell of a trail the caller owns. */
 export function pushNewest(trail: Trail, cell: number): void {
   trail.cells[(trail.start + trail.size) % trail.cells.length] = cell;
