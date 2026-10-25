@@ -145,8 +145,14 @@ diffuseColor.rgb *= body * (1.0 + ${glsl(RIM)} * rim + ${glsl(PULSE)} * pulse) +
     slotAt[i] = slot;
     const x = (cell % side) + 0.5;
     const z = Math.floor(cell / side) + 0.5;
-    const fx = from < 0 ? x : (from % side) + 0.5;
-    const fz = from < 0 ? z : Math.floor(from / side) + 0.5;
+    // A from that is not a neighbour on the grid (a gap in the trail, a stale cell) would stretch
+    // one box across every cell between; it is drawn as a lone cell instead. Row and column are
+    // compared, not the cell numbers: the last cell of a row and the first of the next are far.
+    const near =
+      from >= 0 &&
+      Math.abs((from % side) + 0.5 - x) + Math.abs(Math.floor(from / side) + 0.5 - z) === 1;
+    const fx = near ? (from % side) + 0.5 : x;
+    const fz = near ? Math.floor(from / side) + 0.5 : z;
     const along = Math.abs(fx - x) + Math.abs(fz - z);
     rotation.setFromAxisAngle(UP, fz !== z ? Math.PI / 2 : 0);
     // A cell's wall runs from the centre of the cell laid before it to its own centre, a wall's
