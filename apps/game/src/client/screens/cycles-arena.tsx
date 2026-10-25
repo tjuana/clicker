@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useLayoutEffect } from 'react';
+import { lazy, Suspense, useCallback, useEffect } from 'react';
 import { useSound } from '../audio/use-sound';
 import { secondsLeft, useServerClock } from '../clock';
 import {
@@ -114,11 +114,7 @@ export function CyclesArena({
   );
 
   // Everything an input needs is known before the early return: hooks run on every render.
-  // A layout effect, not a plain one: a plain effect attaches the listener after the browser has
-  // painted, and in that gap the turn buttons are already enabled while a key press reaches no
-  // listener (the end-to-end key race plan 8's review recorded). A layout effect runs before the
-  // browser yields.
-  useLayoutEffect(() => {
+  useEffect(() => {
     if (!running) return;
 
     const onKey = (event: KeyboardEvent): void => {
