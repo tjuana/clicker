@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect } from 'react';
+import { lazy, Suspense, useCallback, useLayoutEffect } from 'react';
 import { useSound } from '../audio/use-sound';
 import { secondsLeft, useServerClock } from '../clock';
 import {
@@ -28,15 +28,9 @@ const TURN_KEYS: Record<string, 'left' | 'right'> = {
 };
 
 /** The ring around the boost button fills as the cooldown runs out. */
-function BoostButton({
-  charge,
-  onBoost,
-  disabled,
-}: {
-  charge: number;
-  onBoost: () => void;
-  disabled: boolean;
-}) {
+function BoostButton({ onBoost, disabled }: { onBoost: () => void; disabled: boolean }) {
+  // Read here and not in the arena: the charge changes on every tick, and only this button shows it.
+  const charge = useBoostCharge();
   const radius = 32;
   const circumference = 2 * Math.PI * radius;
   const ready = charge >= 1;
@@ -99,9 +93,12 @@ export function CyclesArena({
   const now = useServerClock();
   const snapshot = useClient((state) => state.snapshot);
   const you = useClient((state) => state.you);
-  const model = useCycles((state) => state.model);
-  const charge = useBoostCharge();
   const running = snapshot?.phase === 'running';
+  // A boolean and not the model: the model is a new object on every message, and the arena would
+  // re-render on each one for a flag that changes once per round.
+  const headGone = useCycles(
+    (state) => state.model !== null && !state.model.heads.has(slotOfId(state.model, you)),
+  );
   const blip = useSound(you);
   const turn = useCallback(
     (side: 'left' | 'right') => {
@@ -112,7 +109,11 @@ export function CyclesArena({
   );
 
   // Everything an input needs is known before the early return: hooks run on every render.
-  useEffect(() => {
+  // A layout effect, not a plain one: a plain effect attaches the listener after the browser has
+  // painted, and in that gap the turn buttons are already enabled while a key press reaches no
+  // listener (the end-to-end key race plan 8's review recorded). A layout effect runs before the
+  // browser yields.
+  useLayoutEffect(() => {
     if (!running) return;
 
     const onKey = (event: KeyboardEvent): void => {
@@ -132,8 +133,7 @@ export function CyclesArena({
 
   if (snapshot === null) return null;
   const round = snapshot.round;
-  const own = slotOfId(model, you);
-  const wrecked = running && model !== null && !model.heads.has(own);
+  const wrecked = running && headGone;
 
   return (
     <div
@@ -192,7 +192,7 @@ export function CyclesArena({
         >
           {strings.cycles.turnLeft}
         </Button>
-        <BoostButton charge={charge} onBoost={onBoost} disabled={!running} />
+        <BoostButton onBoost={onBoost} disabled={!running} />
         <Button
           testId="turn-right"
           variant="secondary"
