@@ -191,3 +191,20 @@ which waits on real-network numbers from the readout.
   lostpointercapture).
 - Found on the way: the name filter's regex held raw bidi characters, against CLAUDE.md. They are
   escapes now, and a test fails the build on any invisible character in tracked source.
+
+What plan 10's review changed:
+
+- **A room stored by the build before is upgraded first**, before a round it was in the middle of
+  is aborted: a light-cycle room stored mid-round with only a `speed` would otherwise have thrown on
+  every start, for good.
+- **A rider who comes back starts with the key up**: the room cannot know what happened to the key
+  while the socket was down.
+- **Bots relight only with a second of energy** and keep the wall while they have any: lighting on
+  every unit that regrew laid one cell every other tick, the dotted wall the fresh-press rule keeps
+  people from laying.
+- **The client holds the wall while any of its sources is down** — W, ↑ or the button — and a key
+  held through the countdown lights the wall when the round goes live.
+- **A `bad_version` error is readable by a tab of any version.**
+- The invisible-character test covers every tracked text file.
+- Known and left: a `full` can draw an unlit bike's head when it happens to sit next to its own
+  last wall cell, until its next move.
