@@ -12,8 +12,10 @@ import { describe, expect, it } from 'vitest';
 const ROOT = new URL('../../..', import.meta.url).pathname;
 const ROOTS = ['packages', 'apps/game/src', 'apps/game/test', 'apps/game/e2e', 'docs', '.claude'];
 const EXTENSION = /\.(ts|tsx|md|json|jsonc)$/;
-// Code point ranges, not a regex literal: the formatter turns escapes inside one back into the raw
-// characters. Tab (U+0009), line feed (U+000A) and carriage return (U+000D) are ordinary whitespace.
+// Code points as numbers, not escapes in a regex literal: while this test was written, a tool that
+// rewrote the file turned such escapes back into the raw characters, and a number cannot be.
+// (Biome does not do that; checked.) Tab (U+0009), line feed (U+000A) and carriage return
+// (U+000D) are ordinary whitespace.
 const INVISIBLE: ReadonlyArray<readonly [number, number]> = [
   [0x0000, 0x0008],
   [0x000b, 0x000c],
