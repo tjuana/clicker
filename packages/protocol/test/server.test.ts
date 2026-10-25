@@ -438,3 +438,26 @@ describe('the new error code', () => {
     ).not.toBeNull();
   });
 });
+
+describe('an error frame read by a tab of another version', () => {
+  it('reads bad_version whatever the version of the frame says', () => {
+    const raw = JSON.stringify({ v: 99, type: 'error', code: 'bad_version' });
+
+    expect(parseServerMessage(raw)).toEqual({
+      v: PROTOCOL_VERSION,
+      type: 'error',
+      code: 'bad_version',
+    });
+  });
+
+  it('still refuses every other frame of a foreign version', () => {
+    for (const frame of [
+      { v: 99, type: 'error', code: 'not_host' },
+      { v: 99, type: 'error', code: 'bad_version', extra: 1 },
+      { v: 'x', type: 'error', code: 'bad_version' },
+      { v: 99, type: 'welcome', you: '1', isHost: true },
+    ]) {
+      expect(parseServerMessage(JSON.stringify(frame))).toBeNull();
+    }
+  });
+});

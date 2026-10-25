@@ -155,6 +155,13 @@ export const errorSchema = v.strictObject({
   code: errorCodeSchema,
 });
 
+/** What the server says to a tab of another version, read whatever version the frame carries. */
+const staleTabSchema = v.strictObject({
+  v: v.number(),
+  type: v.literal('error'),
+  code: v.literal('bad_version'),
+});
+
 export const serverMessageSchema = v.variant('type', [
   welcomeSchema,
   snapshotSchema,
@@ -182,7 +189,11 @@ export function parseServerMessage(raw: string): ServerMessage | null {
   }
 
   const result = v.safeParse(serverMessageSchema, data);
-  return result.success ? result.output : null;
+  if (result.success) return result.output;
+  // The one frame a tab of any version must understand: it is how an out-of-date tab learns to
+  // reload instead of sitting blank. The frame is handed on as this build's own.
+  const stale = v.safeParse(staleTabSchema, data);
+  return stale.success ? { v: PROTOCOL_VERSION, type: 'error', code: 'bad_version' } : null;
 }
 
 function cyclesDataOf(
