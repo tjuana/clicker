@@ -18,6 +18,7 @@ import { seenOnScreen } from '../cycles/latency-store';
 import { useCycles } from '../cycles/store';
 import type { Sample, Step, Timeline } from '../cycles/timeline';
 import { createCycleGeometry } from './cycle-model';
+import { Floor, Grid } from './floor';
 import { BIKE_LEVEL, BLOOM, SLOT_COLOURS } from './look';
 import { createWalls, type Walls } from './walls';
 
@@ -154,6 +155,11 @@ function Field({ side, tickMs, you }: { side: number; tickMs: number; you: strin
   const walls = useMemo(() => createWalls(side, tickMs), [side, tickMs]);
   const rig = useMemo(createRig, []);
 
+  // The grid lives on layer 1 so the floor's mirror, which sees layer 0 only, leaves it out.
+  useEffect(() => {
+    camera.layers.enable(1);
+  }, [camera]);
+
   const bikes = useMemo(() => {
     const geometry = createCycleGeometry();
     // Vertex colours carry each part's brightness; the instance colour, the slot's.
@@ -242,14 +248,7 @@ function Field({ side, tickMs, you }: { side: number; tickMs: number; you: strin
 
   return (
     <>
-      <mesh rotation-x={-Math.PI / 2} position={[side / 2, 0, side / 2]}>
-        <planeGeometry args={[side, side]} />
-        <meshBasicMaterial color="#02040a" />
-      </mesh>
-      <gridHelper
-        args={[side, side / 2, '#0a5a7a', '#06303f']}
-        position={[side / 2, 0.01, side / 2]}
-      />
+      <Grid side={side} />
       <Border side={side} />
       <primitive object={walls.mesh} />
       <primitive object={bikes.mesh} />
@@ -336,6 +335,7 @@ export default function Cycles({ you }: { you: string | null }) {
     >
       <color attach="background" args={['#000']} />
       <fog attach="fog" args={['#000', 30, 110]} />
+      <Floor side={side} />
       <Field key={`${side}:${tickMs}`} side={side} tickMs={tickMs} you={you} />
     </Canvas>
   );

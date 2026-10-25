@@ -51,3 +51,23 @@ export const PULSE_PERIOD_S = 3;
 
 /** The owner's, by eye. */
 export const BLOOM = { strength: 0.55, radius: 0.35, threshold: 0.6 };
+
+/**
+ * The floor's mirror. All figures were tried by eye in a scratch scene with 20 bikes:
+ * a sharper reflection read as a second, wrong arena under the real one.
+ */
+export const FLOOR = {
+  /** Reflection texture size: soft smears need no more, and it is rendered a second time every frame. */
+  resolution: 512,
+  /** How far the reflection is smeared; high on purpose, the floor is wet asphalt, not a mirror. */
+  blur: [250, 250] as [number, number],
+  /** How much of the reflection shows; 6 doubled the glow of every wall and flooded the frame. */
+  mixStrength: 3,
+};
+
+/** The grid's colour level: 1 was brighter than the reflections it sits on and read as a net over them. */
+export const GRID_LEVEL = 0.75;
+/** The grid's base colour, before the level. */
+export const GRID_COLOUR = '#0a5a7a';
+/** Cells between two grid lines: every cell was noise at a distance. */
+export const GRID_SPACING = 2;
