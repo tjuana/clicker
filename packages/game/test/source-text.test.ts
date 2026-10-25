@@ -10,8 +10,10 @@ import { describe, expect, it } from 'vitest';
  */
 
 const ROOT = new URL('../../..', import.meta.url).pathname;
-const ROOTS = ['packages', 'apps/game/src', 'apps/game/test', 'apps/game/e2e', 'docs', '.claude'];
-const EXTENSION = /\.(ts|tsx|md|json|jsonc)$/;
+// Every tracked text file, not a list of folders: a list is how CLAUDE.md, the configs and the
+// workflows stayed outside the rule. Dotfiles (.gitignore, .nvmrc) have no extension to match.
+const EXTENSION = /\.(ts|tsx|js|mjs|cjs|json|jsonc|md|html|css|yml|yaml|toml)$/;
+const DOTFILE = /(^|\/)\.[^/]+$/;
 // Code points as numbers, not escapes in a regex literal: while this test was written, a tool that
 // rewrote the file turned such escapes back into the raw characters, and a number cannot be.
 // (Biome does not do that; checked.) Tab (U+0009), line feed (U+000A) and carriage return
@@ -36,11 +38,11 @@ function hasInvisible(text: string): boolean {
 }
 
 function trackedFiles(): string[] {
-  const listed = execFileSync('git', ['ls-files', '-z', '--', ...ROOTS], {
+  const listed = execFileSync('git', ['ls-files', '-z'], {
     cwd: ROOT,
     encoding: 'utf8',
   });
-  return listed.split('\u0000').filter((path) => EXTENSION.test(path));
+  return listed.split('\u0000').filter((path) => EXTENSION.test(path) || DOTFILE.test(path));
 }
 
 describe('source text', () => {
