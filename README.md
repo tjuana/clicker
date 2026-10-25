@@ -90,9 +90,9 @@ pnpm --filter @clicker/app run deploy     # build and publish to Cloudflare
 
 | Part | State |
 |---|---|
-| Game rules (`packages/game`) | clicker and light cycles, 261 tests |
-| Wire format (`packages/protocol`) | version 3, 87 tests |
-| Room server and client (`apps/game`) | 219 tests, including integration tests in the Workers runtime |
+| Game rules (`packages/game`) | clicker and light cycles, 265 tests |
+| Wire format (`packages/protocol`) | version 3, 89 tests |
+| Room server and client (`apps/game`) | 225 tests, including integration tests in the Workers runtime |
 | End to end | a clicker round, a light-cycle round against bots, and walls on a key, desktop and phone |
 | Deploy | every push to `main`, through Cloudflare Workers Builds |
 
