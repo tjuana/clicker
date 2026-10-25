@@ -44,6 +44,12 @@ export const TOP_TO = 0.96;
 export const FOOT = 0.35;
 /** How much a wall seen edge-on glows over one seen face-on: a rim that outlines the trail. */
 export const RIM = 0.5;
+/** How fast the rim falls off towards the face-on side: higher keeps the glow on the outline only. */
+export const RIM_EXPONENT = 3.0;
+/** How narrow the pulse's crest is: higher is a thinner bright band between long dark stretches. */
+export const PULSE_EXPONENT = 12.0;
+/** The field's border walls: a cooler, dimmer cyan than any bike, so the edge reads but never competes. */
+export const BORDER_COLOUR = '#0f8fb0';
 /** How much brighter the moving crest is than the body. */
 export const PULSE = 0.9;
 /** Seconds between two crests of the pulse running along a trail. */

@@ -21,7 +21,7 @@ import { useCycles } from '../cycles/store';
 import type { Sample, Step, Timeline } from '../cycles/timeline';
 import { createCycleGeometry } from './cycle-model';
 import { Floor, Grid } from './floor';
-import { BIKE_LEVEL, BLOOM, SLOT_COLOURS } from './look';
+import { BIKE_LEVEL, BLOOM, BORDER_COLOUR, SLOT_COLOURS } from './look';
 import { createWalls, type Walls } from './walls';
 
 const MAX_BIKES = 64;
@@ -293,7 +293,7 @@ function Border({ side }: { side: number }) {
       ].map(([x, z, w, d]) => (
         <mesh key={`${x},${z}`} position={[x as number, 0, z as number]}>
           <boxGeometry args={[w as number, 0.5, d as number]} />
-          <meshBasicMaterial color="#0f8fb0" toneMapped={false} />
+          <meshBasicMaterial color={BORDER_COLOUR} toneMapped={false} />
         </mesh>
       ))}
     </group>

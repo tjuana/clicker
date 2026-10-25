@@ -12,8 +12,10 @@ import type { WallOp } from '../cycles/model';
 import {
   FOOT,
   PULSE,
+  PULSE_EXPONENT,
   PULSE_PERIOD_S,
   RIM,
+  RIM_EXPONENT,
   SLOT_COLOURS,
   TOP,
   TOP_FROM,
@@ -103,8 +105,8 @@ varying vec3 vViewPos;`,
         `#include <color_fragment>
 float top = smoothstep(${glsl(TOP_FROM)}, ${glsl(TOP_TO)}, vHeight);
 float body = mix(${glsl(FOOT)}, 1.0, vHeight * vHeight);
-float rim = pow(max(1.0 - abs(dot(normalize(vViewNormal), normalize(-vViewPos))), 0.0), 3.0);
-float pulse = pow(max(0.5 + 0.5 * cos(6.2831853 * (time + vLaid) / ${glsl(PULSE_PERIOD_S)}), 0.0), 12.0);
+float rim = pow(max(1.0 - abs(dot(normalize(vViewNormal), normalize(-vViewPos))), 0.0), ${glsl(RIM_EXPONENT)});
+float pulse = pow(max(0.5 + 0.5 * cos(6.2831853 * (time + vLaid) / ${glsl(PULSE_PERIOD_S)}), 0.0), ${glsl(PULSE_EXPONENT)});
 diffuseColor.rgb *= body * (1.0 + ${glsl(RIM)} * rim + ${glsl(PULSE)} * pulse) + top * ${glsl(TOP)};`,
       );
   };
@@ -121,8 +123,8 @@ diffuseColor.rgb *= body * (1.0 + ${glsl(RIM)} * rim + ${glsl(PULSE)} * pulse) +
   const slotAt = new Int32Array(MAX_WALLS);
   let count = 0;
 
-  // Every index written since the last flush, so the flush can upload those instances alone. No
-  // allocation per frame: a fixed buffer, and a write beyond its end falls back to a full upload.
+  // Every index written since the last flush, so the flush can upload those instances alone. The
+  // list itself allocates nothing: a fixed buffer, and a write beyond its end falls back to a full upload.
   const touched = new Int32Array(MAX_WALLS * 2);
   let touchedCount = 0;
   let overflow = false;
@@ -233,7 +235,10 @@ diffuseColor.rgb *= body * (1.0 + ${glsl(RIM)} * rim + ${glsl(PULSE)} * pulse) +
     /**
      * Not the obvious `needsUpdate` alone: that re-uploads whole buffers (about 1.2 MB a tick at
      * full size, plan 8's review) for the few instances a tick changes. Ranges tell three to send
-     * just those. They are never cleared here: three clears them after it uploads, and clearing
+     * just those. Not free either: `addUpdateRange` makes a `{start, count}` object per call, so a
+     * tick costs a few dozen small objects and a reset a few thousand, against the ~1.2 MB upload
+     * it replaces. Cheaper than that upload by orders of magnitude, but not allocation-free.
+     * They are never cleared here: three clears them after it uploads, and clearing
      * ourselves could drop the ranges of a flush no frame has rendered yet.
      */
     flush: () => {
