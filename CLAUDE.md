@@ -93,12 +93,14 @@ from the others. That is what keeps the layers above from eroding.
 | Agent | Owns | Must not touch |
 |---|---|---|
 | `engine` | rules, wire format, the room server | anything in `src/client` |
-| `ui` | screens, HUD, input, texts | `packages/**`, `src/worker` |
+| `ui` | screens, HUD, input, texts | `packages/**`, `src/worker`, the 3D scene |
+| `graphics` | the 3D scene: meshes, shaders, light, post-processing, camera | `packages/**`, `src/worker`, screens and HUD |
 | `qa` | tests at every level | production code — it reports defects, it does not fix them |
 
-Three more roles — graphics, game design, devops — get their own agents when there is steady work
-for them: a real scene to build, a second mode to balance, a deploy that has become routine. An
-agent with nothing to own is overhead.
+`graphics` joined when the scene became steady work: the arena's polish, then its effects and
+environment, then the race's whole look. Two more roles — game design, devops — get their own
+agents when there is steady work for them: a second mode to balance, a deploy that has become
+routine. An agent with nothing to own is overhead.
 
 Shared rituals live as skills in [.claude/skills/](.claude/skills/), so they travel with the
 repository and every agent has them:

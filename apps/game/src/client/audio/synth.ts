@@ -9,6 +9,13 @@ import { type Note, notesIn } from './score';
 /** The timer looks this often, and hands WebAudio the notes of the next `AHEAD` seconds. */
 const EVERY_MS = 25;
 const AHEAD = 0.1;
+/**
+ * Browsers run a hidden tab's timers about once a second, so a tenth of a second of lookahead
+ * would play a tenth of the music. While hidden, the notes of the next second and a half are handed
+ * over each time, which covers the gap with some to spare. `cursor` keeps a note from being
+ * scheduled twice when the tab comes back and the window shrinks again.
+ */
+const AHEAD_HIDDEN = 1.5;
 
 /**
  * Linear gains. Quiet on purpose: the arena is what the player looks at, and a loud track on top
@@ -200,7 +207,8 @@ export function createSynth(): Synth {
     const now = round + (ctx.currentTime - audio);
     // A late timer drops what it missed instead of playing it all at once.
     const from = Math.max(session.cursor, now);
-    const to = now + AHEAD;
+    // Guarded: the module is also loaded where there is no document.
+    const to = now + (typeof document !== 'undefined' && document.hidden ? AHEAD_HIDDEN : AHEAD);
     session.cursor = Math.max(session.cursor, to);
     if (muted || from >= to) return;
 

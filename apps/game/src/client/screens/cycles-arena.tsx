@@ -28,15 +28,9 @@ const TURN_KEYS: Record<string, 'left' | 'right'> = {
 };
 
 /** The ring around the boost button fills as the cooldown runs out. */
-function BoostButton({
-  charge,
-  onBoost,
-  disabled,
-}: {
-  charge: number;
-  onBoost: () => void;
-  disabled: boolean;
-}) {
+function BoostButton({ onBoost, disabled }: { onBoost: () => void; disabled: boolean }) {
+  // Read here and not in the arena: the charge changes on every tick, and only this button shows it.
+  const charge = useBoostCharge();
   const radius = 32;
   const circumference = 2 * Math.PI * radius;
   const ready = charge >= 1;
@@ -89,6 +83,12 @@ function BoostButton({
   );
 }
 
+/** Reads the clock itself: ten times a second is for the digits, not for the whole arena. */
+function Countdown({ goAt }: { goAt: number }) {
+  const now = useServerClock();
+  return <CountdownOverlay seconds={secondsLeft(goAt, now)} veil={0.45} />;
+}
+
 export function CyclesArena({
   onTurn,
   onBoost,
@@ -96,12 +96,14 @@ export function CyclesArena({
   onTurn: (side: 'left' | 'right') => void;
   onBoost: () => void;
 }) {
-  const now = useServerClock();
   const snapshot = useClient((state) => state.snapshot);
   const you = useClient((state) => state.you);
-  const model = useCycles((state) => state.model);
-  const charge = useBoostCharge();
   const running = snapshot?.phase === 'running';
+  // A boolean and not the model: the model is a new object on every message, and the arena would
+  // re-render on each one for a flag that changes once per round.
+  const headGone = useCycles(
+    (state) => state.model !== null && !state.model.heads.has(slotOfId(state.model, you)),
+  );
   const blip = useSound(you);
   const turn = useCallback(
     (side: 'left' | 'right') => {
@@ -132,8 +134,7 @@ export function CyclesArena({
 
   if (snapshot === null) return null;
   const round = snapshot.round;
-  const own = slotOfId(model, you);
-  const wrecked = running && model !== null && !model.heads.has(own);
+  const wrecked = running && headGone;
 
   return (
     <div
@@ -192,7 +193,7 @@ export function CyclesArena({
         >
           {strings.cycles.turnLeft}
         </Button>
-        <BoostButton charge={charge} onBoost={onBoost} disabled={!running} />
+        <BoostButton onBoost={onBoost} disabled={!running} />
         <Button
           testId="turn-right"
           variant="secondary"
@@ -207,9 +208,7 @@ export function CyclesArena({
         {strings.cycles.keys}
       </p>
 
-      {snapshot.phase === 'countdown' && round !== null ? (
-        <CountdownOverlay seconds={secondsLeft(round.goAt, now)} veil={0.45} />
-      ) : null}
+      {snapshot.phase === 'countdown' && round !== null ? <Countdown goAt={round.goAt} /> : null}
     </div>
   );
 }

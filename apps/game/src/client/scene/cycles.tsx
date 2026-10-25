@@ -1,60 +1,32 @@
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { useEffect, useMemo } from 'react';
 import {
-  BoxGeometry,
   type Camera,
-  Color,
+  type Color,
   type Fog,
+  HalfFloatType,
   InstancedMesh,
   Matrix4,
   MeshBasicMaterial,
   Quaternion,
   Vector2,
   Vector3,
+  WebGLRenderTarget,
 } from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { seenOnScreen } from '../cycles/latency-store';
-import type { WallOp } from '../cycles/model';
 import { useCycles } from '../cycles/store';
 import type { Sample, Step, Timeline } from '../cycles/timeline';
 import { createCycleGeometry } from './cycle-model';
+import { Floor, Grid } from './floor';
+import { BIKE_LEVEL, BLOOM, BORDER_COLOUR, SLOT_COLOURS } from './look';
+import { createWalls, type Walls } from './walls';
 
-/** Twenty bikes with trails of at most 400 cells, and room for the cells a boost lays in passing. */
-const MAX_WALLS = 20 * 400 + 64;
 const MAX_BIKES = 64;
 
-const SLOT_COLOURS = [
-  '#ffe066',
-  '#00f0ff',
-  '#ff3df2',
-  '#7dff6a',
-  '#ff8a3d',
-  '#8a7dff',
-  '#ff4d6d',
-  '#3dffb5',
-  '#ffd23d',
-  '#3da5ff',
-  '#d63dff',
-  '#b5ff3d',
-  '#ff6a3d',
-  '#3dfff0',
-  '#ff3d9e',
-  '#9eff3d',
-  '#3d6aff',
-  '#ffb53d',
-  '#3dff6a',
-  '#f03dff',
-].map((hex) => new Color(hex));
-/**
- * A wall is dark and solid; only its top edge is bright enough to bloom. Colours are multiplied
- * past 1 on purpose: bloom keys on brightness, and 1.25 is what puts the edges and the bikes
- * above its threshold while the walls (0.3) stay below it. Translucent walls were tried: they
- * overlap at every cell centre and the overlaps add up into stripes.
- */
-const WALL = SLOT_COLOURS.map((colour) => colour.clone().multiplyScalar(0.3));
-const EDGE = SLOT_COLOURS.map((colour) => colour.clone().multiplyScalar(1.25));
+const BIKE = SLOT_COLOURS.map((colour) => colour.clone().multiplyScalar(BIKE_LEVEL));
 /**
  * The player's own bike is bigger, not brighter: a yellow bike at 1.25 is already past white,
  * and a harder glow only turned it into a blown-out blob.
@@ -65,12 +37,6 @@ const OWN_SIZE = 1.2;
 const DIR_X = [1, 0, -1, 0];
 const DIR_Z = [0, 1, 0, -1];
 
-const THICK = 0.12;
-/**
- * Lower than the bike, which stands about 0.9 tall: a wall as high as the bike swallowed it, since
- * the trail runs right up to the head. In the films the wall streams out below the rider too.
- */
-const WALL_HEIGHT = 0.42;
 const UP = new Vector3(0, 1, 0);
 
 /** Scratch objects, one set for the whole module: nothing in the frame loop allocates. */
@@ -78,115 +44,6 @@ const matrix = new Matrix4();
 const position = new Vector3();
 const scale = new Vector3();
 const rotation = new Quaternion();
-const colour = new Color();
-
-interface Walls {
-  trails: InstancedMesh;
-  edges: InstancedMesh;
-  put: (cell: number, slot: number, from: number) => void;
-  lift: (cell: number) => void;
-  clear: () => void;
-  /** Tells the GPU what changed; once a frame, however many walls were laid or lifted. */
-  flush: () => void;
-  dispose: () => void;
-}
-
-/**
- * The trails as two instanced meshes: a dark body and a bright edge strip, one instance of each
- * per cell. A cell finds its instance through a `Map`, and lifting one moves the last instance
- * into the hole, so a lift is O(1) and the instances stay packed with no gaps to skip.
- */
-function createWalls(side: number): Walls {
-  const geometry = new BoxGeometry(1, 1, 1);
-  const body = new MeshBasicMaterial({ toneMapped: false });
-  const strip = new MeshBasicMaterial({ toneMapped: false });
-  const trails = new InstancedMesh(geometry, body, MAX_WALLS);
-  const edges = new InstancedMesh(geometry, strip, MAX_WALLS);
-  trails.frustumCulled = false;
-  edges.frustumCulled = false;
-  trails.count = 0;
-  edges.count = 0;
-
-  const instanceOf = new Map<number, number>();
-  const cellAt = new Int32Array(MAX_WALLS);
-  let count = 0;
-
-  return {
-    trails,
-    edges,
-    /**
-     * A cell's wall runs from the centre of the cell laid before it to its own centre, a wall's
-     * thickness longer, so consecutive walls overlap at the centres and a corner closes. A wall
-     * centred on its own cell instead stops at the cell's edge and leaves a gap at every turn.
-     */
-    put: (cell, slot, from) => {
-      let i = instanceOf.get(cell);
-      if (i === undefined) {
-        if (count === MAX_WALLS) return;
-        i = count;
-        count += 1;
-        instanceOf.set(cell, i);
-        cellAt[i] = cell;
-      }
-      const x = (cell % side) + 0.5;
-      const z = Math.floor(cell / side) + 0.5;
-      const fx = from < 0 ? x : (from % side) + 0.5;
-      const fz = from < 0 ? z : Math.floor(from / side) + 0.5;
-      const along = Math.abs(fx - x) + Math.abs(fz - z);
-      rotation.setFromAxisAngle(UP, fz !== z ? Math.PI / 2 : 0);
-      matrix.compose(
-        position.set((x + fx) / 2, WALL_HEIGHT / 2, (z + fz) / 2),
-        rotation,
-        scale.set(along + THICK, WALL_HEIGHT, THICK),
-      );
-      trails.setMatrixAt(i, matrix);
-      trails.setColorAt(i, WALL[(slot - 1) % WALL.length] as Color);
-      matrix.compose(
-        position.set((x + fx) / 2, WALL_HEIGHT + 0.02, (z + fz) / 2),
-        rotation,
-        scale.set(along + THICK + 0.02, 0.05, THICK + 0.02),
-      );
-      edges.setMatrixAt(i, matrix);
-      edges.setColorAt(i, EDGE[(slot - 1) % EDGE.length] as Color);
-    },
-    lift: (cell) => {
-      const i = instanceOf.get(cell);
-      if (i === undefined) return;
-      const last = count - 1;
-      if (i !== last) {
-        for (const mesh of [trails, edges]) {
-          mesh.getMatrixAt(last, matrix);
-          mesh.setMatrixAt(i, matrix);
-          mesh.getColorAt(last, colour);
-          mesh.setColorAt(i, colour);
-        }
-        const moved = cellAt[last] as number;
-        cellAt[i] = moved;
-        instanceOf.set(moved, i);
-      }
-      instanceOf.delete(cell);
-      count = last;
-    },
-    clear: () => {
-      instanceOf.clear();
-      count = 0;
-    },
-    flush: () => {
-      for (const mesh of [trails, edges]) {
-        mesh.count = count;
-        mesh.instanceMatrix.needsUpdate = true;
-        if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-      }
-    },
-    dispose: () => {
-      geometry.dispose();
-      body.dispose();
-      strip.dispose();
-      trails.dispose();
-      edges.dispose();
-    },
-  };
-}
 
 /** What the camera remembers from frame to frame, kept out of React: it changes sixty times a second. */
 interface Rig {
@@ -239,16 +96,10 @@ function ownSlotOf(rig: Rig, ids: Map<number, string>, you: string | null): numb
   return rig.ownSlot;
 }
 
-function applyWall(walls: Walls, op: WallOp): void {
-  if (op.kind === 'put') walls.put(op.cell, op.slot, op.from);
-  else walls.lift(op.cell);
-}
-
 function applyStep(walls: Walls, rig: Rig, step: Step): void {
   // A full of the same round (a bike joined, or a gap was closed) says nothing new about who
   // killed the player, so `killedBy` stays; a new round gets a new timeline, which clears it.
-  if (step.reset) walls.clear();
-  for (const op of step.walls) applyWall(walls, op);
+  walls.lay(step.walls, step.tick, step.reset);
   for (const event of step.events) {
     if (event.slot !== rig.ownSlot) continue;
     if (event.type === 'died') rig.killedBy = event.by;
@@ -286,7 +137,7 @@ function drawBike(
     scale.setScalar(slot === rig.ownSlot ? OWN_SIZE : 1),
   );
   mesh.setMatrixAt(index, matrix);
-  mesh.setColorAt(index, EDGE[(slot - 1) % EDGE.length] as Color);
+  mesh.setColorAt(index, BIKE[(slot - 1) % BIKE.length] as Color);
   // The player's own bike wins over the one that killed it, which is followed only while the
   // player has none.
   const { chase } = rig;
@@ -301,10 +152,15 @@ function drawBike(
 
 const wrapAngle = (angle: number): number => Math.atan2(Math.sin(angle), Math.cos(angle));
 
-function Field({ side, you }: { side: number; you: string | null }) {
+function Field({ side, tickMs, you }: { side: number; tickMs: number; you: string | null }) {
   const { gl, scene, camera, size } = useThree();
-  const walls = useMemo(() => createWalls(side), [side]);
+  const walls = useMemo(() => createWalls(side, tickMs), [side, tickMs]);
   const rig = useMemo(createRig, []);
+
+  // The grid lives on layer 1 so the floor's mirror, which sees layer 0 only, leaves it out.
+  useEffect(() => {
+    camera.layers.enable(1);
+  }, [camera]);
 
   const bikes = useMemo(() => {
     const geometry = createCycleGeometry();
@@ -315,20 +171,36 @@ function Field({ side, you }: { side: number; you: string | null }) {
     return { mesh, geometry, material };
   }, []);
 
-  // Bloom keys on brightness: see EDGE. Strength, radius and threshold are the owner's, by eye.
+  // Bloom keys on brightness: see BIKE_LEVEL. Its figures are in look.ts.
   // The size here is a placeholder: the effect below sets the real one, and again on every resize.
-  const composer = useMemo(() => {
-    const chain = new EffectComposer(gl);
+  // The composer renders into its own target, which the canvas's antialias flag does not reach:
+  // without samples here every edge stair-steps. Half float keeps the bloom's brightness past 1.
+  const { composer, bloom } = useMemo(() => {
+    const target = new WebGLRenderTarget(1, 1, { type: HalfFloatType, samples: 4 });
+    const chain = new EffectComposer(gl, target);
     chain.addPass(new RenderPass(scene, camera));
-    chain.addPass(new UnrealBloomPass(new Vector2(256, 256), 0.55, 0.35, 0.6));
-    return chain;
+    const pass = new UnrealBloomPass(
+      new Vector2(256, 256),
+      BLOOM.strength,
+      BLOOM.radius,
+      BLOOM.threshold,
+    );
+    chain.addPass(pass);
+    return { composer: chain, bloom: pass };
   }, [gl, scene, camera]);
 
   useEffect(() => {
     composer.setSize(size.width, size.height);
   }, [composer, size]);
 
-  useEffect(() => () => composer.dispose(), [composer]);
+  // The composer disposes its two targets and copy pass, not the passes added to it.
+  useEffect(
+    () => () => {
+      bloom.dispose();
+      composer.dispose();
+    },
+    [composer, bloom],
+  );
   useEffect(() => () => walls.dispose(), [walls]);
   useEffect(
     () => () => {
@@ -339,6 +211,10 @@ function Field({ side, you }: { side: number; you: string | null }) {
     [bikes],
   );
 
+  // R3F runs frame callbacks in ascending priority, and drei's reflector renders the floor's
+  // mirror at priority 0. The scene is therefore brought up to date at -1, before the mirror
+  // looks at it, and only drawn at 1 (a positive priority is also what stops R3F rendering by
+  // itself). Done in one callback at 1, the reflection showed the previous frame's arena.
   useFrame((_, delta) => {
     const { model, timeline } = useCycles.getState();
     const now = performance.now();
@@ -359,6 +235,8 @@ function Field({ side, you }: { side: number; you: string | null }) {
       const steps = timeline.release(now, 1);
       for (const step of steps) applyStep(walls, rig, step);
       if (steps.length > 0) walls.flush();
+      const tick = timeline.renderTick(now);
+      if (Number.isFinite(tick)) walls.setTime((tick * tickMs) / 1000);
 
       const sample = timeline.sample(now);
       let shown = 0;
@@ -385,22 +263,18 @@ function Field({ side, you }: { side: number; you: string | null }) {
 
       pointCamera(rig, camera, side, delta, fog);
     }
-    composer.render(delta);
-  }, 1);
+    // The reflector reads the camera's world matrix, which is otherwise refreshed only inside the
+    // render that comes after it.
+    camera.updateMatrixWorld();
+  }, -1);
+
+  useFrame((_, delta) => composer.render(delta), 1);
 
   return (
     <>
-      <mesh rotation-x={-Math.PI / 2} position={[side / 2, 0, side / 2]}>
-        <planeGeometry args={[side, side]} />
-        <meshBasicMaterial color="#02040a" />
-      </mesh>
-      <gridHelper
-        args={[side, side / 2, '#0a5a7a', '#06303f']}
-        position={[side / 2, 0.01, side / 2]}
-      />
+      <Grid side={side} />
       <Border side={side} />
-      <primitive object={walls.trails} />
-      <primitive object={walls.edges} />
+      <primitive object={walls.mesh} />
       <primitive object={bikes.mesh} />
     </>
   );
@@ -419,7 +293,7 @@ function Border({ side }: { side: number }) {
       ].map(([x, z, w, d]) => (
         <mesh key={`${x},${z}`} position={[x as number, 0, z as number]}>
           <boxGeometry args={[w as number, 0.5, d as number]} />
-          <meshBasicMaterial color="#0f8fb0" toneMapped={false} />
+          <meshBasicMaterial color={BORDER_COLOUR} toneMapped={false} />
         </mesh>
       ))}
     </group>
@@ -475,16 +349,22 @@ function pointCamera(rig: Rig, camera: Camera, side: number, delta: number, fog:
 /** The arena: a neon field seen from behind the player's own bike. */
 export default function Cycles({ you }: { you: string | null }) {
   const side = useCycles((state) => state.model?.side ?? 0);
+  const tickMs = useCycles((state) => state.model?.tickMs ?? 0);
   if (side === 0) return null;
   return (
     <Canvas
       dpr={[1, 2]}
+      // Only the bloom pass's full-screen quad reaches the default framebuffer now; the scene is
+      // drawn into the composer's own multisampled target. Canvas MSAA would cost a multisampled
+      // colour and depth buffer and a resolve every frame for edges nobody sees. Depth stays.
+      gl={{ antialias: false }}
       camera={{ fov: 60, near: 0.1, far: 400, position: [side / 2, 20, side / 2] }}
       style={{ width: '100%', height: '100%' }}
     >
       <color attach="background" args={['#000']} />
       <fog attach="fog" args={['#000', 30, 110]} />
-      <Field key={side} side={side} you={you} />
+      <Floor side={side} />
+      <Field key={`${side}:${tickMs}`} side={side} tickMs={tickMs} you={you} />
     </Canvas>
   );
 }
