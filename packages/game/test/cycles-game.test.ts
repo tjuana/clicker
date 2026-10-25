@@ -213,7 +213,9 @@ describe('bots', () => {
     expect(deaths).toBeLessThanOrEqual(30);
   });
 
-  it('rarely dies alone with walls on a key either, where it never lights them', () => {
+  // Alone, a bot never lights its wall, so it leaves no trail to coil into: the only death left is
+  // the field's edge. Measured: none in thirty rounds. A loose bound would not notice it coming back.
+  it('practically never dies alone with walls on a key, where it never lights them', () => {
     const button = cyclesConfig({ walls: 'button' });
     let deaths = 0;
     for (let seed = 1; seed <= 30; seed += 1) {
@@ -221,6 +223,6 @@ describe('bots', () => {
       state = addPlayer(state, 'bot-0', true, button);
       deaths += play(startRound(state, button), 3600, undefined, button).bikes[0]?.deaths ?? 0;
     }
-    expect(deaths).toBeLessThanOrEqual(30);
+    expect(deaths).toBeLessThanOrEqual(2);
   });
 });
