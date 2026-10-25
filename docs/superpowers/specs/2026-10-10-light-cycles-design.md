@@ -354,7 +354,14 @@ The look of section 8 moved on; the design is in the
   instances a tick wrote.
 - **MSAA** (4 samples) in the composer's own target; the canvas's antialias never reached it.
 - Every brightness figure lives in `scene/look.ts`; the owner's eye is still the judge.
+- **MSAA lives in the composer only**: the canvas is created without `antialias`, since nothing but
+  the bloom pass's full-screen quad reaches it.
+- **The scene is updated before it is reflected**: one frame callback at priority −1 brings walls,
+  bikes and camera up to date, drei's mirror renders at 0, the composer at 1.
+- A full of the same round keeps the dates of the cells a client already holds, so the pulse does
+  not jump when someone joins mid-round.
 - The arena re-renders when what it shows changes, not on every message or clock tick (274 renders
-  in seven seconds of a round before, 4 after), and its keys are listened for from the first frame
-  the controls are enabled. The soundtrack looks 1.5 s ahead while the tab is hidden.
+  in seven seconds of a round before, 4 after). The soundtrack looks 1.5 s ahead while the tab is
+  hidden. The end-to-end key-listener race of plan 8 is still open: the theory that a plain effect
+  attaches its listener after a paint is false in React 19.2.
 - Measured: 120 fps (the display's cap) with 20 participants on the M2 in a real window.
