@@ -14,6 +14,8 @@ export interface Head {
   energy: number;
   cap: number;
   lit: boolean;
+  /** Whether its cell carries a wall instance: a bike without its wall leaves nothing under it. */
+  drawn: boolean;
 }
 
 export interface CyclesModel {
@@ -29,6 +31,11 @@ export interface CyclesModel {
   deaths: Map<number, number>;
 }
 
+/** Manhattan distance between two cells of a square field. */
+function apart(a: number, b: number, side: number): number {
+  return Math.abs((a % side) - (b % side)) + Math.abs(Math.floor(a / side) - Math.floor(b / side));
+}
+
 /** Starts over from a full message; returns the walls to draw from scratch. */
 export function fromFull(full: FullMessage): { model: CyclesModel; walls: WallOp[] } {
   const ids = new Map<number, string>();
@@ -40,11 +47,18 @@ export function fromFull(full: FullMessage): { model: CyclesModel; walls: WallOp
     ids.set(bike.slot, bike.id);
     kills.set(bike.slot, bike.kills);
     deaths.set(bike.slot, bike.deaths);
+    // A button-mode trail has gaps: only neighbours are joined, so a bar never spans a hole.
     let from = -1;
-    for (const cell of bike.trail) {
-      walls.push({ kind: 'put', cell, slot: bike.slot, from });
+    let drawn = false;
+    const last = bike.trail.length - 1;
+    bike.trail.forEach((cell, index) => {
+      const joined = from >= 0 && apart(cell, from, full.side) === 1;
+      // The head of a bike that is not laying a wall is a bare cell, unless it continues a wall.
+      const isDrawn = index < last || bike.lit || joined;
+      if (isDrawn) walls.push({ kind: 'put', cell, slot: bike.slot, from: joined ? from : -1 });
+      if (index === last) drawn = isDrawn;
       from = cell;
-    }
+    });
     // A dead bike has no trail, hence no head; the head of a living one is its newest cell.
     if (bike.alive && from >= 0) {
       heads.set(bike.slot, {
@@ -56,6 +70,7 @@ export function fromFull(full: FullMessage): { model: CyclesModel; walls: WallOp
         energy: bike.energy,
         cap: bike.cap,
         lit: bike.lit,
+        drawn,
       });
     }
   }
@@ -109,6 +124,7 @@ export function applyDelta(
       energy: delta.heads[i + 5] as number,
       cap: delta.heads[i + 6] as number,
       lit: delta.heads[i + 7] === 1,
+      drawn: false, // settled below, once the walls are laid
     });
   }
 
@@ -124,32 +140,59 @@ export function applyDelta(
     }
   }
 
-  for (const { slot, cell } of heads.values()) {
-    let before = model.heads.get(slot)?.cell ?? -1;
+  // What each cell ends the tick holding: a wall is laid only where the rules still have one.
+  const finals = new Map<number, number>();
+  for (let i = 0; i < delta.cells.length; i += 2) {
+    finals.set(delta.cells[i] as number, delta.cells[i + 1] as number);
+  }
+
+  for (const head of heads.values()) {
+    const { slot, cell } = head;
+    const prev = model.heads.get(slot);
+    let before = prev?.cell ?? -1;
+    let prevDrawn = prev?.drawn ?? false;
     if (respawned.has(slot)) {
       // A fresh life joins nothing before it; its own spawn cell comes first when it rode on.
       before = -1;
+      prevDrawn = false;
       const spawn = spawns.get(slot);
       if (spawn !== undefined) {
         walls.push({ kind: 'put', cell: spawn, slot, from: -1 });
         before = spawn;
+        prevDrawn = true;
+      } else {
+        // It could not ride on: it is drawn only if it is laying a wall already.
+        head.drawn = head.lit;
+        if (head.lit) walls.push({ kind: 'put', cell, slot, from: -1 });
+        continue;
       }
     }
-    if (before === cell) continue; // stalled against an obstacle: nothing new laid
-    if (before < 0) {
-      walls.push({ kind: 'put', cell, slot, from: -1 });
+    if (before === cell) {
+      head.drawn = prevDrawn; // stalled against an obstacle: nothing new laid
       continue;
     }
+    if (before < 0) {
+      // Seen for the first time (a bike that joined between fulls): as a respawn that did not move.
+      head.drawn = head.lit;
+      if (head.lit) walls.push({ kind: 'put', cell, slot, from: -1 });
+      continue;
+    }
+    // A cell the bike left is a wall only if the rules still hold it for this slot; absent from
+    // the delta means untouched, and so unchanged.
+    const keptBefore = (finals.get(before) ?? slot) === slot;
+    // The bike lit up where it stood: that cell was bare and becomes the first of a wall.
+    if (keptBefore && !prevDrawn) walls.push({ kind: 'put', cell: before, slot, from: -1 });
     // Within one tick a bike only rides straight, so a two-cell step has its middle between.
-    const apart =
-      Math.abs((cell % side) - (before % side)) +
-      Math.abs(Math.floor(cell / side) - Math.floor(before / side));
-    if (apart === 2) {
+    if (apart(cell, before, side) === 2) {
       const middle = (cell + before) / 2;
-      walls.push({ kind: 'put', cell: middle, slot, from: before });
-      walls.push({ kind: 'put', cell, slot, from: middle });
-    } else {
+      if (finals.get(middle) === slot) {
+        walls.push({ kind: 'put', cell: middle, slot, from: keptBefore ? before : -1 });
+        walls.push({ kind: 'put', cell, slot, from: middle });
+        head.drawn = true;
+      }
+    } else if (keptBefore) {
       walls.push({ kind: 'put', cell, slot, from: before });
+      head.drawn = true;
     }
   }
 

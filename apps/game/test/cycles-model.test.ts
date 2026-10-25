@@ -90,10 +90,39 @@ describe('fromFull', () => {
       [2, '2'],
     ]);
     expect([...model.heads.values()]).toEqual([
-      { slot: 1, cell: at(2, 1), dir: 0, rubber: 2, cooldown: 7, energy: 80, cap: 80, lit: true },
+      {
+        slot: 1,
+        cell: at(2, 1),
+        dir: 0,
+        rubber: 2,
+        cooldown: 7,
+        energy: 80,
+        cap: 80,
+        lit: true,
+        drawn: true,
+      },
     ]);
     expect(model.kills.get(1)).toBe(3);
     expect(model.deaths.get(2)).toBe(4);
+  });
+});
+
+describe('fromFull with gaps in a trail', () => {
+  it('joins only neighbours, and leaves a bare head undrawn', () => {
+    const { model, walls } = fromFull(
+      fullOf([bike(1, [at(1, 1), at(2, 1), at(5, 1), at(8, 1)], { lit: false })]),
+    );
+    expect(walls).toEqual([
+      { kind: 'put', cell: at(1, 1), slot: 1, from: -1 },
+      { kind: 'put', cell: at(2, 1), slot: 1, from: at(1, 1) },
+      { kind: 'put', cell: at(5, 1), slot: 1, from: -1 },
+    ]);
+    expect(model.heads.get(1)?.drawn).toBe(false);
+  });
+
+  it('draws a lone lit head, and nothing for a lone bare one', () => {
+    expect(fromFull(fullOf([bike(1, [at(3, 3)])])).walls).toHaveLength(1);
+    expect(fromFull(fullOf([bike(1, [at(3, 3)], { lit: false })])).walls).toEqual([]);
   });
 });
 
@@ -224,17 +253,30 @@ describe('applyDelta', () => {
   });
 });
 
+/** A small seeded generator, so the recorded round is the same on every run. */
+function seeded(seed: number): () => number {
+  let state = seed;
+  return () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 2 ** 32;
+  };
+}
+
 /**
  * A round the real rules played, in the form it would go over the wire. The client has to end up
  * with exactly the walls the rules have, after every single tick: a wall too many or too few is
  * a trail drawn through a bike or a gap in a barrier.
  */
-function record(ticks: number): {
+function record(
+  ticks: number,
+  walls: 'always' | 'button' = 'always',
+): {
   full: FullMessage;
   deltas: DeltaMessage[];
   fields: Uint16Array[];
 } {
   const config = configFor('cycles', DEFAULT_CONFIG, 20);
+  const random = seeded(7);
   let state: RoomState = createRoomState();
   const run = (command: Command, now: number) => {
     const result = apply(state, command, now, config);
@@ -244,6 +286,7 @@ function record(ticks: number): {
   run({ type: 'join', playerId: 'host', connectionId: 'c', name: 'Host', hostKey: 'k' }, 0);
   run({ type: 'setMode', playerId: 'host', mode: 'cycles' }, 0);
   run({ type: 'setSpeed', playerId: 'host', speed: 20 }, 0);
+  run({ type: 'setWalls', playerId: 'host', walls }, 0);
   for (let bot = 0; bot < 7; bot += 1) run({ type: 'addBot', playerId: 'host' }, 0);
   run({ type: 'start', playerId: 'host' }, 0);
   run({ type: 'tick' }, config.countdownMs);
@@ -260,6 +303,17 @@ function record(ticks: number): {
     if (tick % 9 === 4) {
       const side = tick % 2 === 0 ? 'left' : 'right';
       run({ type: 'input', playerId: 'host', input: { type: 'turn', side } }, config.countdownMs);
+    }
+    if (walls === 'button') {
+      // The rider presses and lets go of the wall key at random, so lit and bare stretches mix.
+      const roll = random();
+      if (roll < 0.15 || roll > 0.85) {
+        const input = { type: 'wall', on: roll < 0.5 } as const;
+        run({ type: 'input', playerId: 'host', input }, config.countdownMs);
+      } else if (roll > 0.8) {
+        const side = roll > 0.82 ? 'left' : 'right';
+        run({ type: 'input', playerId: 'host', input: { type: 'turn', side } }, config.countdownMs);
+      }
     }
     for (const event of run({ type: 'step' }, config.countdownMs)) {
       if (event.type !== 'stepped') continue;
@@ -323,6 +377,48 @@ describe('replaying a recorded round', () => {
         }
       }
       expect(walls.size).toBe(live);
+    });
+  });
+});
+
+describe('replaying a recorded round with walls on a key', () => {
+  const ticks = 400;
+  const { full, deltas, fields } = record(ticks, 'button');
+
+  it('is a round worth replaying: bikes light up, go bare and die', () => {
+    const lit = deltas.flatMap((delta) => {
+      const flags: number[] = [];
+      for (let i = 0; i < delta.heads.length; i += 8) flags.push(delta.heads[i + 7] as number);
+      return flags;
+    });
+    expect(lit).toContain(0);
+    expect(lit).toContain(1);
+    expect(deltas.flatMap((delta) => delta.events).some((e) => e.type === 'died')).toBe(true);
+  });
+
+  it("draws only real walls, and every real wall but a bike's own head cell", () => {
+    const start = fromFull(full);
+    const drawn = new Map<number, number>();
+    holdWalls(drawn, start.walls, start.model.side);
+    let model = start.model;
+
+    deltas.forEach((delta, index) => {
+      const result = advance(model, delta);
+      holdWalls(drawn, result.walls, model.side);
+      model = result.model;
+
+      const field = fields[index] as Uint16Array;
+      const headCells = new Set([...model.heads.values()].map((head) => head.cell));
+      for (const [cell, slot] of drawn) {
+        if (field[cell] !== slot) {
+          expect(field[cell], `drawn cell ${cell} after tick ${delta.t}`).toBe(slot);
+        }
+      }
+      for (let cell = 0; cell < field.length; cell += 1) {
+        const slot = field[cell] as number;
+        if (slot === 0 || drawn.get(cell) === slot || headCells.has(cell)) continue;
+        expect(drawn.get(cell), `cell ${cell} of slot ${slot} after tick ${delta.t}`).toBe(slot);
+      }
     });
   });
 });
