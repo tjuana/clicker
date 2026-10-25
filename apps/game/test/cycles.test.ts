@@ -503,3 +503,59 @@ describe('the walls of a light-cycle room', () => {
     expect((await clicker.waitFor(isError)).code).toBe('not_supported');
   });
 });
+
+describe('walls on a key in a running light-cycle room', () => {
+  /** The 8-number head of one slot in a delta, or undefined when that bike is not in it. */
+  const headOf = (delta: Delta, slot: number) => {
+    for (let i = 0; i < delta.heads.length; i += 8) {
+      if (delta.heads[i] === slot) {
+        const [, , , , , energy, cap, lit] = delta.heads.slice(i, i + 8);
+        return { energy: energy as number, cap: cap as number, lit: lit === 1 };
+      }
+    }
+    return undefined;
+  };
+
+  it('lights the bike and spends its energy while the key is held, and refills it after', async () => {
+    const host = await lightCycleLobby(generateId(), 1);
+    const welcome = host.received.find(isWelcome);
+    host.send({ type: 'setWalls', walls: 'button' });
+    await host.waitFor(
+      (message): message is Snapshot =>
+        isSnapshot(message) && message.mode === 'cycles' && message.data.walls === 'button',
+    );
+    host.send({ type: 'start' });
+    const full = await host.waitFor(isFull);
+    const mine = full.bikes.find((bike) => bike.id === welcome?.you);
+    if (mine === undefined) throw new Error('the host has no bike');
+    const slot = mine.slot;
+    // Nobody holds a key yet, so the bike rides bare at full energy.
+    expect(mine.lit).toBe(false);
+    await host.waitFor(isRunning);
+
+    host.send({ type: 'input', input: { type: 'wall', on: true } });
+    const mineIn = (delta: Delta) => headOf(delta, slot);
+    const spending: number[] = [];
+    // Two lit ticks in a row, each with less energy than the one before.
+    await vi.waitFor(() => {
+      spending.length = 0;
+      for (const delta of host.received.filter(isDelta)) {
+        const head = mineIn(delta);
+        if (head?.lit === true) spending.push(head.energy);
+      }
+      expect(spending.length).toBeGreaterThanOrEqual(2);
+    });
+    expect(spending[0]).toBeLessThan(mine.cap);
+    for (let i = 1; i < spending.length; i += 1) {
+      expect(spending[i]).toBe((spending[i - 1] as number) - 1);
+    }
+
+    host.send({ type: 'input', input: { type: 'wall', on: false } });
+    const floor = spending.at(-1) as number;
+    await host.waitFor((message): message is Delta => {
+      if (!isDelta(message)) return false;
+      const head = mineIn(message);
+      return head !== undefined && !head.lit && head.energy > floor;
+    });
+  });
+});
