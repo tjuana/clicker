@@ -35,8 +35,11 @@ function wallsSent(page: Page): string[] {
  * with that figure.
  *
  * One page on purpose, as in cycles.spec.ts. The round is ten seconds because playwright.config.ts
- * starts the server with ROUND_MS. Nothing here waits on the bike surviving: the first lit tick
- * lowers the bar at once, and everything after that is read off the wire.
+ * starts the server with ROUND_MS. The one thing this relies on is that the bike is alive at its
+ * first lit tick: that tick comes within a tick of the press, at the start of the round, when a
+ * bike placed facing its longest open run cannot yet have reached an obstacle. A rider who died
+ * in between would respawn unlit, the key would need a fresh press, and the bar would never fall.
+ * After that first tick everything is read off the wire.
  */
 async function startWallsOnAKey(page: Page): Promise<number> {
   await page.goto('/');
