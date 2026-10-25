@@ -1,0 +1,100 @@
+import { Color, type InstancedBufferAttribute, Matrix4 } from 'three';
+import { describe, expect, it } from 'vitest';
+import type { WallOp } from '../src/client/cycles/model';
+import { createWalls } from '../src/client/scene/walls';
+
+const SIDE = 64;
+const TICK_MS = 125;
+
+const put = (cell: number, slot: number, from = -1): WallOp => ({ kind: 'put', cell, slot, from });
+const lift = (cell: number): WallOp => ({ kind: 'lift', cell });
+
+/** What the GPU would be given for one instance, read back through the mesh's public attributes. */
+function instance(walls: ReturnType<typeof createWalls>, i: number) {
+  const matrix = new Matrix4();
+  const colour = new Color();
+  walls.mesh.getMatrixAt(i, matrix);
+  walls.mesh.getColorAt(i, colour);
+  const laid = walls.mesh.geometry.getAttribute('laid').getX(i);
+  return { matrix: matrix.elements.slice(), colour: colour.getHex(), laid };
+}
+
+function attributes(walls: ReturnType<typeof createWalls>): InstancedBufferAttribute[] {
+  return [
+    walls.mesh.instanceMatrix,
+    walls.mesh.instanceColor as InstancedBufferAttribute,
+    walls.mesh.geometry.getAttribute('laid') as InstancedBufferAttribute,
+  ];
+}
+
+/** Stands in for the renderer, which clears the ranges after it uploads them. */
+function uploaded(walls: ReturnType<typeof createWalls>): void {
+  for (const attribute of attributes(walls)) attribute.clearUpdateRanges();
+}
+
+const rangeLength = (attribute: InstancedBufferAttribute): number =>
+  attribute.updateRanges.reduce((sum, range) => sum + range.count, 0);
+
+describe('the walls', () => {
+  it('moves matrix, colour and date together when a lift swaps the last wall into the hole', () => {
+    const walls = createWalls(SIDE, TICK_MS);
+    walls.lay([put(10, 1)], 1, false);
+    walls.lay([put(11, 2, 10)], 2, false);
+    walls.lay([put(12, 3, 11)], 3, false);
+    const third = instance(walls, 2);
+    const first = instance(walls, 0);
+    expect(third.laid).not.toBe(instance(walls, 1).laid);
+
+    walls.lay([lift(11)], 4, false);
+    walls.flush();
+
+    expect(walls.mesh.count).toBe(2);
+    expect(instance(walls, 0)).toEqual(first);
+    expect(instance(walls, 1)).toEqual(third);
+  });
+
+  it('dates a reset trail one tick apart, oldest first, each bike from its own length', () => {
+    const walls = createWalls(SIDE, TICK_MS);
+    walls.lay([put(10, 1), put(11, 1, 10), put(12, 1, 11)], 10, true);
+    expect([0, 1, 2].map((i) => instance(walls, i).laid)).toEqual([1.0, 1.125, 1.25]);
+
+    // Two bikes, interleaved with a longer trail first: the dates follow each slot's own count.
+    walls.lay([put(20, 1), put(21, 1, 20), put(22, 1, 21), put(30, 2), put(31, 2, 30)], 10, true);
+    expect([0, 1, 2, 3, 4].map((i) => instance(walls, i).laid)).toEqual([
+      1.0, 1.125, 1.25, 1.125, 1.25,
+    ]);
+  });
+
+  it('dates a put of an ordinary step by its own tick', () => {
+    const walls = createWalls(SIDE, TICK_MS);
+    walls.lay([put(10, 1)], 16, false);
+    expect(instance(walls, 0).laid).toBe(2.0);
+  });
+
+  it('uploads as much for one put and one lift among 100 walls as among 1000', () => {
+    const lengths: number[] = [];
+    for (const n of [100, 1000]) {
+      const walls = createWalls(SIDE, TICK_MS);
+      const ops: WallOp[] = [];
+      for (let k = 0; k < n; k += 1) ops.push(put(k, 1, k === 0 ? -1 : k - 1));
+      walls.lay(ops, 5, false);
+      walls.flush();
+      uploaded(walls);
+
+      walls.lay([put(n + 5, 2), lift(3)], 6, false);
+      walls.flush();
+      lengths.push(rangeLength(walls.mesh.instanceMatrix));
+      expect(rangeLength(walls.mesh.instanceMatrix)).toBeLessThanOrEqual(32);
+      expect(rangeLength(walls.mesh.instanceMatrix)).toBeGreaterThan(0);
+    }
+    expect(lengths[0]).toBe(lengths[1]);
+  });
+
+  it('clears the previous walls on a reset', () => {
+    const walls = createWalls(SIDE, TICK_MS);
+    walls.lay([put(1, 1), put(2, 1, 1), put(3, 1, 2)], 1, false);
+    walls.lay([put(9, 2)], 2, true);
+    walls.flush();
+    expect(walls.mesh.count).toBe(1);
+  });
+});
