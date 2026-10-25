@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addPlayer, applyInput, createCyclesState, startRound } from '../src/modes/cycles';
+import { addPlayer, applyInput, createCyclesState, leave, startRound } from '../src/modes/cycles';
 import type { CyclesState } from '../src/modes/cycles/state';
 import { step } from '../src/modes/cycles/step';
 import { arena, contradiction, cyclesConfig, trailOf } from './cycles-support';
@@ -277,5 +277,42 @@ describe('replays', () => {
       expect(summary(a)).toEqual(summary(b));
       expect(a.seed).toBe(b.seed);
     }
+  });
+});
+
+describe('a rider who comes back', () => {
+  function twoRiders(): CyclesState {
+    let state = createCyclesState(3);
+    state = addPlayer(state, 'a', false, button);
+    state = addPlayer(state, 'b', false, button);
+    return startRound(state, button);
+  }
+
+  it('does not remember the key it let go of while its socket was down', () => {
+    let state = twoRiders();
+    state = wall(state, 'a', true);
+    state = leave(state, 'a');
+    state = ride(state, 1);
+    // The key was released while the connection was closed; the room never heard of it.
+    state = addPlayer(state, 'a', false, button);
+    state = ride(state, button.respawnTicks + 1);
+    expect(bikeOf(state, 1).alive).toBe(true);
+
+    state = wall(state, 'a', true);
+
+    expect(bikeOf(state, 1).lit).toBe(true);
+  });
+
+  it('keeps its wall when the same player joins again from a second tab', () => {
+    const always = cyclesConfig({ walls: 'always' });
+    let state = createCyclesState(3);
+    state = addPlayer(state, 'a', false, always);
+    state = addPlayer(state, 'b', false, always);
+    state = ride(startRound(state, always), 3, always);
+
+    state = addPlayer(state, 'a', false, always);
+
+    expect(bikeOf(state, 1).lit).toBe(true);
+    expect(bikeOf(state, 1).alive).toBe(true);
   });
 });

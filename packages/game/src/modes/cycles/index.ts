@@ -71,7 +71,16 @@ export function addPlayer(
   if (position !== undefined && existing !== undefined) {
     // Coming back after leaving: the same slot, and the usual wait before riding again.
     if (!existing.left) return state;
-    return withBike(state, position, { ...existing, left: false, respawnIn: config.respawnTicks });
+    // The key is forgotten: a release sent while the socket was down never arrived, and the
+    // next press is ignored by a bike that believes it is still held. A bike that never left
+    // returned above, so a second tab cannot take its wall away.
+    return withBike(state, position, {
+      ...existing,
+      left: false,
+      respawnIn: config.respawnTicks,
+      held: false,
+      lit: config.walls === 'always',
+    });
   }
   const bike = newBike(state.bikes.length + 1, publicId, bot, config);
   return {
