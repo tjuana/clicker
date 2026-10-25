@@ -166,6 +166,18 @@ describe('applyDelta', () => {
     ]);
   });
 
+  it('draws nothing for a bike that is not laying a wall: it only lifts the cell it left', () => {
+    const model = fromFull(fullOf([bike(1, [at(2, 1)], { lit: false })])).model;
+
+    const result = advance(
+      model,
+      deltaOf(6, { cells: [at(2, 1), 0], heads: [1, at(3, 1), 0, 3, 0, 80, 80, 0] }),
+    );
+
+    expect(result.walls).toEqual([{ kind: 'lift', cell: at(2, 1) }]);
+    expect(result.model.heads.get(1)).toMatchObject({ cell: at(3, 1), drawn: false });
+  });
+
   it('lays nothing for a bike that stalled, and lifts the tail the rules freed', () => {
     const result = advance(
       start(),
@@ -405,10 +417,21 @@ describe('replaying a recorded round with walls on a key', () => {
     deltas.forEach((delta, index) => {
       const result = advance(model, delta);
       holdWalls(drawn, result.walls, model.side);
+      const before = model.heads;
       model = result.model;
 
       const field = fields[index] as Uint16Array;
       const headCells = new Set([...model.heads.values()].map((head) => head.cell));
+      for (const head of model.heads.values()) {
+        // A bike that moved without laying a wall leaves nothing under its head, unless the cell
+        // it left is still a wall of its own for the head to continue. Judged from the rules'
+        // lit flag, not from the model's `drawn`, which is what is under test.
+        const prev = before.get(head.slot);
+        if (head.lit || prev === undefined || prev.cell === head.cell) continue;
+        if (drawn.has(head.cell) && drawn.get(prev.cell) !== head.slot) {
+          expect(drawn.has(head.cell), `bare head ${head.cell} after tick ${delta.t}`).toBe(false);
+        }
+      }
       for (const [cell, slot] of drawn) {
         if (field[cell] !== slot) {
           expect(field[cell], `drawn cell ${cell} after tick ${delta.t}`).toBe(slot);
