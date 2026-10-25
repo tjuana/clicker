@@ -35,6 +35,14 @@ function uploaded(walls: ReturnType<typeof createWalls>): void {
 const rangeLength = (attribute: InstancedBufferAttribute): number =>
   attribute.updateRanges.reduce((sum, range) => sum + range.count, 0);
 
+/** Element offsets and lengths an attribute will upload, as a sorted set: order and repeats do not matter. */
+function ranges(attribute: InstancedBufferAttribute): { start: number; count: number }[] {
+  const seen = new Map<string, { start: number; count: number }>();
+  for (const { start, count } of attribute.updateRanges)
+    seen.set(`${start}:${count}`, { start, count });
+  return [...seen.values()].sort((a, b) => a.start - b.start);
+}
+
 describe('the walls', () => {
   it('moves matrix, colour and date together when a lift swaps the last wall into the hole', () => {
     const walls = createWalls(SIDE, TICK_MS);
@@ -96,5 +104,62 @@ describe('the walls', () => {
     walls.lay([put(9, 2)], 2, true);
     walls.flush();
     expect(walls.mesh.count).toBe(1);
+  });
+
+  it('hands the GPU exactly the instances a step touched, in all three buffers', () => {
+    const walls = createWalls(SIDE, TICK_MS);
+    walls.lay([put(10, 1), put(11, 1, 10), put(12, 1, 11)], 1, false);
+    walls.flush();
+    uploaded(walls);
+    const before = attributes(walls).map((a) => a.version);
+
+    // A put appends at index 3; lifting cell 10 (index 0) moves the last instance, 3, into the hole.
+    walls.lay([put(13, 2), lift(10)], 2, false);
+    walls.flush();
+
+    const sizes = [16, 3, 1];
+    attributes(walls).forEach((attribute, k) => {
+      const size = sizes[k] as number;
+      expect(attribute.version).toBeGreaterThan(before[k] as number);
+      expect(ranges(attribute)).toEqual([
+        { start: 0, count: size },
+        { start: 3 * size, count: size },
+      ]);
+    });
+  });
+
+  it('uploads the hole a lift fills, not the end it vacates', () => {
+    const walls = createWalls(SIDE, TICK_MS);
+    walls.lay([put(10, 1), put(11, 1, 10), put(12, 1, 11), put(13, 1, 12)], 1, false);
+    walls.flush();
+    uploaded(walls);
+
+    walls.lay([lift(11)], 2, false);
+    walls.flush();
+
+    // Instance 3 moved into hole 1: only the hole is written, the vacated end is not.
+    expect(ranges(walls.mesh.instanceMatrix)).toEqual([{ start: 16, count: 16 }]);
+    expect(ranges(walls.mesh.instanceColor as InstancedBufferAttribute)).toEqual([
+      { start: 3, count: 3 },
+    ]);
+  });
+
+  it('lays a repeated full of the same round as a fresh walls object would', () => {
+    const cells = [put(10, 1), put(11, 1, 10), put(12, 1, 11), put(30, 2), put(31, 2, 30)];
+    const again = [...cells, put(32, 2, 31)];
+
+    const walls = createWalls(SIDE, TICK_MS);
+    walls.lay(cells, 10, true);
+    walls.flush();
+    walls.lay(again, 10, true);
+    walls.flush();
+
+    const fresh = createWalls(SIDE, TICK_MS);
+    fresh.lay(again, 10, true);
+    fresh.flush();
+
+    expect(walls.mesh.count).toBe(6);
+    expect(fresh.mesh.count).toBe(6);
+    for (let i = 0; i < 6; i += 1) expect(instance(walls, i)).toEqual(instance(fresh, i));
   });
 });
