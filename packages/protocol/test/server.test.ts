@@ -9,6 +9,7 @@ import {
   type RoomState,
   syncConnections,
   type TickChanges,
+  upgradeStored,
 } from '@clicker/game';
 import { describe, expect, it } from 'vitest';
 import { PROTOCOL_VERSION } from '../src/client';
@@ -119,7 +120,10 @@ describe('toSnapshot', () => {
     const { bot: _bot, ...legacy } = playedRoom().players['secret-1'] as Player;
     const stored = { ...playedRoom(), players: { 'secret-1': legacy as Player } };
 
-    const snapshot = toSnapshot(syncConnections(stored, { 'secret-1': ['conn-9'] }, 0), 42);
+    const snapshot = toSnapshot(
+      syncConnections(upgradeStored(stored), { 'secret-1': ['conn-9'] }, 0),
+      42,
+    );
 
     expect(snapshot.players).toEqual([{ id: '1', name: 'Аня', connected: true, bot: false }]);
     expect(parseServerMessage(JSON.stringify(snapshot))).toEqual(snapshot);

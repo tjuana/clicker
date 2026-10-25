@@ -11,6 +11,7 @@ import {
   nextDeadline,
   type RoomState,
   syncConnections,
+  upgradeStored,
 } from '@clicker/game';
 import {
   PROTOCOL_VERSION,
@@ -68,7 +69,8 @@ export class Room extends Server<Env> {
     };
 
     const stored = await this.ctx.storage.get<RoomState>('state');
-    let state = stored ?? createRoomState();
+    // Before anything reads it: a build ago the state had another shape.
+    let state = stored ? upgradeStored(stored) : createRoomState();
 
     // A round phase in storage means the object restarted mid-game
     // and the clicks held in memory are lost.

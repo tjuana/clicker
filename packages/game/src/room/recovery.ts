@@ -19,16 +19,11 @@ export function abortRound(state: RoomState): RoomState {
 }
 
 /**
- * Recounts the connections after the server wakes up or restarts.
- * `live` holds the ids of the connections each playerId has right now.
+ * What storage hands back was written by an older build and may lack what this one reads: the
+ * room's settings (a speed alone, or nothing) and the players' bot flag. It runs first thing
+ * after the read, because everything after it, `abortRound` included, trusts the shape.
  */
-export function syncConnections(
-  state: RoomState,
-  live: Record<string, string[]>,
-  now: number,
-): RoomState {
-  // Same for the settings: a room stored before they existed reads as the defaults, and one
-  // stored with only a speed keeps it.
+export function upgradeStored(state: RoomState): RoomState {
   const stored = state as Omit<RoomState, 'settings'> & {
     settings?: CyclesSettings;
     speed?: CyclesSettings['speed'];
@@ -38,22 +33,35 @@ export function syncConnections(
     speed: stored.speed ?? DEFAULT_CYCLES_SETTINGS.speed,
   };
   const players: Record<string, Player> = {};
-  for (const [playerId, stored] of Object.entries(state.players)) {
-    // What storage hands back was written by an older build and may lack the flag. Every stored
-    // room passes through here when the object starts, so this is where it becomes a boolean.
-    const player: Omit<Player, 'bot'> & { bot?: boolean } = stored;
+  for (const [playerId, player] of Object.entries(state.players)) {
+    const old: Omit<Player, 'bot'> & { bot?: boolean } = player;
+    players[playerId] = { ...player, bot: old.bot === true };
+  }
+  return { ...state, players, settings };
+}
+
+/**
+ * Recounts the connections after the server wakes up or restarts.
+ * `live` holds the ids of the connections each playerId has right now.
+ */
+export function syncConnections(
+  state: RoomState,
+  live: Record<string, string[]>,
+  now: number,
+): RoomState {
+  const players: Record<string, Player> = {};
+  for (const [playerId, player] of Object.entries(state.players)) {
     // A bot has no connection to recount; counting it as disconnected would expire it.
-    if (player.bot === true) {
-      players[playerId] = stored;
+    if (player.bot) {
+      players[playerId] = player;
       continue;
     }
     const connectionIds = live[playerId] ?? [];
     players[playerId] = {
       ...player,
-      bot: false,
       connectionIds,
       disconnectedAt: connectionIds.length > 0 ? null : (player.disconnectedAt ?? now),
     };
   }
-  return { ...state, players, settings };
+  return { ...state, players };
 }

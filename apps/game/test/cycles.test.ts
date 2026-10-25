@@ -1,4 +1,4 @@
-import { runInDurableObject } from 'cloudflare:test';
+import { abortAllDurableObjects, runInDurableObject } from 'cloudflare:test';
 import { env } from 'cloudflare:workers';
 import type { CyclesState, RoomState } from '@clicker/game';
 import { generateId, type SnapshotMessage } from '@clicker/protocol';
@@ -419,6 +419,40 @@ describe('the speed of a light-cycle room', () => {
     await lightCycleLobby(roomId, 0, 12);
 
     await vi.waitFor(async () => expect((await storedState(roomId))?.settings.speed).toBe(12));
+  });
+
+  it('wakes up a room the build before stored mid-round, and starts it again', async () => {
+    const roomId = generateId();
+    await lightCycleLobby(roomId, 1, 8);
+    await vi.waitFor(async () => expect((await storedState(roomId))?.settings.speed).toBe(8));
+    const stub = env.Room.get(env.Room.idFromName(roomId));
+    // The shape the previous build left behind: the speed on the room, no settings, bikes without
+    // the wall fields, a round that was running.
+    await runInDurableObject(stub, async (_instance, state) => {
+      const { settings: _settings, ...stored } = (await state.storage.get<RoomState>(
+        'state',
+      )) as RoomState;
+      const modeState = stored.modeState as CyclesState;
+      const bikes = modeState.bikes.map(
+        ({ held: _h, lit: _l, energy: _e, energyCap: _c, energyRegen: _r, ...bike }) => bike,
+      );
+      await state.storage.put('state', {
+        ...stored,
+        speed: 8,
+        phase: 'running',
+        round: { goAt: 0, endsAt: Date.now() + 600_000 },
+        modeState: { ...modeState, bikes },
+      });
+    });
+    await abortAllDurableObjects();
+
+    const returning = await connect(roomId);
+    returning.send({ type: 'join', playerId: generateId(), name: 'Боря' });
+    const snapshot = await returning.waitFor(isSnapshot);
+
+    expect(snapshot.phase).toBe('lobby');
+    expect(snapshot.notice).toBe('round_aborted');
+    expect((await storedState(roomId))?.settings).toEqual({ speed: 8, walls: 'always' });
   });
 
   it('makes the room tick at the new pace, not the one the room was created with', async () => {

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { apply } from '../src/room/apply';
-import { abortRound, syncConnections } from '../src/room/recovery';
+import { abortRound, syncConnections, upgradeStored } from '../src/room/recovery';
 import { createRoomState, type Player, type RoomState } from '../src/room/state';
-import { clickerOf, config, deepFreeze } from './support';
+import { clickerOf, config, cyclesOf, deepFreeze, lobbyWithHost, run } from './support';
 
 const CONFIG = config({ countdownMs: 3000, roundMs: 10000 });
 
@@ -129,8 +129,39 @@ describe('syncConnections', () => {
     const { bot: _bot, ...legacy } = running().players['secret-1'] as Player;
     const stored = { ...running(), players: { 'secret-1': legacy as Player } };
 
-    const synced = syncConnections(stored, { 'secret-1': ['conn-2'] }, 9000);
+    const synced = syncConnections(upgradeStored(stored), { 'secret-1': ['conn-2'] }, 9000);
 
     expect(synced.players['secret-1']?.bot).toBe(false);
+  });
+});
+
+describe('a light-cycle room stored mid-round by the build before', () => {
+  it('goes through the start-up in the order the server runs it and comes out a lobby', () => {
+    const riding = run(lobbyWithHost(), [
+      { type: 'setMode', playerId: 'host', mode: 'cycles' },
+      { type: 'addBot', playerId: 'host' },
+      { type: 'start', playerId: 'host' },
+    ]);
+    const { settings: _settings, ...modern } = apply(
+      riding,
+      { type: 'tick' },
+      riding.round?.goAt ?? 0,
+    ).state;
+    // The old build kept the speed on the room and gave its bikes no wall fields.
+    const bikes = cyclesOf(modern as RoomState).bikes.map(
+      ({ held: _h, lit: _l, energy: _e, energyCap: _c, energyRegen: _r, ...bike }) => bike,
+    );
+    const stored = {
+      ...modern,
+      speed: 8,
+      modeState: { ...(modern.modeState as object), bikes },
+    } as unknown as RoomState;
+    expect(stored.phase).toBe('running');
+
+    const upgraded = upgradeStored(stored);
+    const synced = syncConnections(abortRound(upgraded), { host: ['c-host'] }, 0);
+
+    expect(synced.settings).toEqual({ speed: 8, walls: 'always' });
+    expect(synced.phase).toBe('lobby');
   });
 });

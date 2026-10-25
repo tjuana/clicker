@@ -8,7 +8,7 @@ import {
 } from '../src/modes/cycles/config';
 import { apply } from '../src/room/apply';
 import { configFor, DEFAULT_CONFIG } from '../src/room/config';
-import { abortRound, syncConnections } from '../src/room/recovery';
+import { abortRound, upgradeStored } from '../src/room/recovery';
 import { createRoomState, type RoomState } from '../src/room/state';
 import { cyclesOf, lobbyWithHost, run } from './support';
 
@@ -192,7 +192,7 @@ describe('a room stored before the speed existed', () => {
   it('reads as the default speed', () => {
     const { settings: _settings, ...legacy } = cyclesLobby();
 
-    const synced = syncConnections(legacy as unknown as RoomState, { host: ['c-host'] }, 0);
+    const synced = upgradeStored(legacy as unknown as RoomState);
 
     expect(synced.settings.speed).toBe(DEFAULT_SPEED);
   });
@@ -200,6 +200,6 @@ describe('a room stored before the speed existed', () => {
   it('keeps a speed that was stored', () => {
     const stored = run(cyclesLobby(), [{ type: 'setSpeed', playerId: 'host', speed: 12 }]);
 
-    expect(syncConnections(stored, { host: ['c-host'] }, 0).settings.speed).toBe(12);
+    expect(upgradeStored(stored).settings.speed).toBe(12);
   });
 });

@@ -6,7 +6,7 @@ import {
   WALL_MODES,
 } from '../src/modes/cycles/config';
 import { apply } from '../src/room/apply';
-import { syncConnections } from '../src/room/recovery';
+import { upgradeStored } from '../src/room/recovery';
 import { createRoomState, type RoomState } from '../src/room/state';
 import { lobbyWithHost, run } from './support';
 
@@ -143,11 +143,7 @@ describe('a room stored before the walls existed', () => {
   it('keeps the speed it had and lays its walls as ever', () => {
     const { settings: _settings, ...legacy } = cyclesLobby();
 
-    const synced = syncConnections(
-      { ...legacy, speed: 12 } as unknown as RoomState,
-      { host: ['c-host'] },
-      0,
-    );
+    const synced = upgradeStored({ ...legacy, speed: 12 } as unknown as RoomState);
 
     expect(synced.settings).toEqual({ speed: 12, walls: 'always' });
   });
@@ -155,7 +151,7 @@ describe('a room stored before the walls existed', () => {
   it('reads as the defaults when it had no speed either', () => {
     const { settings: _settings, ...legacy } = cyclesLobby();
 
-    const synced = syncConnections(legacy as unknown as RoomState, { host: ['c-host'] }, 0);
+    const synced = upgradeStored(legacy as unknown as RoomState);
 
     expect(synced.settings).toEqual(DEFAULT_CYCLES_SETTINGS);
   });
@@ -163,6 +159,6 @@ describe('a room stored before the walls existed', () => {
   it('keeps settings that were stored', () => {
     const stored = run(cyclesLobby(), [{ type: 'setWalls', playerId: 'host', walls: 'button' }]);
 
-    expect(syncConnections(stored, { host: ['c-host'] }, 0).settings.walls).toBe('button');
+    expect(upgradeStored(stored).settings.walls).toBe('button');
   });
 });

@@ -40,6 +40,6 @@ export {
   tickMsFor,
 } from './room/config';
 export { nextDeadline } from './room/deadline';
-export { abortRound, syncConnections } from './room/recovery';
+export { abortRound, syncConnections, upgradeStored } from './room/recovery';
 export type { Notice, Phase, Player, RoomState, Round } from './room/state';
 export { createRoomState } from './room/state';
