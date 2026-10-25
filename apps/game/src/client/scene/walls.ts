@@ -103,8 +103,8 @@ varying vec3 vViewPos;`,
         `#include <color_fragment>
 float top = smoothstep(${glsl(TOP_FROM)}, ${glsl(TOP_TO)}, vHeight);
 float body = mix(${glsl(FOOT)}, 1.0, vHeight * vHeight);
-float rim = pow(1.0 - abs(dot(normalize(vViewNormal), normalize(-vViewPos))), 3.0);
-float pulse = pow(0.5 + 0.5 * cos(6.2831853 * (time + vLaid) / ${glsl(PULSE_PERIOD_S)}), 12.0);
+float rim = pow(max(1.0 - abs(dot(normalize(vViewNormal), normalize(-vViewPos))), 0.0), 3.0);
+float pulse = pow(max(0.5 + 0.5 * cos(6.2831853 * (time + vLaid) / ${glsl(PULSE_PERIOD_S)}), 0.0), 12.0);
 diffuseColor.rgb *= body * (1.0 + ${glsl(RIM)} * rim + ${glsl(PULSE)} * pulse) + top * ${glsl(TOP)};`,
       );
   };
