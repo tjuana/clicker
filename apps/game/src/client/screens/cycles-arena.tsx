@@ -13,6 +13,7 @@ import {
   useBoostCharge,
 } from '../cycles/hud';
 import { useCycles } from '../cycles/store';
+import { createWallKeys } from '../cycles/wall-keys';
 import { useClient } from '../store';
 import { strings } from '../strings';
 import { theme } from '../theme';
@@ -168,27 +169,41 @@ export function CyclesArena({
     [blip, onTurn],
   );
 
-  // Everything an input needs is known before the early return: hooks run on every render.
+  // The wall is held by any of W, the up arrow and the button; the set outlives the effects below
+  // so a key already down when the round goes live is still counted.
+  const keys = useRef(createWallKeys());
+  const runningRef = useRef(running);
+  runningRef.current = running;
+  const onWallRef = useRef(onWall);
+  onWallRef.current = onWall;
+  // Nothing is sent before the round is live: a key held through the countdown is sent at go.
+  const say = useCallback((changed: boolean): void => {
+    if (changed && runningRef.current) onWallRef.current(keys.current.held());
+  }, []);
+  const button = useCallback(
+    (on: boolean): void => say(on ? keys.current.press('button') : keys.current.release('button')),
+    [say],
+  );
+
   useEffect(() => {
     if (!running) return;
-
-    // The wall key is held, not pressed: `held` makes every release and every loss of focus say
-    // "off" exactly once, and never when the key was not down.
-    let held = false;
-    const wall = (on: boolean): void => {
-      if (held === on) return;
-      held = on;
-      onWall(on);
+    if (keys.current.held()) onWallRef.current(true);
+    return () => {
+      if (keys.current.held()) onWallRef.current(false);
     };
+  }, [running]);
 
+  // Everything an input needs is known before the early return: hooks run on every render.
+  useEffect(() => {
     const onDown = (event: KeyboardEvent): void => {
       // One press, one move: a held key repeats by itself and would flood the turn queue.
       if (event.repeat || event.metaKey || event.ctrlKey || event.altKey) return;
       if (walls && WALL_KEYS.has(event.code)) {
         event.preventDefault();
-        wall(true);
+        say(keys.current.press(event.code));
         return;
       }
+      if (!runningRef.current) return;
       const side = TURN_KEYS[event.code];
       if (side === undefined && event.code !== 'Space') return;
       // Arrows and Space scroll the page unless told otherwise.
@@ -198,25 +213,24 @@ export function CyclesArena({
     };
 
     const onUp = (event: KeyboardEvent): void => {
-      if (WALL_KEYS.has(event.code)) wall(false);
+      if (WALL_KEYS.has(event.code)) say(keys.current.release(event.code));
     };
     const onHidden = (): void => {
-      if (document.visibilityState === 'hidden') wall(false);
+      if (document.visibilityState === 'hidden') say(keys.current.clear());
     };
-    const onBlur = (): void => wall(false);
+    const onBlur = (): void => say(keys.current.clear());
 
     window.addEventListener('keydown', onDown);
     window.addEventListener('keyup', onUp);
     window.addEventListener('blur', onBlur);
     document.addEventListener('visibilitychange', onHidden);
     return () => {
-      wall(false);
       window.removeEventListener('keydown', onDown);
       window.removeEventListener('keyup', onUp);
       window.removeEventListener('blur', onBlur);
       document.removeEventListener('visibilitychange', onHidden);
     };
-  }, [running, walls, turn, onBoost, onWall]);
+  }, [walls, turn, onBoost, say]);
 
   if (snapshot === null) return null;
   const round = snapshot.round;
@@ -281,7 +295,7 @@ export function CyclesArena({
           {strings.cycles.turnLeft}
         </Button>
         <BoostButton onBoost={onBoost} disabled={!running} />
-        {walls ? <WallButton onWall={onWall} disabled={!running} /> : null}
+        {walls ? <WallButton onWall={button} disabled={!running} /> : null}
         <Button
           testId="turn-right"
           variant="secondary"
