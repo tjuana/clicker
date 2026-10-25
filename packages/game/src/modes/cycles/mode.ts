@@ -39,6 +39,11 @@ function clear(state: CyclesState, settings: CyclesSettings): CyclesState {
       deaths: 0,
       life: 0,
       longest: 0,
+      held: false,
+      lit: config.walls === 'always',
+      energy: config.energyTicks,
+      energyCap: config.energyTicks,
+      energyRegen: 0,
     })),
     tick: 0,
     results: null,
@@ -53,7 +58,8 @@ export const cyclesMode: Mode<CyclesState, CyclesInput> = {
   // Light-cycle time is counted in ticks, so the wall-clock start of the round means nothing.
   startRound: (state, _goAt, _config, settings) => startRound(state, cyclesConfigFor(settings)),
   applyInput: (state, publicId, input, _now, _config, settings) =>
-    input.type === 'turn' || input.type === 'boost'
+    // The clicker's input is not ours; the room hands every mode whatever the player sent.
+    input.type === 'turn' || input.type === 'boost' || input.type === 'wall'
       ? applyInput(state, publicId, input, cyclesConfigFor(settings))
       : state,
   // Whoever joins has a connection, so is a person; a bot is never rejoined.

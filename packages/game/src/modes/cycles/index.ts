@@ -52,6 +52,11 @@ function newBike(slot: number, publicId: string, bot: boolean, config: CyclesCon
     deaths: 0,
     life: 0,
     longest: 0,
+    held: false,
+    lit: config.walls === 'always',
+    energy: config.energyTicks,
+    energyCap: config.energyTicks,
+    energyRegen: 0,
   };
 }
 
@@ -154,7 +159,23 @@ export function applyInput(
 ): CyclesState {
   const position = state.index[publicId];
   const bike = position === undefined ? undefined : state.bikes[position];
-  if (position === undefined || bike === undefined || !bike.alive) return state;
+  if (position === undefined || bike === undefined) return state;
+
+  if (input.type === 'wall') {
+    if (config.walls === 'always') return state;
+    // A dead bike still remembers the key, but nothing lights until it is placed again.
+    if (!bike.alive)
+      return bike.held === input.on
+        ? state
+        : withBike(state, position, { ...bike, held: input.on });
+    if (input.on) {
+      if (bike.held) return state;
+      return withBike(state, position, { ...bike, held: true, lit: bike.energy > 0 });
+    }
+    if (!bike.held && !bike.lit) return state;
+    return withBike(state, position, { ...bike, held: false, lit: false });
+  }
+  if (!bike.alive) return state;
 
   if (input.type === 'turn') {
     if (bike.turns.length >= config.turnQueue) return state;

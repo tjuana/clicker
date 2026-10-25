@@ -35,10 +35,11 @@ const nameSchema = v.pipe(
 /** The clicker's input. What it means is the mode's business, not the room's. */
 export const clickerInputSchema = v.strictObject({ type: v.literal('click') });
 
-/** The light cycles' input: a turn to a side, or a boost. */
+/** The light cycles' input: a turn to a side, a boost, or the wall key going down or up. */
 export const cyclesInputSchema = v.variant('type', [
   v.strictObject({ type: v.literal('turn'), side: v.picklist(['left', 'right']) }),
   v.strictObject({ type: v.literal('boost') }),
+  v.strictObject({ type: v.literal('wall'), on: v.boolean() }),
 ]);
 
 export const joinSchema = v.strictObject({

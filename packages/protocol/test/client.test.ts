@@ -196,6 +196,8 @@ describe('parseClientMessage', () => {
     { type: 'input', input: { type: 'turn', side: 'left' } },
     { type: 'input', input: { type: 'turn', side: 'right' } },
     { type: 'input', input: { type: 'boost' } },
+    { type: 'input', input: { type: 'wall', on: true } },
+    { type: 'input', input: { type: 'wall', on: false } },
   ])('accepts $type', (message) => {
     const sent = { v: PROTOCOL_VERSION, ...message };
 
@@ -217,6 +219,8 @@ describe('parseClientMessage', () => {
     ['an extra field in setWalls', { type: 'setWalls', walls: 'button', speed: 8 }],
     ['an extra field in setSpeed', { type: 'setSpeed', speed: 8, mode: 'cycles' }],
     ['an extra field in a boost', { type: 'input', input: { type: 'boost', power: 9 } }],
+    ['a wall input without a state', { type: 'input', input: { type: 'wall' } }],
+    ['a wall input with a state as text', { type: 'input', input: { type: 'wall', on: 'yes' } }],
     ['an extra field in addBot', { type: 'addBot', count: 5 }],
     ['an extra field in resync', { type: 'resync', since: 3 }],
   ])('rejects %s', (_label, message) => {

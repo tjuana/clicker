@@ -122,6 +122,9 @@ export const fullSchema = v.strictObject({
       rubber: v.number(),
       boost: v.number(),
       cooldown: v.number(),
+      energy: v.number(),
+      cap: v.number(),
+      lit: v.boolean(),
       respawnIn: v.number(),
     }),
   ),
@@ -134,7 +137,7 @@ export const deltaSchema = v.strictObject({
   t: v.number(),
   /** Flat pairs: cell, what it holds after the tick (0 = empty). Apply in any order. */
   cells: v.array(v.number()),
-  /** Flat 5-tuples for every living bike: slot, head cell, direction, rubber left, boost cooldown left. */
+  /** Flat 8-tuples for every living bike: slot, head cell, direction, rubber left, boost cooldown left, energy, energy capacity, lit (1 or 0). */
   heads: v.array(v.number()),
   events: v.array(eventSchema),
 });
@@ -257,6 +260,9 @@ export function toFull(state: RoomState): FullMessage | null {
         rubber: bike.rubber,
         boost: bike.boost,
         cooldown: bike.cooldown,
+        energy: bike.energy,
+        cap: bike.energyCap,
+        lit: bike.lit,
         respawnIn: bike.respawnIn,
       };
     }),

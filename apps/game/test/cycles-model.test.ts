@@ -36,6 +36,9 @@ function bike(
     rubber: 3,
     boost: 0,
     cooldown: 0,
+    energy: 80,
+    cap: 80,
+    lit: true,
     respawnIn: 0,
     ...overrides,
   };
@@ -87,7 +90,7 @@ describe('fromFull', () => {
       [2, '2'],
     ]);
     expect([...model.heads.values()]).toEqual([
-      { slot: 1, cell: at(2, 1), dir: 0, rubber: 2, cooldown: 7 },
+      { slot: 1, cell: at(2, 1), dir: 0, rubber: 2, cooldown: 7, energy: 80, cap: 80, lit: true },
     ]);
     expect(model.kills.get(1)).toBe(3);
     expect(model.deaths.get(2)).toBe(4);
@@ -100,7 +103,7 @@ describe('applyDelta', () => {
   it('lays one wall for one step, joined to the previous head, and moves the head', () => {
     const result = advance(
       start(),
-      deltaOf(6, { cells: [at(3, 1), 1], heads: [1, at(3, 1), 0, 3, 0] }),
+      deltaOf(6, { cells: [at(3, 1), 1], heads: [1, at(3, 1), 0, 3, 0, 80, 80, 1] }),
     );
 
     expect(result.walls).toEqual([{ kind: 'put', cell: at(3, 1), slot: 1, from: at(2, 1) }]);
@@ -111,7 +114,7 @@ describe('applyDelta', () => {
   it('lays the middle cell too when a boost carries the head two cells', () => {
     const result = advance(
       start(),
-      deltaOf(6, { cells: [at(3, 1), 1, at(4, 1), 1], heads: [1, at(4, 1), 0, 3, 28] }),
+      deltaOf(6, { cells: [at(3, 1), 1, at(4, 1), 1], heads: [1, at(4, 1), 0, 3, 28, 80, 80, 1] }),
     );
 
     expect(result.walls).toEqual([
@@ -125,7 +128,7 @@ describe('applyDelta', () => {
 
     const { walls } = advance(
       model,
-      deltaOf(6, { cells: [at(4, 4), 1, at(4, 5), 1], heads: [1, at(4, 5), 1, 3, 28] }),
+      deltaOf(6, { cells: [at(4, 4), 1, at(4, 5), 1], heads: [1, at(4, 5), 1, 3, 28, 80, 80, 1] }),
     );
 
     expect(walls).toEqual([
@@ -137,7 +140,7 @@ describe('applyDelta', () => {
   it('lays nothing for a bike that stalled, and lifts the tail the rules freed', () => {
     const result = advance(
       start(),
-      deltaOf(6, { cells: [at(1, 1), 0], heads: [1, at(2, 1), 0, 2, 0] }),
+      deltaOf(6, { cells: [at(1, 1), 0], heads: [1, at(2, 1), 0, 2, 0, 80, 80, 1] }),
     );
 
     expect(result.walls).toEqual([{ kind: 'lift', cell: at(1, 1) }]);
@@ -153,7 +156,7 @@ describe('applyDelta', () => {
       model,
       deltaOf(6, {
         cells: [at(1, 1), 0, at(2, 1), 0, at(3, 1), 0, at(8, 6), 2],
-        heads: [2, at(8, 6), 3, 3, 0],
+        heads: [2, at(8, 6), 3, 3, 0, 80, 80, 1],
         events: [{ type: 'died', slot: 1, by: 2 }],
       }),
     );
@@ -178,7 +181,7 @@ describe('applyDelta', () => {
       model,
       deltaOf(6, {
         cells: [at(5, 5), 1, at(6, 5), 1],
-        heads: [1, at(6, 5), 0, 3, 0],
+        heads: [1, at(6, 5), 0, 3, 0, 80, 80, 1],
         events: [{ type: 'respawned', slot: 1 }],
       }),
     );
@@ -197,7 +200,7 @@ describe('applyDelta', () => {
       model,
       deltaOf(6, {
         cells: [at(5, 5), 1],
-        heads: [1, at(5, 5), 0, 3, 0],
+        heads: [1, at(5, 5), 0, 3, 0, 80, 80, 1],
         events: [{ type: 'respawned', slot: 1 }],
       }),
     );

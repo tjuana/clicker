@@ -16,6 +16,10 @@ export interface BikeSpec {
   rubber?: number;
   bot?: boolean;
   turns?: ('left' | 'right')[];
+  /** Laying a wall now; defaults to what the config's wall mode gives a fresh bike. */
+  lit?: boolean;
+  energy?: number;
+  energyCap?: number;
 }
 
 /**
@@ -52,6 +56,11 @@ export function arena(side: number, specs: BikeSpec[], config = cyclesConfig()):
       deaths: 0,
       life: 0,
       longest: 0,
+      held: false,
+      lit: spec.lit ?? config.walls === 'always',
+      energy: spec.energy ?? config.energyTicks,
+      energyCap: spec.energyCap ?? config.energyTicks,
+      energyRegen: 0,
     };
   });
   const index: Record<string, number> = {};

@@ -7,7 +7,9 @@ const TICK_MS = 125;
 const DELAY_MS = renderDelay(TICK_MS);
 
 function head(cell: number): Map<number, Head> {
-  return new Map([[1, { slot: 1, cell, dir: 0, rubber: 3, cooldown: 0 }]]);
+  return new Map([
+    [1, { slot: 1, cell, dir: 0, rubber: 3, cooldown: 0, energy: 80, cap: 80, lit: true }],
+  ]);
 }
 
 function step(tick: number): Step {

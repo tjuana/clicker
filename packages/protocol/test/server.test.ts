@@ -1,6 +1,7 @@
 import {
   apply,
   type Command,
+  type CyclesState,
   configFor,
   createRoomState,
   type GameEvent,
@@ -310,6 +311,13 @@ describe('toFull', () => {
     expect(full?.bikes).toHaveLength(20);
   });
 
+  it('carries each bike energy, its capacity and whether its wall is lit', () => {
+    const { state } = cyclesRoom(2, 3);
+    const bike = toFull(state)?.bikes[0];
+    const own = (state.modeState as CyclesState).bikes[0];
+    expect(bike).toMatchObject({ energy: own?.energy, cap: own?.energyCap, lit: own?.lit });
+  });
+
   it('says how long a tick lasts, from the speed the host chose', () => {
     const { state } = cyclesRoom(2, 3);
 
@@ -333,9 +341,9 @@ describe('toFull', () => {
     const alive = (full?.bikes ?? []).filter((bike) => bike.alive);
     expect(alive.length).toBeGreaterThan(0);
     for (const bike of alive) {
-      // Heads are 5-tuples; searching the flat list for the slot could land on a rubber or a cooldown.
+      // Heads are 8-tuples; searching the flat list for the slot could land on a rubber or a cooldown.
       let at = 0;
-      while (delta.heads[at] !== bike.slot) at += 5;
+      while (delta.heads[at] !== bike.slot) at += 8;
       // The head the tick reported is the last cell of the trail, and every cell borders the next.
       expect(bike.trail.at(-1)).toBe(delta.heads[at + 1]);
       for (let i = 1; i < bike.trail.length; i += 1) {
@@ -397,7 +405,7 @@ describe('toDelta', () => {
     expect(delta.cells).toEqual(changes.cells);
     expect(delta.heads).toEqual(changes.heads);
     expect(delta.heads.length).toBeGreaterThan(0);
-    expect(delta.heads.length % 5).toBe(0);
+    expect(delta.heads.length % 8).toBe(0);
     expect(parseServerMessage(JSON.stringify(delta))).toEqual(delta);
   });
 

@@ -11,6 +11,9 @@ export interface Head {
   dir: number;
   rubber: number;
   cooldown: number;
+  energy: number;
+  cap: number;
+  lit: boolean;
 }
 
 export interface CyclesModel {
@@ -50,6 +53,9 @@ export function fromFull(full: FullMessage): { model: CyclesModel; walls: WallOp
         dir: bike.dir,
         rubber: bike.rubber,
         cooldown: bike.cooldown,
+        energy: bike.energy,
+        cap: bike.cap,
+        lit: bike.lit,
       });
     }
   }
@@ -92,7 +98,7 @@ export function applyDelta(
   }
 
   const heads = new Map<number, Head>();
-  for (let i = 0; i < delta.heads.length; i += 5) {
+  for (let i = 0; i < delta.heads.length; i += 8) {
     const slot = delta.heads[i] as number;
     heads.set(slot, {
       slot,
@@ -100,6 +106,9 @@ export function applyDelta(
       dir: delta.heads[i + 2] as number,
       rubber: delta.heads[i + 3] as number,
       cooldown: delta.heads[i + 4] as number,
+      energy: delta.heads[i + 5] as number,
+      cap: delta.heads[i + 6] as number,
+      lit: delta.heads[i + 7] === 1,
     });
   }
 

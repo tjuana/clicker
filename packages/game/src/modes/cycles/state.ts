@@ -7,7 +7,10 @@ export const DY = [0, 1, 0, -1] as const;
 
 export type Turn = 'left' | 'right';
 
-export type CyclesInput = { type: 'turn'; side: Turn } | { type: 'boost' };
+export type CyclesInput =
+  | { type: 'turn'; side: Turn }
+  | { type: 'boost' }
+  | { type: 'wall'; on: boolean };
 
 /**
  * A trail is a ring buffer over a fixed `Int32Array` of `trailMax` cells. The capacity never
@@ -47,6 +50,15 @@ export interface Bike {
   /** Ticks alive in the current life, and the best life so far. */
   life: number;
   longest: number;
+  /** The wall key as the player last reported it. */
+  held: boolean;
+  /** Laying a wall right now. Always true in `always` mode. */
+  lit: boolean;
+  energy: number;
+  /** Capacity in this life: grows with kills up to `energyMaxTicks`. */
+  energyCap: number;
+  /** Ticks without a wall counted towards the next unit of energy. */
+  energyRegen: number;
 }
 
 export interface CyclesResultRow {

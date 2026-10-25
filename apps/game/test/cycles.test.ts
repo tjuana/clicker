@@ -54,7 +54,16 @@ function replay(full: Full, deltas: Delta[]): { field: number[]; heads: number[]
   for (const bike of full.bikes) {
     for (const cell of bike.trail) field[cell] = bike.slot;
     if (bike.alive) {
-      heads.push([bike.slot, bike.trail.at(-1) ?? -1, bike.dir, bike.rubber, bike.cooldown]);
+      heads.push([
+        bike.slot,
+        bike.trail.at(-1) ?? -1,
+        bike.dir,
+        bike.rubber,
+        bike.cooldown,
+        bike.energy,
+        bike.cap,
+        bike.lit ? 1 : 0,
+      ]);
     }
   }
   let tick = full.tick;
@@ -65,7 +74,7 @@ function replay(full: Full, deltas: Delta[]): { field: number[]; heads: number[]
       field[delta.cells[i] as number] = delta.cells[i + 1] as number;
     }
     heads = [];
-    for (let i = 0; i < delta.heads.length; i += 5) heads.push(delta.heads.slice(i, i + 5));
+    for (let i = 0; i < delta.heads.length; i += 8) heads.push(delta.heads.slice(i, i + 8));
   }
   return { field, heads };
 }
@@ -137,6 +146,9 @@ describe('a light-cycle room over websocket', () => {
         bike.dir,
         bike.rubber,
         bike.cooldown,
+        bike.energy,
+        bike.energyCap,
+        bike.lit ? 1 : 0,
       ]);
     expect(seen.heads).toEqual(heads);
   });
