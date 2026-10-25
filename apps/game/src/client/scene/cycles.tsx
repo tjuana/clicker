@@ -21,12 +21,13 @@ import { useCycles } from '../cycles/store';
 import type { Sample, Step, Timeline } from '../cycles/timeline';
 import { createCycleGeometry } from './cycle-model';
 import { Floor, Grid } from './floor';
-import { BIKE_LEVEL, BLOOM, BORDER_COLOUR, SLOT_COLOURS } from './look';
+import { BIKE_LEVEL, BLOOM, BORDER_COLOUR, DIM_LEVEL, SLOT_COLOURS } from './look';
 import { createWalls, type Walls } from './walls';
 
 const MAX_BIKES = 64;
 
 const BIKE = SLOT_COLOURS.map((colour) => colour.clone().multiplyScalar(BIKE_LEVEL));
+const DIM = SLOT_COLOURS.map((colour) => colour.clone().multiplyScalar(DIM_LEVEL));
 /**
  * The player's own bike is bigger, not brighter: a yellow bike at 1.25 is already past white,
  * and a harder glow only turned it into a blown-out blob.
@@ -137,7 +138,9 @@ function drawBike(
     scale.setScalar(slot === rig.ownSlot ? OWN_SIZE : 1),
   );
   mesh.setMatrixAt(index, matrix);
-  mesh.setColorAt(index, BIKE[(slot - 1) % BIKE.length] as Color);
+  // Dim while the head it rides towards is not laying a wall: lit mode is told apart by eye.
+  const colours = end.lit ? BIKE : DIM;
+  mesh.setColorAt(index, colours[(slot - 1) % colours.length] as Color);
   // The player's own bike wins over the one that killed it, which is followed only while the
   // player has none.
   const { chase } = rig;
