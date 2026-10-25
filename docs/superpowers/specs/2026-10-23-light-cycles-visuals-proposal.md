@@ -1,7 +1,8 @@
 # Light cycles: visual upgrade — proposal
 
-Date: 2026-10-23 · Status: **proposal**. Options for the owner to choose from; the plan follows the
-choice. The current look and why it is what it is: [light-cycles spec](2026-10-10-light-cycles-design.md)
+Date: 2026-10-23 · Status: **answered 2026-10-25** — see the
+[polish and walls design](2026-10-25-light-cycles-polish-and-walls-design.md). Options for the owner
+to choose from; the plan follows the choice. The current look and why it is what it is: [light-cycles spec](2026-10-10-light-cycles-design.md)
 section 8 and [plan 8](../plans/2026-10-11-plan-8-cycles-client.md) ("What was verified").
 
 ## 1. Where it stands

@@ -1,6 +1,8 @@
 # Ring race with textures — proposal
 
-Date: 2026-10-23 · Status: **proposal**. Options and a recommendation, written so a fresh session
+Date: 2026-10-23 · Status: **proposal**, partly answered 2026-10-25: version 1 runs entirely on
+the server and R0 is dropped — see §1 of the
+[polish and walls design](2026-10-25-light-cycles-polish-and-walls-design.md). Options and a recommendation, written so a fresh session
 can open the brainstorm. Nothing here is decided until the owner answers the open questions at the
 end; the spec and the plans come after that.
 
