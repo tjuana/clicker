@@ -11,7 +11,8 @@ Object that talks to players over WebSockets.
 
 1. Open the game and create a room.
 2. Send the link to everyone else — the link is the invitation, and it cannot be guessed.
-3. The host picks a game, and for the light cycles a speed and any bots; then presses Start.
+3. The host picks a game, and for the light cycles a speed, the walls and any bots; then presses
+   Start.
 
 **Clicker** — three seconds of countdown, ten seconds of clicking. Most clicks wins; on a tie,
 whoever reached that score first.
@@ -19,7 +20,8 @@ whoever reached that score first.
 **Light cycles** — a neon arena in the spirit of *Tron*. Each bike leaves a wall of light; ride
 others into yours and stay clear of everything yourself. A / D or the arrows turn, Space boosts; a
 crash puts you back in two seconds. Three-minute rounds, up to twenty riders with bots, ranked by
-kills.
+kills. The host can put the walls on a key: then a bike lays its wall only while W or ↑ is held,
+from four seconds of energy that refill in eight, and every kill adds a second.
 
 ## Architecture
 
@@ -58,7 +60,7 @@ single deploy.
 A game is a directory under `packages/game/src/modes/` behind the `Mode` interface — derived from
 the clicker and the light cycles once both existed — plus its schemas in `packages/protocol` and its
 screens on the client. It does not touch the room, the message envelope or the lobby. Input travels
-as a generic `input` command only the mode interprets, and a protocol version (now 2) tells an old
+as a generic `input` command only the mode interprets, and a protocol version (now 3) tells an old
 tab to reload instead of letting it misread a message in silence.
 
 What comes next is in [docs/superpowers/specs](docs/superpowers/specs/): proposals for a textured
@@ -88,10 +90,10 @@ pnpm --filter @clicker/app run deploy     # build and publish to Cloudflare
 
 | Part | State |
 |---|---|
-| Game rules (`packages/game`) | clicker and light cycles, 216 tests |
-| Wire format (`packages/protocol`) | version 2, 74 tests |
-| Room server and client (`apps/game`) | 199 tests, including integration tests in the Workers runtime |
-| End to end | a clicker round and a light-cycle round against bots, desktop and phone |
+| Game rules (`packages/game`) | clicker and light cycles, 261 tests |
+| Wire format (`packages/protocol`) | version 3, 87 tests |
+| Room server and client (`apps/game`) | 219 tests, including integration tests in the Workers runtime |
+| End to end | a clicker round, a light-cycle round against bots, and walls on a key, desktop and phone |
 | Deploy | every push to `main`, through Cloudflare Workers Builds |
 
 The designs are the [specs](docs/superpowers/specs/),
