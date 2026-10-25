@@ -9,7 +9,7 @@ import {
   startRound,
   step,
 } from '.';
-import { type CyclesConfig, cyclesConfigFor, type Speed } from './config';
+import { type CyclesConfig, type CyclesSettings, cyclesConfigFor } from './config';
 import type { CyclesInput, CyclesState } from './state';
 import { emptyTrail } from './trail';
 
@@ -17,8 +17,8 @@ import { emptyTrail } from './trail';
  * Back to a lobby: the players and their slots stay, everything the round built goes. The
  * field is zeroed rather than dropped so its side still matches the cells the slots refer to.
  */
-function clear(state: CyclesState, speed: Speed): CyclesState {
-  const config: CyclesConfig = cyclesConfigFor(speed);
+function clear(state: CyclesState, settings: CyclesSettings): CyclesState {
+  const config: CyclesConfig = cyclesConfigFor(settings);
   return {
     ...state,
     field: new Uint16Array(state.side * state.side),
@@ -47,18 +47,19 @@ function clear(state: CyclesState, speed: Speed): CyclesState {
 
 export const cyclesMode: Mode<CyclesState, CyclesInput> = {
   create: createCyclesState,
-  addPlayer: (state, publicId, bot, _now, _config, speed) =>
-    addPlayer(state, publicId, bot, cyclesConfigFor(speed)),
+  addPlayer: (state, publicId, bot, _now, _config, settings) =>
+    addPlayer(state, publicId, bot, cyclesConfigFor(settings)),
   removePlayers,
   // Light-cycle time is counted in ticks, so the wall-clock start of the round means nothing.
-  startRound: (state, _goAt, _config, speed) => startRound(state, cyclesConfigFor(speed)),
-  applyInput: (state, publicId, input, _now, _config, speed) =>
+  startRound: (state, _goAt, _config, settings) => startRound(state, cyclesConfigFor(settings)),
+  applyInput: (state, publicId, input, _now, _config, settings) =>
     input.type === 'turn' || input.type === 'boost'
-      ? applyInput(state, publicId, input, cyclesConfigFor(speed))
+      ? applyInput(state, publicId, input, cyclesConfigFor(settings))
       : state,
   // Whoever joins has a connection, so is a person; a bot is never rejoined.
-  rejoin: (state, publicId, speed) => addPlayer(state, publicId, false, cyclesConfigFor(speed)),
-  step: (state, speed) => step(state, cyclesConfigFor(speed)),
+  rejoin: (state, publicId, settings) =>
+    addPlayer(state, publicId, false, cyclesConfigFor(settings)),
+  step: (state, settings) => step(state, cyclesConfigFor(settings)),
   abandon: leave,
   finish,
   clear,

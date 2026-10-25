@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { modeFor } from '../src/modes';
 import { clickerMode } from '../src/modes/clicker/mode';
-import { DEFAULT_SPEED } from '../src/modes/cycles/config';
+import { DEFAULT_CYCLES_SETTINGS } from '../src/modes/cycles/config';
 import { cyclesMode } from '../src/modes/cycles/mode';
 import { configFor } from '../src/room/config';
 import { config } from './support';
@@ -15,18 +15,18 @@ describe('the mode interface', () => {
 
   it('ignores a click sent to the cycles: the state comes back as it was', () => {
     let state = cyclesMode.create(1);
-    state = cyclesMode.addPlayer(state, '1', false, 0, config(), DEFAULT_SPEED);
-    state = cyclesMode.startRound(state, 0, config(), DEFAULT_SPEED);
+    state = cyclesMode.addPlayer(state, '1', false, 0, config(), DEFAULT_CYCLES_SETTINGS);
+    state = cyclesMode.startRound(state, 0, config(), DEFAULT_CYCLES_SETTINGS);
 
-    expect(cyclesMode.applyInput(state, '1', { type: 'click' }, 10, config(), DEFAULT_SPEED)).toBe(
-      state,
-    );
+    expect(
+      cyclesMode.applyInput(state, '1', { type: 'click' }, 10, config(), DEFAULT_CYCLES_SETTINGS),
+    ).toBe(state);
   });
 
   it('ignores a turn sent to the clicker: the state comes back as it was', () => {
     let state = clickerMode.create(1);
-    state = clickerMode.addPlayer(state, '1', false, 0, config(), DEFAULT_SPEED);
-    state = clickerMode.startRound(state, 0, config(), DEFAULT_SPEED);
+    state = clickerMode.addPlayer(state, '1', false, 0, config(), DEFAULT_CYCLES_SETTINGS);
+    state = clickerMode.startRound(state, 0, config(), DEFAULT_CYCLES_SETTINGS);
 
     expect(
       clickerMode.applyInput(
@@ -35,18 +35,18 @@ describe('the mode interface', () => {
         { type: 'turn', side: 'left' },
         10,
         config(),
-        DEFAULT_SPEED,
+        DEFAULT_CYCLES_SETTINGS,
       ),
     ).toBe(state);
-    expect(clickerMode.applyInput(state, '1', { type: 'boost' }, 10, config(), DEFAULT_SPEED)).toBe(
-      state,
-    );
+    expect(
+      clickerMode.applyInput(state, '1', { type: 'boost' }, 10, config(), DEFAULT_CYCLES_SETTINGS),
+    ).toBe(state);
   });
 
   it('counts a click for the clicker, so the test above is not passing on a dead path', () => {
     let state = clickerMode.create(1);
-    state = clickerMode.addPlayer(state, '1', false, 0, config(), DEFAULT_SPEED);
-    state = clickerMode.startRound(state, 0, config(), DEFAULT_SPEED);
+    state = clickerMode.addPlayer(state, '1', false, 0, config(), DEFAULT_CYCLES_SETTINGS);
+    state = clickerMode.startRound(state, 0, config(), DEFAULT_CYCLES_SETTINGS);
 
     const clicked = clickerMode.applyInput(
       state,
@@ -54,7 +54,7 @@ describe('the mode interface', () => {
       { type: 'click' },
       10,
       config(),
-      DEFAULT_SPEED,
+      DEFAULT_CYCLES_SETTINGS,
     );
     expect(clicked.scores['1']?.clicks).toBe(1);
   });
@@ -64,12 +64,12 @@ describe('clearing a living mode', () => {
   function playedRound() {
     let state = cyclesMode.create(5);
     for (let i = 1; i <= 6; i += 1) {
-      state = cyclesMode.addPlayer(state, String(i), true, 0, config(), DEFAULT_SPEED);
+      state = cyclesMode.addPlayer(state, String(i), true, 0, config(), DEFAULT_CYCLES_SETTINGS);
     }
-    state = cyclesMode.startRound(state, 0, config(), DEFAULT_SPEED);
+    state = cyclesMode.startRound(state, 0, config(), DEFAULT_CYCLES_SETTINGS);
     // Long enough for deaths, kills and a trail on the field: clearing nothing proves nothing.
     for (let tick = 0; tick < 600 && cyclesMode.step !== null; tick += 1) {
-      state = cyclesMode.step(state, DEFAULT_SPEED).state;
+      state = cyclesMode.step(state, DEFAULT_CYCLES_SETTINGS).state;
     }
     return state;
   }
@@ -79,7 +79,7 @@ describe('clearing a living mode', () => {
     expect(played.bikes.some((bike) => bike.kills + bike.deaths > 0)).toBe(true);
     expect(played.field.some((cell) => cell !== 0)).toBe(true);
 
-    const cleared = cyclesMode.clear(played, DEFAULT_SPEED);
+    const cleared = cyclesMode.clear(played, DEFAULT_CYCLES_SETTINGS);
 
     expect(cleared.field.every((cell) => cell === 0)).toBe(true);
     expect(cleared.bikes.some((bike) => bike.alive)).toBe(false);
@@ -90,7 +90,7 @@ describe('clearing a living mode', () => {
 
   it('keeps the players and their slots', () => {
     const played = playedRound();
-    const cleared = cyclesMode.clear(played, DEFAULT_SPEED);
+    const cleared = cyclesMode.clear(played, DEFAULT_CYCLES_SETTINGS);
 
     const seats = (state: typeof played) =>
       state.bikes.map((bike) => [bike.slot, bike.publicId, bike.bot]);

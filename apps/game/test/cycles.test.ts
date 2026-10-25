@@ -1,7 +1,7 @@
 import { runInDurableObject } from 'cloudflare:test';
 import { env } from 'cloudflare:workers';
 import type { CyclesState, RoomState } from '@clicker/game';
-import { generateId } from '@clicker/protocol';
+import { generateId, type SnapshotMessage } from '@clicker/protocol';
 import { describe, expect, it, vi } from 'vitest';
 import {
   type Client,
@@ -83,7 +83,7 @@ describe('a light-cycle room over websocket', () => {
       'Bot 3',
     ]);
     expect(snapshot.players.filter((player) => !player.bot)).toHaveLength(1);
-    expect(snapshot.data).toEqual({ results: null, speed: 20 });
+    expect(snapshot.data).toEqual({ results: null, speed: 20, walls: 'always' });
   });
 
   it('answers not_supported to a bot in the clicker', async () => {
@@ -316,6 +316,7 @@ describe('a light-cycle room over websocket', () => {
     expect(over.mode).toBe('cycles');
     expect(over.data).toEqual({
       speed: 20,
+      walls: 'always',
       results: expect.arrayContaining([expect.objectContaining({ id: '1', name: 'Аня' })]),
     });
     const before = host.received.filter(isDelta).length;
@@ -405,7 +406,7 @@ describe('the speed of a light-cycle room', () => {
     const roomId = generateId();
     await lightCycleLobby(roomId, 0, 12);
 
-    await vi.waitFor(async () => expect((await storedState(roomId))?.speed).toBe(12));
+    await vi.waitFor(async () => expect((await storedState(roomId))?.settings.speed).toBe(12));
   });
 
   it('makes the room tick at the new pace, not the one the room was created with', async () => {
@@ -431,6 +432,62 @@ describe('the speed of a light-cycle room', () => {
     clicker.send({ type: 'join', playerId: generateId(), name: 'Аня', hostKey: generateId() });
     await clicker.waitFor(isWelcome);
     clicker.send({ type: 'setSpeed', speed: 8 });
+    expect((await clicker.waitFor(isError)).code).toBe('not_supported');
+  });
+});
+
+describe('the walls of a light-cycle room', () => {
+  /** The snapshot where the room's walls read `walls`; the lobby is rebuilt after a mode change. */
+  const seen = (client: Client, walls: 'always' | 'button') =>
+    client.waitFor(
+      (message): message is SnapshotMessage =>
+        isSnapshot(message) && message.mode === 'cycles' && message.data.walls === walls,
+    );
+
+  it('are laid always until the host says otherwise', async () => {
+    const host = await lightCycleLobby(generateId(), 0);
+
+    await seen(host, 'always');
+  });
+
+  it('follow the host, reach every client and are stored with the room', async () => {
+    const roomId = generateId();
+    const host = await lightCycleLobby(roomId, 0);
+    const guest = await connect(roomId);
+    guest.send({ type: 'join', playerId: generateId(), name: 'Боря' });
+    await guest.waitFor(isWelcome);
+
+    host.send({ type: 'setWalls', walls: 'button' });
+
+    await seen(host, 'button');
+    await seen(guest, 'button');
+    await vi.waitFor(async () =>
+      expect((await storedState(roomId))?.settings).toEqual({ speed: 20, walls: 'button' }),
+    );
+  });
+
+  it('keep the pace of the room: only a new speed changes the tick', async () => {
+    const host = await lightCycleLobby(generateId(), 1, 16);
+    host.send({ type: 'setWalls', walls: 'button' });
+    host.send({ type: 'start' });
+
+    expect((await host.waitFor(isFull)).tickMs).toBe(62.5);
+  });
+
+  it('answer not_host to a guest and not_supported to the clicker', async () => {
+    const roomId = generateId();
+    await lightCycleLobby(roomId, 0);
+    const guest = await connect(roomId);
+    guest.send({ type: 'join', playerId: generateId(), name: 'Боря' });
+    await guest.waitFor(isWelcome);
+
+    guest.send({ type: 'setWalls', walls: 'button' });
+    expect((await guest.waitFor(isError)).code).toBe('not_host');
+
+    const clicker = await connect(generateId());
+    clicker.send({ type: 'join', playerId: generateId(), name: 'Аня', hostKey: generateId() });
+    await clicker.waitFor(isWelcome);
+    clicker.send({ type: 'setWalls', walls: 'button' });
     expect((await clicker.waitFor(isError)).code).toBe('not_supported');
   });
 });

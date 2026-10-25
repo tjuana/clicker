@@ -12,13 +12,17 @@ export {
   type CyclesConfig,
   type CyclesEvent,
   type CyclesResultRow,
+  type CyclesSettings,
   type CyclesState,
   cyclesConfigFor,
+  DEFAULT_CYCLES_SETTINGS,
   DEFAULT_SPEED,
   forEachCell,
   SPEEDS,
   type Speed,
   type TickChanges,
+  WALL_MODES,
+  type WallMode,
 } from './modes/cycles';
 export { type ApplyResult, apply } from './room/apply';
 export type {

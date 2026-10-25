@@ -16,6 +16,7 @@ export {
   resyncSchema,
   setModeSchema,
   setSpeedSchema,
+  setWallsSchema,
   startSchema,
 } from './client';
 export { generateId, ID_PATTERN, isId } from './ids';

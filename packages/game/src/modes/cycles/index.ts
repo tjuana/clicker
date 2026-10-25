@@ -8,10 +8,14 @@ import { emptyTrail } from './trail';
 export {
   CYCLES_CONFIG,
   type CyclesConfig,
+  type CyclesSettings,
   cyclesConfigFor,
+  DEFAULT_CYCLES_SETTINGS,
   DEFAULT_SPEED,
   SPEEDS,
   type Speed,
+  WALL_MODES,
+  type WallMode,
 } from './config';
 export {
   type Bike,

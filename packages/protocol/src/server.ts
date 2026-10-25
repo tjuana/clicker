@@ -1,14 +1,15 @@
 import {
   type ClickerState,
+  type CyclesSettings,
   type CyclesState,
   comparePublicIds,
   forEachCell,
   type RoomState,
   SPEEDS,
-  type Speed,
   type TickChanges,
   tickMsFor,
   toModeData,
+  WALL_MODES,
 } from '@clicker/game';
 import * as v from 'valibot';
 import { PROTOCOL_VERSION } from './client';
@@ -54,6 +55,8 @@ export const clickerDataSchema = v.strictObject({
 export const cyclesDataSchema = v.strictObject({
   /** Cells a second; the lobby shows it and the host changes it. */
   speed: v.picklist(SPEEDS),
+  /** Whether a wall is always laid or only while its player holds a key. */
+  walls: v.picklist(WALL_MODES),
   results: v.nullable(
     v.array(
       v.strictObject({
@@ -179,10 +182,14 @@ export function parseServerMessage(raw: string): ServerMessage | null {
   return result.success ? result.output : null;
 }
 
-function cyclesDataOf(state: CyclesState, speed: Speed): v.InferOutput<typeof cyclesDataSchema> {
+function cyclesDataOf(
+  state: CyclesState,
+  settings: CyclesSettings,
+): v.InferOutput<typeof cyclesDataSchema> {
   const { results } = state;
   return {
-    speed,
+    speed: settings.speed,
+    walls: settings.walls,
     results:
       results === null
         ? null
@@ -221,7 +228,7 @@ export function toSnapshot(state: RoomState, now: number): SnapshotMessage {
   return {
     ...common,
     mode: 'cycles',
-    data: cyclesDataOf(state.modeState as CyclesState, state.speed),
+    data: cyclesDataOf(state.modeState as CyclesState, state.settings),
   };
 }
 
@@ -234,7 +241,7 @@ export function toFull(state: RoomState): FullMessage | null {
     v: PROTOCOL_VERSION,
     type: 'full',
     tick: cycles.tick,
-    tickMs: tickMsFor(state.speed),
+    tickMs: tickMsFor(state.settings.speed),
     side: cycles.side,
     bikes: cycles.bikes.map((bike) => {
       const trail: number[] = [];

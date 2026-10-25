@@ -1,4 +1,4 @@
-import { SPEEDS } from '@clicker/game';
+import { SPEEDS, WALL_MODES } from '@clicker/game';
 import * as v from 'valibot';
 import { ID_PATTERN } from './ids';
 
@@ -8,9 +8,10 @@ export const MAX_NAME_LENGTH = 20;
 /**
  * Bumped when the wire format changes in a way an old client cannot read. 2: players[] in the
  * snapshot gained a required `bot`, which a strict version-1 client rejects; it now gets
- * `bad_version` and reloads instead of silently dropping every snapshot.
+ * `bad_version` and reloads instead of silently dropping every snapshot. 3: the light-cycle
+ * snapshot's `data` gained a required `walls`, which a strict version-2 client rejects.
  */
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 
 const encoder = new TextEncoder();
 
@@ -67,6 +68,12 @@ export const setSpeedSchema = v.strictObject({
   type: v.literal('setSpeed'),
   speed: v.picklist(SPEEDS),
 });
+/** How the light cycles lay their walls; a value outside the list never reaches the rules. */
+export const setWallsSchema = v.strictObject({
+  v: versionSchema,
+  type: v.literal('setWalls'),
+  walls: v.picklist(WALL_MODES),
+});
 export const addBotSchema = v.strictObject({ v: versionSchema, type: v.literal('addBot') });
 export const removeBotSchema = v.strictObject({ v: versionSchema, type: v.literal('removeBot') });
 /** The client noticed a gap in tick numbers and asks for the whole state again. */
@@ -78,6 +85,7 @@ export const clientMessageSchema = v.variant('type', [
   inputSchema,
   setModeSchema,
   setSpeedSchema,
+  setWallsSchema,
   addBotSchema,
   removeBotSchema,
   resyncSchema,

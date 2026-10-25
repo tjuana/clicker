@@ -166,6 +166,13 @@ describe('parseClientMessage', () => {
     expect(parseClientMessage(raw)).toEqual({ ok: false, reason: 'bad_version' });
   });
 
+  // Version 2 had no `walls` in the light-cycle snapshot: a strict version-2 client rejects it.
+  it('turns away the clients of version 2', () => {
+    const raw = encode({ v: 2, type: 'start' });
+
+    expect(parseClientMessage(raw)).toEqual({ ok: false, reason: 'bad_version' });
+  });
+
   // Version 1 had no bot flag in the snapshot: a tab still running that client must be told to
   // reload, because it would otherwise reject every new snapshot and sit on a blank screen.
   it('turns away the clients of version 1', () => {
@@ -181,6 +188,8 @@ describe('parseClientMessage', () => {
     { type: 'setSpeed', speed: 12 },
     { type: 'setSpeed', speed: 16 },
     { type: 'setSpeed', speed: 20 },
+    { type: 'setWalls', walls: 'always' },
+    { type: 'setWalls', walls: 'button' },
     { type: 'addBot' },
     { type: 'removeBot' },
     { type: 'resync' },
@@ -203,6 +212,9 @@ describe('parseClientMessage', () => {
     ['a speed that is not on offer', { type: 'setSpeed', speed: 10 }],
     ['a speed as text', { type: 'setSpeed', speed: '8' }],
     ['a setSpeed without a speed', { type: 'setSpeed' }],
+    ['walls that are not on offer', { type: 'setWalls', walls: 'never' }],
+    ['a setWalls without walls', { type: 'setWalls' }],
+    ['an extra field in setWalls', { type: 'setWalls', walls: 'button', speed: 8 }],
     ['an extra field in setSpeed', { type: 'setSpeed', speed: 8, mode: 'cycles' }],
     ['an extra field in a boost', { type: 'input', input: { type: 'boost', power: 9 } }],
     ['an extra field in addBot', { type: 'addBot', count: 5 }],

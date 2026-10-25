@@ -1,7 +1,7 @@
 import type { GameConfig } from '../room/config';
 import { clickerMode } from './clicker/mode';
 import type { ClickerInput, ClickerState } from './clicker/state';
-import type { Speed } from './cycles/config';
+import type { CyclesSettings } from './cycles/config';
 import { cyclesMode } from './cycles/mode';
 import type { CyclesInput, CyclesState } from './cycles/state';
 import type { TickChanges } from './cycles/step';
@@ -14,8 +14,8 @@ export type ModeInput = ClickerInput | CyclesInput;
  * Everything the room asks of a game. Derived from two implementations, not designed ahead of
  * them: the clicker and the light cycles, which is the moment CLAUDE.md names for it.
  *
- * `speed` is the room's pace setting. Only the light cycles read it; it comes last so a mode that
- * does not care leaves it off.
+ * `settings` is the room's light-cycle settings, speed and walls. Only the light cycles read
+ * them; they come last so a mode that does not care leaves them off.
  *
  * `_I` is the mode's own input. Nothing in the interface uses it — `applyInput` takes any
  * `ModeInput` and refuses the foreign kind — but it states which input a mode owns where the
@@ -29,10 +29,10 @@ export interface Mode<S extends ModeState, _I extends ModeInput> {
     bot: boolean,
     now: number,
     config: GameConfig,
-    speed: Speed,
+    settings: CyclesSettings,
   ): S;
   removePlayers(state: S, publicIds: string[]): S;
-  startRound(state: S, goAt: number, config: GameConfig, speed: Speed): S;
+  startRound(state: S, goAt: number, config: GameConfig, settings: CyclesSettings): S;
   /** Foreign input — a click sent to the cycles — is ignored: the state comes back as it was. */
   applyInput(
     state: S,
@@ -40,20 +40,20 @@ export interface Mode<S extends ModeState, _I extends ModeInput> {
     input: ModeInput,
     now: number,
     config: GameConfig,
-    speed: Speed,
+    settings: CyclesSettings,
   ): S;
   /** Only living modes have it; the room calls it once per tick while a round runs. */
-  step: ((state: S, speed: Speed) => { state: S; changes: TickChanges }) | null;
+  step: ((state: S, settings: CyclesSettings) => { state: S; changes: TickChanges }) | null;
   /**
    * A player the room already knows joins again. The clicker must not touch their score; the
    * cycles bring a bike that left back. Called in any phase, so it must be harmless in a lobby.
    */
-  rejoin(state: S, publicId: string, speed: Speed): S;
+  rejoin(state: S, publicId: string, settings: CyclesSettings): S;
   /** A player gone mid-round. The clicker keeps the score; the cycles take the bike off the field. */
   abandon(state: S, publicId: string): S;
   finish(state: S, names: Record<string, string>): S;
   /** An interrupted round: nothing of it may be left on screen in the lobby. */
-  clear(state: S, speed: Speed): S;
+  clear(state: S, settings: CyclesSettings): S;
   /** Whether bots can take part. */
   bots: boolean;
 }

@@ -12,7 +12,7 @@ describe('createRoomState', () => {
       nextSeq: 1,
       round: null,
       notice: null,
-      speed: 8,
+      settings: { speed: 8, walls: 'always' },
       modeState: { scores: {}, results: null },
     });
   });

@@ -39,6 +39,8 @@ function handle(state: RoomState, command: Command, now: number, config: GameCon
       return setMode(state, command, now, config);
     case 'setSpeed':
       return setSpeed(state, command);
+    case 'setWalls':
+      return setWalls(state, command);
     case 'addBot':
       return addBot(state, command.playerId, now, config);
     case 'removeBot':
@@ -101,7 +103,7 @@ function setMode(
   let modeState = next.create(now | 0);
   const seated = Object.values(players).sort((a, b) => comparePublicIds(a.publicId, b.publicId));
   for (const player of seated) {
-    modeState = next.addPlayer(modeState, player.publicId, player.bot, now, config, state.speed);
+    modeState = next.addPlayer(modeState, player.publicId, player.bot, now, config, state.settings);
   }
 
   // The results of the old mode mean nothing in the new one, so the room goes back to the lobby.
@@ -123,8 +125,16 @@ function setSpeed(state: RoomState, command: Extract<Command, { type: 'setSpeed'
   const refused = lobbyHostOnly(state, command.playerId);
   if (refused !== null) return refused;
   if (state.mode !== 'cycles') return reject(state, command.playerId, 'not_supported');
-  if (command.speed === state.speed) return { state, events: [] };
-  return { state: { ...state, speed: command.speed }, events: [] };
+  if (command.speed === state.settings.speed) return { state, events: [] };
+  return { state: { ...state, settings: { ...state.settings, speed: command.speed } }, events: [] };
+}
+
+function setWalls(state: RoomState, command: Extract<Command, { type: 'setWalls' }>): ApplyResult {
+  const refused = lobbyHostOnly(state, command.playerId);
+  if (refused !== null) return refused;
+  if (state.mode !== 'cycles') return reject(state, command.playerId, 'not_supported');
+  if (command.walls === state.settings.walls) return { state, events: [] };
+  return { state: { ...state, settings: { ...state.settings, walls: command.walls } }, events: [] };
 }
 
 function addBot(state: RoomState, playerId: string, now: number, config: GameConfig): ApplyResult {
@@ -146,7 +156,7 @@ function addBot(state: RoomState, playerId: string, now: number, config: GameCon
         bot: true,
       }),
       nextSeq: state.nextSeq + 1,
-      modeState: mode.addPlayer(state.modeState, publicId, true, now, config, state.speed),
+      modeState: mode.addPlayer(state.modeState, publicId, true, now, config, state.settings),
     },
     events: [],
   };
@@ -199,7 +209,7 @@ function join(
       disconnectedAt: null,
     };
     // Whatever the mode keeps for them — a bike that left the field — is theirs to take back.
-    modeState = modeFor(state.mode).rejoin(state.modeState, existing.publicId, state.speed);
+    modeState = modeFor(state.mode).rejoin(state.modeState, existing.publicId, state.settings);
   } else {
     if (isFull(state, config)) {
       return reject(state, command.playerId, 'room_full');
@@ -219,7 +229,7 @@ function join(
       false,
       now,
       config,
-      state.speed,
+      state.settings,
     );
   }
 
@@ -287,7 +297,7 @@ function step(state: RoomState): ApplyResult {
   const stepMode = modeFor(state.mode).step;
   if (state.phase !== 'running' || stepMode === null) return { state, events: [] };
 
-  const stepped = stepMode(state.modeState, state.speed);
+  const stepped = stepMode(state.modeState, state.settings);
   return {
     state: { ...state, modeState: stepped.state },
     // The tick number comes from the state that was produced, so it cannot drift from it.
@@ -321,7 +331,7 @@ function start(state: RoomState, playerId: string, now: number, config: GameConf
       phase: 'countdown',
       round: { goAt, endsAt },
       notice: null,
-      modeState: mode.startRound(modeState, goAt, config, state.speed),
+      modeState: mode.startRound(modeState, goAt, config, state.settings),
     },
     events: [{ type: 'phaseChanged', phase: 'countdown' }],
   };
@@ -344,7 +354,7 @@ function input(
     command.input,
     now,
     config,
-    state.speed,
+    state.settings,
   );
   // The mode returns the same reference when nothing changed — a refused click, for instance.
   // Keep that identity: callers rely on it to skip broadcasting a snapshot that is not new.

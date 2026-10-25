@@ -44,7 +44,7 @@ export class Room extends Server<Env> {
   #state: RoomState = createRoomState();
   /** What the environment changes, if anything. Wins over the mode: a test round must be short in every mode. */
   #overrides: Partial<GameConfig> = {};
-  #config: GameConfig = configFor(this.#state.mode, undefined, this.#state.speed);
+  #config: GameConfig = configFor(this.#state.mode, undefined, this.#state.settings.speed);
   #timer: ReturnType<typeof setInterval> | null = null;
   #ticker = new Ticker<ReturnType<typeof setInterval>>({
     now: () => Date.now(),
@@ -161,6 +161,12 @@ export class Room extends Server<Env> {
           connection,
         );
         return;
+      case 'setWalls':
+        await this.#run(
+          { type: 'setWalls', playerId: session.playerId, walls: incoming.walls },
+          connection,
+        );
+        return;
       case 'addBot':
       case 'removeBot':
       case 'start':
@@ -206,9 +212,11 @@ export class Room extends Server<Env> {
    */
   #apply(command: Command, source?: Connection<Session>, now = Date.now()): boolean {
     const applied = apply(this.#state, command, now, this.#config);
-    // The pace belongs to the config as much as the mode does: the tick length follows it.
+    // The pace belongs to the config as much as the mode does: the tick length follows it. The
+    // walls setting does not: the rules read it from the settings they are handed.
     const configChanged =
-      applied.state.mode !== this.#state.mode || applied.state.speed !== this.#state.speed;
+      applied.state.mode !== this.#state.mode ||
+      applied.state.settings.speed !== this.#state.settings.speed;
     const newSeat = seats(applied.state) > seats(this.#state);
     this.#state = applied.state;
     if (configChanged) this.#config = this.#configOf(applied.state);
@@ -277,7 +285,7 @@ export class Room extends Server<Env> {
 
   /** The base config belongs to the mode in play; what the environment sets wins over it. */
   #configOf(state: RoomState): GameConfig {
-    return { ...configFor(state.mode, undefined, state.speed), ...this.#overrides };
+    return { ...configFor(state.mode, undefined, state.settings.speed), ...this.#overrides };
   }
 
   /** Only for a mode without its own tick: the clicker has to show live scores. */
