@@ -1,79 +1,79 @@
-# Clicker Foundation Implementation Plan (план 1 из 3: ядро и протокол)
+# Clicker Foundation Implementation Plan (plan 1 of 3: core and protocol)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Собрать монорепозиторий и два пакета без внешних зависимостей — правила игры (`packages/game`) и протокол сообщений (`packages/protocol`), полностью покрытые тестами, с линтером, проверкой типов и CI.
+**Goal:** Build the monorepo and two packages with no external dependencies — the game rules (`packages/game`) and the message protocol (`packages/protocol`) — fully covered by tests, with a linter, a type check and CI.
 
-**Architecture:** Правила игры — чистые функции: состояние комнаты меняет только `apply(state, command, now, config)`, время приходит параметром, входное состояние не мутируется. Протокол описан схемами valibot, типы выводятся из схем, и он же превращает состояние в снимок для клиентов. Ни один пакет ничего не знает про Cloudflare, WebSocket и DOM — сервер (план 2) и клиент (план 3) будут их адаптерами.
+**Architecture:** The game rules are pure functions: only `apply(state, command, now, config)` changes the room state, time arrives as a parameter, and the input state is never mutated. The protocol is described by valibot schemas, the types are inferred from the schemas, and the protocol also turns the state into a snapshot for clients. Neither package knows anything about Cloudflare, WebSocket or the DOM — the server (plan 2) and the client (plan 3) will be their adapters.
 
-**Tech Stack:** pnpm 12.4.1 (через corepack), TypeScript 7.0.2, Vitest 4.1.11, valibot 1.5.0, Biome 2.5.13, Node 22, GitHub Actions.
+**Tech Stack:** pnpm 12.4.1 (via corepack), TypeScript 7.0.2, Vitest 4.1.11, valibot 1.5.0, Biome 2.5.13, Node 22, GitHub Actions.
 
-Спецификация: [2026-09-11-clicker-foundation-design.md](../specs/2026-09-11-clicker-foundation-design.md), разделы 3, 5, 6, 10, 11.
+Specification: [2026-09-11-clicker-foundation-design.md](../specs/2026-09-11-clicker-foundation-design.md), sections 3, 5, 6, 10, 11.
 
 ---
 
-## Проверено перед написанием плана
+## Checked before the plan was written
 
-Весь код ниже был написан и прогнан во временной папке на этой машине: 44 теста `packages/game`, 23 теста `packages/protocol`, `tsc --noEmit` обоих пакетов и `biome check` — всё зелёное. Версии взяты из npm на 2026-09-12.
+All the code below was written and run in a temporary folder on this machine: 44 `packages/game` tests, 23 `packages/protocol` tests, `tsc --noEmit` for both packages and `biome check` — all green. Versions were taken from npm on 2026-09-12.
 
-Два факта, которые определили выбор версий:
-- `@cloudflare/vitest-plugin` (понадобится в плане 2) требует Vitest `^4.1.0`, поэтому берём 4.1.11, а не вышедший 5.0.
-- Vitest 4.1 и TypeScript 7 работают с этим `tsconfig` без единой правки.
+Two facts that decided the choice of versions:
+- `@cloudflare/vitest-plugin` (needed in plan 2) requires Vitest `^4.1.0`, so we take 4.1.11, not the newly released 5.0.
+- Vitest 4.1 and TypeScript 7 work with this `tsconfig` without a single change.
 
-## Как выполнять
+## How to execute
 
-- Работать в отдельном worktree (скилл superpowers:using-git-worktrees), ветка `feat/core-and-protocol`.
-- Один таск — один коммит. Сообщения по Conventional Commits, на английском, **без подписей Claude**.
-- Порядок тасков менять нельзя: каждый следующий опирается на файлы предыдущего.
+- Work in a separate worktree (skill superpowers:using-git-worktrees), branch `feat/core-and-protocol`.
+- One task, one commit. Commit messages follow Conventional Commits, in English, **with no Claude signatures**.
+- The order of the tasks must not change: each one builds on the files of the previous one.
 
-## Файловая структура
+## File structure
 
-Создаётся в этом плане:
+Created in this plan:
 
 ```
-package.json                      скрипты всего репозитория, devDependency Biome
-pnpm-workspace.yaml               список пакетов
-tsconfig.base.json                общие настройки TypeScript
-biome.json                        линтер и форматтер
+package.json                      scripts for the whole repository, Biome as a devDependency
+pnpm-workspace.yaml               list of packages
+tsconfig.base.json                shared TypeScript settings
+biome.json                        linter and formatter
 .gitignore  .nvmrc
-.github/workflows/ci.yml          проверки на push и pull request
+.github/workflows/ci.yml          checks on push and pull request
 
 packages/game/
   package.json  tsconfig.json
-  src/config.ts       настройки правил: длительности, лимиты
-  src/state.ts        типы состояния и createRoomState
-  src/commands.ts     команды, события, коды ошибок
-  src/results.ts      подсчёт итогов раунда
-  src/advance.ts      продвижение состояния во времени
-  src/apply.ts        единственная точка изменения состояния
-  src/deadline.ts     ближайший срок для будильника
-  src/recovery.ts     восстановление после перезапуска сервера
-  src/index.ts        публичный вход пакета
-  test/support.ts     помощники тестов
-  test/*.test.ts      по файлу на каждую часть
+  src/config.ts       rules settings: durations, limits
+  src/state.ts        state types and createRoomState
+  src/commands.ts     commands, events, error codes
+  src/results.ts      round results calculation
+  src/advance.ts      advancing the state through time
+  src/apply.ts        the single point where state changes
+  src/deadline.ts     the nearest deadline for the alarm
+  src/recovery.ts     recovery after a server restart
+  src/index.ts        the package's public entry point
+  test/support.ts     test helpers
+  test/*.test.ts      one file for each part
 
 packages/protocol/
   package.json  tsconfig.json
-  src/ids.ts          формат и генерация идентификаторов
-  src/client.ts       схемы сообщений клиента и их разбор
-  src/server.ts       схемы сообщений сервера, разбор и построение снимка
-  src/index.ts        публичный вход пакета
+  src/ids.ts          identifier format and generation
+  src/client.ts       client message schemas and their parsing
+  src/server.ts       server message schemas, parsing and snapshot building
+  src/index.ts        the package's public entry point
   test/*.test.ts
 ```
 
 ---
 
-### Task 1: Каркас репозитория
+### Task 1: Repository skeleton
 
 **Files:**
 - Create: `package.json`, `pnpm-workspace.yaml`, `tsconfig.base.json`, `biome.json`, `.gitignore`, `.nvmrc`
 
-- [ ] **Step 1: Включить pnpm**
+- [ ] **Step 1: Enable pnpm**
 
 Run: `corepack enable pnpm`
-Expected: команда молча завершается. Node стоит через nvm, права root не нужны.
+Expected: the command finishes silently. Node is installed through nvm, no root rights needed.
 
-- [ ] **Step 2: Создать `package.json`**
+- [ ] **Step 2: Create `package.json`**
 
 ```json
 {
@@ -96,7 +96,7 @@ Expected: команда молча завершается. Node стоит че
 }
 ```
 
-- [ ] **Step 3: Создать `pnpm-workspace.yaml`**
+- [ ] **Step 3: Create `pnpm-workspace.yaml`**
 
 ```yaml
 packages:
@@ -106,7 +106,7 @@ onlyBuiltDependencies:
   - esbuild
 ```
 
-- [ ] **Step 4: Создать `tsconfig.base.json`**
+- [ ] **Step 4: Create `tsconfig.base.json`**
 
 ```json
 {
@@ -126,7 +126,7 @@ onlyBuiltDependencies:
 }
 ```
 
-- [ ] **Step 5: Создать `biome.json`**
+- [ ] **Step 5: Create `biome.json`**
 
 ```json
 {
@@ -157,7 +157,7 @@ onlyBuiltDependencies:
 }
 ```
 
-- [ ] **Step 6: Создать `.gitignore`**
+- [ ] **Step 6: Create `.gitignore`**
 
 ```gitignore
 node_modules/
@@ -168,18 +168,18 @@ dist/
 .DS_Store
 ```
 
-- [ ] **Step 7: Создать `.nvmrc`**
+- [ ] **Step 7: Create `.nvmrc`**
 
 ```
 22
 ```
 
-- [ ] **Step 8: Установить зависимости**
+- [ ] **Step 8: Install the dependencies**
 
 Run: `pnpm install`
-Expected: `devDependencies: + @biomejs/biome 2.5.13` и `Done in ...`. Появляется `pnpm-lock.yaml`.
+Expected: `devDependencies: + @biomejs/biome 2.5.13` and `Done in ...`. `pnpm-lock.yaml` appears.
 
-- [ ] **Step 9: Проверить формат и закоммитить**
+- [ ] **Step 9: Check the format and commit**
 
 ```bash
 pnpm format
@@ -187,17 +187,17 @@ pnpm check
 git add package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.base.json biome.json .gitignore .nvmrc
 git commit -m "chore: set up pnpm workspace with typescript and biome"
 ```
-Expected у `pnpm check`: `Checked N files ... No fixes applied.` и нулевой код возврата.
+Expected for `pnpm check`: `Checked N files ... No fixes applied.` and a zero exit code.
 
 ---
 
-### Task 2: Пакет packages/game и состояние комнаты
+### Task 2: The packages/game package and the room state
 
 **Files:**
 - Create: `packages/game/package.json`, `packages/game/tsconfig.json`, `packages/game/src/config.ts`, `packages/game/src/state.ts`
 - Test: `packages/game/test/state.test.ts`
 
-- [ ] **Step 1: Создать `packages/game/package.json`**
+- [ ] **Step 1: Create `packages/game/package.json`**
 
 ```json
 {
@@ -219,7 +219,7 @@ Expected у `pnpm check`: `Checked N files ... No fixes applied.` и нулев�
 }
 ```
 
-- [ ] **Step 2: Создать `packages/game/tsconfig.json`**
+- [ ] **Step 2: Create `packages/game/tsconfig.json`**
 
 ```json
 {
@@ -228,12 +228,12 @@ Expected у `pnpm check`: `Checked N files ... No fixes applied.` и нулев�
 }
 ```
 
-- [ ] **Step 3: Установить зависимости пакета**
+- [ ] **Step 3: Install the package's dependencies**
 
 Run: `pnpm install`
-Expected: `Scope: all 2 workspace projects`, ставятся typescript и vitest.
+Expected: `Scope: all 2 workspace projects`, typescript and vitest get installed.
 
-- [ ] **Step 4: Написать падающий тест `packages/game/test/state.test.ts`**
+- [ ] **Step 4: Write the failing test `packages/game/test/state.test.ts`**
 
 ```ts
 import { describe, expect, it } from 'vitest';
@@ -255,28 +255,28 @@ describe('createRoomState', () => {
 });
 ```
 
-- [ ] **Step 5: Убедиться, что тест падает**
+- [ ] **Step 5: Confirm the test fails**
 
 Run: `pnpm --filter @clicker/game test`
 Expected: FAIL, `Cannot find module "../src/state"`.
 
-- [ ] **Step 6: Создать `packages/game/src/config.ts`**
+- [ ] **Step 6: Create `packages/game/src/config.ts`**
 
 ```ts
 export interface GameConfig {
-  /** Длительность отсчёта перед раундом. */
+  /** How long the countdown before a round lasts. */
   countdownMs: number;
-  /** Длительность раунда. */
+  /** How long a round lasts. */
   roundMs: number;
-  /** Сколько ещё принимаем клики после конца раунда: запас на сетевую задержку. */
+  /** How long clicks are still accepted after the round ends: a margin for network delay. */
   lateGraceMs: number;
-  /** Скорость пополнения ведра токенов. */
+  /** The refill rate of the token bucket. */
   clicksPerSecond: number;
-  /** Ёмкость ведра токенов. */
+  /** The capacity of the token bucket. */
   burst: number;
-  /** Сколько отключившийся игрок остаётся в списке. */
+  /** How long a disconnected player stays in the list. */
   reconnectGraceMs: number;
-  /** Максимум игроков в комнате. */
+  /** The maximum number of players in a room. */
   maxPlayers: number;
 }
 
@@ -291,7 +291,7 @@ export const DEFAULT_CONFIG: GameConfig = {
 };
 ```
 
-- [ ] **Step 7: Создать `packages/game/src/state.ts`**
+- [ ] **Step 7: Create `packages/game/src/state.ts`**
 
 ```ts
 export type Phase = 'lobby' | 'countdown' | 'running' | 'results';
@@ -304,10 +304,10 @@ export interface Bucket {
 }
 
 export interface Player {
-  /** Публичный идентификатор: только он уходит клиентам. */
+  /** Public identifier: only this one goes out to clients. */
   publicId: string;
   name: string;
-  /** Сколько соединений открыто с этим playerId. */
+  /** How many connections are open for this playerId. */
   connections: number;
   disconnectedAt: number | null;
   clicks: number;
@@ -330,9 +330,9 @@ export interface Round {
 export interface RoomState {
   phase: Phase;
   hostKey: string | null;
-  /** playerId хостов. */
+  /** The hosts' playerIds. */
   hosts: string[];
-  /** Ключ — секретный playerId. */
+  /** The key is the secret playerId. */
   players: Record<string, Player>;
   nextSeq: number;
   round: Round | null;
@@ -354,12 +354,12 @@ export function createRoomState(): RoomState {
 }
 ```
 
-- [ ] **Step 8: Убедиться, что тест проходит**
+- [ ] **Step 8: Confirm the test passes**
 
 Run: `pnpm --filter @clicker/game test`
 Expected: `Test Files 1 passed (1)`, `Tests 1 passed (1)`.
 
-- [ ] **Step 9: Закоммитить**
+- [ ] **Step 9: Commit**
 
 ```bash
 pnpm format
@@ -369,13 +369,13 @@ git commit -m "feat(game): add room state and config"
 
 ---
 
-### Task 3: Итоги раунда
+### Task 3: Round results
 
 **Files:**
 - Create: `packages/game/src/results.ts`, `packages/game/test/support.ts`
 - Test: `packages/game/test/results.test.ts`
 
-- [ ] **Step 1: Создать помощник `packages/game/test/support.ts`**
+- [ ] **Step 1: Create the helper `packages/game/test/support.ts`**
 
 ```ts
 import { DEFAULT_CONFIG, type GameConfig } from '../src/config';
@@ -385,7 +385,7 @@ export function config(overrides: Partial<GameConfig> = {}): GameConfig {
   return { ...DEFAULT_CONFIG, ...overrides };
 }
 
-/** Замораживает состояние: если код попробует его изменить, тест упадёт. */
+/** Freezes the state: if the code tries to change it, the test fails. */
 export function deepFreeze<T>(value: T): T {
   if (value !== null && typeof value === 'object') {
     for (const nested of Object.values(value as Record<string, unknown>)) deepFreeze(nested);
@@ -411,7 +411,7 @@ export function room(overrides: Partial<RoomState> = {}): RoomState {
 }
 ```
 
-- [ ] **Step 2: Написать падающий тест `packages/game/test/results.test.ts`**
+- [ ] **Step 2: Write the failing test `packages/game/test/results.test.ts`**
 
 ```ts
 import { describe, expect, it } from 'vitest';
@@ -454,19 +454,19 @@ describe('computeResults', () => {
 });
 ```
 
-- [ ] **Step 3: Убедиться, что тест падает**
+- [ ] **Step 3: Confirm the test fails**
 
 Run: `pnpm --filter @clicker/game test`
 Expected: FAIL, `Cannot find module "../src/results"`.
 
-- [ ] **Step 4: Создать `packages/game/src/results.ts`**
+- [ ] **Step 4: Create `packages/game/src/results.ts`**
 
 ```ts
 import type { Player, ResultRow } from './state';
 
 /**
- * Больше кликов — выше. При равенстве выигрывает тот, кто набрал счёт раньше.
- * Полная ничья разбивается по publicId, чтобы порядок был предсказуемым.
+ * More clicks rank higher. On a tie, whoever reached the score first wins.
+ * A complete tie is broken by publicId, so the order is predictable.
  */
 function compare(a: Player, b: Player): number {
   if (a.clicks !== b.clicks) return b.clicks - a.clicks;
@@ -488,12 +488,12 @@ export function computeResults(players: Record<string, Player>): ResultRow[] {
 }
 ```
 
-- [ ] **Step 5: Убедиться, что тесты проходят**
+- [ ] **Step 5: Confirm the tests pass**
 
 Run: `pnpm --filter @clicker/game test`
 Expected: `Test Files 2 passed (2)`, `Tests 4 passed (4)`.
 
-- [ ] **Step 6: Закоммитить**
+- [ ] **Step 6: Commit**
 
 ```bash
 pnpm format
@@ -503,15 +503,15 @@ git commit -m "feat(game): compute round results"
 
 ---
 
-### Task 4: Продвижение состояния во времени
+### Task 4: Advancing the state through time
 
 **Files:**
 - Create: `packages/game/src/advance.ts`
 - Test: `packages/game/test/advance.test.ts`
 
-Тест `apply` в конце файла добавится в Task 5 — сейчас его не пишем.
+The `apply` test at the end of the file is added in Task 5 — we do not write it now.
 
-- [ ] **Step 1: Написать падающий тест `packages/game/test/advance.test.ts`**
+- [ ] **Step 1: Write the failing test `packages/game/test/advance.test.ts`**
 
 ```ts
 import { describe, expect, it } from 'vitest';
@@ -526,7 +526,7 @@ const CONFIG = config({
   reconnectGraceMs: 30000,
 });
 
-/** Отсчёт идёт: раунд откроется в 4000, закроется в 14000. */
+/** The countdown is running: the round opens at 4000 and closes at 14000. */
 function countdown(): RoomState {
   return room({
     phase: 'countdown',
@@ -608,12 +608,12 @@ describe('advance', () => {
 });
 ```
 
-- [ ] **Step 2: Убедиться, что тест падает**
+- [ ] **Step 2: Confirm the test fails**
 
 Run: `pnpm --filter @clicker/game test`
 Expected: FAIL, `Cannot find module "../src/advance"`.
 
-- [ ] **Step 3: Создать `packages/game/src/advance.ts`**
+- [ ] **Step 3: Create `packages/game/src/advance.ts`**
 
 ```ts
 import type { GameConfig } from './config';
@@ -622,13 +622,13 @@ import type { Phase, RoomState } from './state';
 
 export interface AdvanceResult {
   state: RoomState;
-  /** Фазы, в которые перешли, по порядку. */
+  /** The phases that were entered, in order. */
   phases: Phase[];
 }
 
 /**
- * Продвигает состояние во времени. Вызывается перед обработкой любой команды,
- * поэтому правила не зависят от того, вовремя ли сработал будильник.
+ * Advances the state through time. Called before handling any command,
+ * so the rules do not depend on whether the alarm fired on time.
  */
 export function advance(state: RoomState, now: number, config: GameConfig): AdvanceResult {
   let next = state;
@@ -655,7 +655,7 @@ export function advance(state: RoomState, now: number, config: GameConfig): Adva
   return { state: removeExpired(next, now, config), phases };
 }
 
-/** Отключившиеся удаляются только вне раунда: во время раунда их счёт нужен. */
+/** Disconnected players are removed only outside a round: during a round their score is needed. */
 function removeExpired(state: RoomState, now: number, config: GameConfig): RoomState {
   if (state.phase !== 'lobby' && state.phase !== 'results') return state;
 
@@ -681,12 +681,12 @@ function removeExpired(state: RoomState, now: number, config: GameConfig): RoomS
 }
 ```
 
-- [ ] **Step 4: Убедиться, что тесты проходят**
+- [ ] **Step 4: Confirm the tests pass**
 
 Run: `pnpm --filter @clicker/game test`
 Expected: `Test Files 3 passed (3)`, `Tests 11 passed (11)`.
 
-- [ ] **Step 5: Закоммитить**
+- [ ] **Step 5: Commit**
 
 ```bash
 pnpm format
@@ -696,14 +696,14 @@ git commit -m "feat(game): advance room state over time"
 
 ---
 
-### Task 5: Команда join и точка входа apply
+### Task 5: The `join` command and the `apply` entry point
 
 **Files:**
 - Create: `packages/game/src/commands.ts`, `packages/game/src/apply.ts`
-- Modify: `packages/game/test/advance.test.ts` (добавить блок про `apply` в конец файла)
+- Modify: `packages/game/test/advance.test.ts` (add a block about `apply` at the end of the file)
 - Test: `packages/game/test/join.test.ts`
 
-- [ ] **Step 1: Написать падающий тест `packages/game/test/join.test.ts`**
+- [ ] **Step 1: Write the failing test `packages/game/test/join.test.ts`**
 
 ```ts
 import { describe, expect, it } from 'vitest';
@@ -838,12 +838,12 @@ describe('join', () => {
 });
 ```
 
-- [ ] **Step 2: Убедиться, что тест падает**
+- [ ] **Step 2: Confirm the test fails**
 
 Run: `pnpm --filter @clicker/game test`
 Expected: FAIL, `Cannot find module "../src/apply"`.
 
-- [ ] **Step 3: Создать `packages/game/src/commands.ts`**
+- [ ] **Step 3: Create `packages/game/src/commands.ts`**
 
 ```ts
 import type { Phase } from './state';
@@ -870,9 +870,9 @@ export type GameEvent =
   | { type: 'phaseChanged'; phase: Phase };
 ```
 
-- [ ] **Step 4: Создать `packages/game/src/apply.ts` с обработкой `tick`, `join` и `leave`**
+- [ ] **Step 4: Create `packages/game/src/apply.ts` handling `tick`, `join` and `leave`**
 
-`leave` нужен уже сейчас: без него не проверить возвращение игрока. Остальные команды добавятся в следующих тасках.
+`leave` is needed right now: without it the return of a player cannot be checked. The other commands are added in the following tasks.
 
 ```ts
 import { advance } from './advance';
@@ -886,8 +886,8 @@ export interface ApplyResult {
 }
 
 /**
- * Единственная точка изменения состояния комнаты.
- * Входное состояние не мутируется, время приходит параметром.
+ * The single point where the room state changes.
+ * The input state is not mutated, time arrives as a parameter.
  */
 export function apply(
   state: RoomState,
@@ -996,9 +996,9 @@ function leave(state: RoomState, playerId: string, now: number): ApplyResult {
 }
 ```
 
-- [ ] **Step 5: Дописать в конец `packages/game/test/advance.test.ts` проверку событий `apply`**
+- [ ] **Step 5: Append a check of the `apply` events to the end of `packages/game/test/advance.test.ts`**
 
-Добавить импорт `apply` вторым импортом (`import { apply } from '../src/apply';` после импорта `advance`) и блок в конец файла:
+Add the `apply` import as the second import (`import { apply } from '../src/apply';` after the `advance` import) and a block at the end of the file:
 
 ```ts
 describe('apply', () => {
@@ -1013,14 +1013,14 @@ describe('apply', () => {
 });
 ```
 
-Этот тест падает: `click` пока не обрабатывается. Так и должно быть — он станет зелёным в Task 8, когда появится обработка кликов.
+This test fails: `click` is not handled yet. That is expected — it turns green in Task 8, when click handling appears.
 
-- [ ] **Step 6: Запустить тесты**
+- [ ] **Step 6: Run the tests**
 
 Run: `pnpm --filter @clicker/game test`
-Expected: PASS все тесты `join`, FAIL ровно один — `apply > reports the phases it walked through before handling the command`, потому что вместо `rejected` приходит пустой список событий.
+Expected: PASS for all the `join` tests, FAIL for exactly one — `apply > reports the phases it walked through before handling the command`, because an empty list of events arrives instead of `rejected`.
 
-- [ ] **Step 7: Закоммитить**
+- [ ] **Step 7: Commit**
 
 ```bash
 pnpm format
@@ -1030,14 +1030,14 @@ git commit -m "feat(game): handle join and leave"
 
 ---
 
-### Task 6: Отключение игрока
+### Task 6: Player disconnect
 
 **Files:**
 - Test: `packages/game/test/leave.test.ts`
 
-Код `leave` уже написан в Task 5, здесь закрываем его тестами.
+The `leave` code was already written in Task 5; here we cover it with tests.
 
-- [ ] **Step 1: Написать тест `packages/game/test/leave.test.ts`**
+- [ ] **Step 1: Write the test `packages/game/test/leave.test.ts`**
 
 ```ts
 import { describe, expect, it } from 'vitest';
@@ -1084,12 +1084,12 @@ describe('leave', () => {
 });
 ```
 
-- [ ] **Step 2: Запустить тесты**
+- [ ] **Step 2: Run the tests**
 
 Run: `pnpm --filter @clicker/game test`
-Expected: все три теста `leave` проходят; по-прежнему падает только тест `apply` из Task 5.
+Expected: all three `leave` tests pass; only the `apply` test from Task 5 still fails.
 
-- [ ] **Step 3: Закоммитить**
+- [ ] **Step 3: Commit**
 
 ```bash
 pnpm format
@@ -1099,13 +1099,13 @@ git commit -m "test(game): cover leaving and reconnecting"
 
 ---
 
-### Task 7: Запуск раунда
+### Task 7: Starting a round
 
 **Files:**
 - Modify: `packages/game/src/apply.ts`
 - Test: `packages/game/test/start.test.ts`
 
-- [ ] **Step 1: Написать падающий тест `packages/game/test/start.test.ts`**
+- [ ] **Step 1: Write the failing test `packages/game/test/start.test.ts`**
 
 ```ts
 import { describe, expect, it } from 'vitest';
@@ -1115,7 +1115,7 @@ import { config } from './support';
 
 const CONFIG = config({ countdownMs: 3000, roundMs: 10000 });
 
-/** Хост «secret-1» и обычный игрок «secret-2» в лобби. */
+/** Host "secret-1" and ordinary player "secret-2" in the lobby. */
 function lobby(): RoomState {
   const host = apply(
     createRoomState(),
@@ -1197,14 +1197,14 @@ describe('start', () => {
 });
 ```
 
-- [ ] **Step 2: Убедиться, что тесты падают**
+- [ ] **Step 2: Confirm the tests fail**
 
 Run: `pnpm --filter @clicker/game test`
-Expected: FAIL шести тестов `start` — состояние остаётся в лобби, событий нет.
+Expected: FAIL for six `start` tests — the state stays in the lobby, there are no events.
 
-- [ ] **Step 3: Добавить ветку `start` в `handle` в `packages/game/src/apply.ts`**
+- [ ] **Step 3: Add a `start` branch to `handle` in `packages/game/src/apply.ts`**
 
-Заменить в `handle` строку `default:` на ветку `start`, оставив `default` для ещё не реализованного `click`:
+In `handle`, replace the `default:` line with the `start` branch, leaving `default` for the not yet implemented `click`:
 
 ```ts
     case 'start':
@@ -1213,7 +1213,7 @@ Expected: FAIL шести тестов `start` — состояние остаё
       return { state, events: [] };
 ```
 
-- [ ] **Step 4: Добавить функцию `start` в конец `packages/game/src/apply.ts`**
+- [ ] **Step 4: Add the `start` function to the end of `packages/game/src/apply.ts`**
 
 ```ts
 function start(state: RoomState, playerId: string, now: number, config: GameConfig): ApplyResult {
@@ -1248,12 +1248,12 @@ function start(state: RoomState, playerId: string, now: number, config: GameConf
 }
 ```
 
-- [ ] **Step 5: Убедиться, что тесты проходят**
+- [ ] **Step 5: Confirm the tests pass**
 
 Run: `pnpm --filter @clicker/game test`
-Expected: все тесты `start` зелёные; падает только тест `apply` из Task 5.
+Expected: all `start` tests are green; only the `apply` test from Task 5 fails.
 
-- [ ] **Step 6: Закоммитить**
+- [ ] **Step 6: Commit**
 
 ```bash
 pnpm format
@@ -1263,13 +1263,13 @@ git commit -m "feat(game): handle round start"
 
 ---
 
-### Task 8: Подсчёт кликов с ведром токенов
+### Task 8: Counting clicks with a token bucket
 
 **Files:**
 - Modify: `packages/game/src/apply.ts`
 - Test: `packages/game/test/click.test.ts`
 
-- [ ] **Step 1: Написать падающий тест `packages/game/test/click.test.ts`**
+- [ ] **Step 1: Write the failing test `packages/game/test/click.test.ts`**
 
 ```ts
 import { describe, expect, it } from 'vitest';
@@ -1281,7 +1281,7 @@ const CONFIG = config({ countdownMs: 3000, roundMs: 10000, burst: 15, clicksPerS
 const GO_AT = 4000;
 const ENDS_AT = 14000;
 
-/** Хост в комнате, раунд запущен в 1000: отсчёт до 4000, конец в 14000. */
+/** A host in the room, the round started at 1000: countdown until 4000, end at 14000. */
 function started(): RoomState {
   const host = apply(
     createRoomState(),
@@ -1357,14 +1357,14 @@ describe('click', () => {
 });
 ```
 
-- [ ] **Step 2: Убедиться, что тесты падают**
+- [ ] **Step 2: Confirm the tests fail**
 
 Run: `pnpm --filter @clicker/game test`
-Expected: FAIL тестов `click`, где ожидается засчитанный клик или отказ.
+Expected: FAIL for the `click` tests that expect a counted click or a rejection.
 
-- [ ] **Step 3: Заменить `default` на ветку `click` в `handle` в `packages/game/src/apply.ts`**
+- [ ] **Step 3: Replace `default` with the `click` branch in `handle` in `packages/game/src/apply.ts`**
 
-Теперь обрабатываются все команды, и `default` больше не нужен:
+Now all the commands are handled, and `default` is no longer needed:
 
 ```ts
 function handle(state: RoomState, command: Command, now: number, config: GameConfig): ApplyResult {
@@ -1383,13 +1383,13 @@ function handle(state: RoomState, command: Command, now: number, config: GameCon
 }
 ```
 
-- [ ] **Step 4: Добавить функцию `click` в конец `packages/game/src/apply.ts`**
+- [ ] **Step 4: Add the `click` function to the end of `packages/game/src/apply.ts`**
 
 ```ts
 function click(state: RoomState, playerId: string, now: number, config: GameConfig): ApplyResult {
   const player = state.players[playerId];
   if (player === undefined) return reject(state, playerId, 'not_joined');
-  // Клик не в раунде — не ошибка: клиент мог не успеть узнать о конце.
+  // A click outside a round is not an error: the client may not have learned of the end in time.
   if (state.phase !== 'running') return { state, events: [] };
 
   const elapsed = Math.max(0, now - player.bucket.updatedAt);
@@ -1417,12 +1417,12 @@ function click(state: RoomState, playerId: string, now: number, config: GameConf
 }
 ```
 
-- [ ] **Step 5: Убедиться, что проходят все тесты пакета, включая отложенный из Task 5**
+- [ ] **Step 5: Confirm all the package's tests pass, including the one postponed from Task 5**
 
 Run: `pnpm --filter @clicker/game test`
 Expected: `Test Files 7 passed (7)`, `Tests 36 passed (36)`.
 
-- [ ] **Step 6: Закоммитить**
+- [ ] **Step 6: Commit**
 
 ```bash
 pnpm format
@@ -1432,13 +1432,13 @@ git commit -m "feat(game): count clicks with a token bucket"
 
 ---
 
-### Task 9: Ближайший срок для будильника
+### Task 9: The nearest deadline for the alarm
 
 **Files:**
 - Create: `packages/game/src/deadline.ts`
 - Test: `packages/game/test/deadline.test.ts`
 
-- [ ] **Step 1: Написать падающий тест `packages/game/test/deadline.test.ts`**
+- [ ] **Step 1: Write the failing test `packages/game/test/deadline.test.ts`**
 
 ```ts
 import { describe, expect, it } from 'vitest';
@@ -1522,20 +1522,20 @@ describe('nextDeadline', () => {
 });
 ```
 
-- [ ] **Step 2: Убедиться, что тест падает**
+- [ ] **Step 2: Confirm the test fails**
 
 Run: `pnpm --filter @clicker/game test`
 Expected: FAIL, `Cannot find module "../src/deadline"`.
 
-- [ ] **Step 3: Создать `packages/game/src/deadline.ts`**
+- [ ] **Step 3: Create `packages/game/src/deadline.ts`**
 
 ```ts
 import { DEFAULT_CONFIG, type GameConfig } from './config';
 import type { RoomState } from './state';
 
 /**
- * Ближайший момент, когда состояние должно измениться само.
- * Сервер ставит на него будильник Durable Object.
+ * The nearest moment at which the state must change by itself.
+ * The server sets a Durable Object alarm for it.
  */
 export function nextDeadline(state: RoomState, config: GameConfig = DEFAULT_CONFIG): number | null {
   const candidates: number[] = [];
@@ -1558,12 +1558,12 @@ export function nextDeadline(state: RoomState, config: GameConfig = DEFAULT_CONF
 }
 ```
 
-- [ ] **Step 4: Убедиться, что тесты проходят**
+- [ ] **Step 4: Confirm the tests pass**
 
 Run: `pnpm --filter @clicker/game test`
 Expected: `Test Files 8 passed (8)`, `Tests 41 passed (41)`.
 
-- [ ] **Step 5: Закоммитить**
+- [ ] **Step 5: Commit**
 
 ```bash
 pnpm format
@@ -1573,13 +1573,13 @@ git commit -m "feat(game): expose the next deadline"
 
 ---
 
-### Task 10: Восстановление после перезапуска сервера
+### Task 10: Recovery after a server restart
 
 **Files:**
 - Create: `packages/game/src/recovery.ts`
 - Test: `packages/game/test/recovery.test.ts`
 
-- [ ] **Step 1: Написать падающий тест `packages/game/test/recovery.test.ts`**
+- [ ] **Step 1: Write the failing test `packages/game/test/recovery.test.ts`**
 
 ```ts
 import { describe, expect, it } from 'vitest';
@@ -1653,26 +1653,26 @@ describe('syncConnections', () => {
 });
 ```
 
-- [ ] **Step 2: Убедиться, что тест падает**
+- [ ] **Step 2: Confirm the test fails**
 
 Run: `pnpm --filter @clicker/game test`
 Expected: FAIL, `Cannot find module "../src/recovery"`.
 
-- [ ] **Step 3: Создать `packages/game/src/recovery.ts`**
+- [ ] **Step 3: Create `packages/game/src/recovery.ts`**
 
 ```ts
 import type { Player, RoomState } from './state';
 
 /**
- * Раунд прерван: сервер перезапустился и клики из памяти потеряны.
+ * The round is aborted: the server restarted and the clicks held in memory are lost.
  */
 export function abortRound(state: RoomState): RoomState {
   return { ...state, phase: 'lobby', round: null, notice: 'round_aborted' };
 }
 
 /**
- * Пересчёт числа соединений после пробуждения или перезапуска сервера.
- * `counts` — сколько живых соединений сейчас у каждого playerId.
+ * Recounts the number of connections after a wake-up or a server restart.
+ * `counts` — how many live connections each playerId has right now.
  */
 export function syncConnections(
   state: RoomState,
@@ -1692,12 +1692,12 @@ export function syncConnections(
 }
 ```
 
-- [ ] **Step 4: Убедиться, что тесты проходят**
+- [ ] **Step 4: Confirm the tests pass**
 
 Run: `pnpm --filter @clicker/game test`
 Expected: `Test Files 9 passed (9)`, `Tests 45 passed (45)`.
 
-- [ ] **Step 5: Закоммитить**
+- [ ] **Step 5: Commit**
 
 ```bash
 pnpm format
@@ -1707,12 +1707,12 @@ git commit -m "feat(game): recover state after a restart"
 
 ---
 
-### Task 11: Публичный вход пакета game
+### Task 11: The public entry point of the game package
 
 **Files:**
 - Create: `packages/game/src/index.ts`
 
-- [ ] **Step 1: Создать `packages/game/src/index.ts`**
+- [ ] **Step 1: Create `packages/game/src/index.ts`**
 
 ```ts
 export { type ApplyResult, apply } from './apply';
@@ -1724,14 +1724,14 @@ export type { Bucket, Notice, Phase, Player, ResultRow, RoomState, Round } from 
 export { createRoomState } from './state';
 ```
 
-`advance` и `computeResults` наружу не выходят: они вызываются только внутри `apply`.
+`advance` and `computeResults` are not exported: they are called only inside `apply`.
 
-- [ ] **Step 2: Проверить типы и тесты**
+- [ ] **Step 2: Check the types and the tests**
 
 Run: `pnpm --filter @clicker/game typecheck && pnpm --filter @clicker/game test`
-Expected: `tsc --noEmit` ничего не печатает, `Tests 45 passed (45)`.
+Expected: `tsc --noEmit` prints nothing, `Tests 45 passed (45)`.
 
-- [ ] **Step 3: Закоммитить**
+- [ ] **Step 3: Commit**
 
 ```bash
 pnpm format
@@ -1741,13 +1741,13 @@ git commit -m "feat(game): expose the package entry point"
 
 ---
 
-### Task 12: Пакет packages/protocol и идентификаторы
+### Task 12: The packages/protocol package and identifiers
 
 **Files:**
 - Create: `packages/protocol/package.json`, `packages/protocol/tsconfig.json`, `packages/protocol/src/ids.ts`
 - Test: `packages/protocol/test/ids.test.ts`
 
-- [ ] **Step 1: Создать `packages/protocol/package.json`**
+- [ ] **Step 1: Create `packages/protocol/package.json`**
 
 ```json
 {
@@ -1773,9 +1773,9 @@ git commit -m "feat(game): expose the package entry point"
 }
 ```
 
-- [ ] **Step 2: Создать `packages/protocol/tsconfig.json`**
+- [ ] **Step 2: Create `packages/protocol/tsconfig.json`**
 
-`dom` в `lib` нужен для `crypto.getRandomValues`, `btoa` и `TextEncoder`: эти API есть и в браузере, и в Workers.
+`dom` in `lib` is needed for `crypto.getRandomValues`, `btoa` and `TextEncoder`: these APIs exist both in the browser and in Workers.
 
 ```json
 {
@@ -1787,12 +1787,12 @@ git commit -m "feat(game): expose the package entry point"
 }
 ```
 
-- [ ] **Step 3: Установить зависимости**
+- [ ] **Step 3: Install the dependencies**
 
 Run: `pnpm install`
-Expected: `Scope: all 3 workspace projects`, ставится valibot 1.5.0, `@clicker/game` линкуется из воркспейса.
+Expected: `Scope: all 3 workspace projects`, valibot 1.5.0 gets installed, `@clicker/game` is linked from the workspace.
 
-- [ ] **Step 4: Написать падающий тест `packages/protocol/test/ids.test.ts`**
+- [ ] **Step 4: Write the failing test `packages/protocol/test/ids.test.ts`**
 
 ```ts
 import { describe, expect, it } from 'vitest';
@@ -1826,15 +1826,15 @@ describe('isId', () => {
 });
 ```
 
-- [ ] **Step 5: Убедиться, что тест падает**
+- [ ] **Step 5: Confirm the test fails**
 
 Run: `pnpm --filter @clicker/protocol test`
 Expected: FAIL, `Cannot find module "../src/ids"`.
 
-- [ ] **Step 6: Создать `packages/protocol/src/ids.ts`**
+- [ ] **Step 6: Create `packages/protocol/src/ids.ts`**
 
 ```ts
-/** 16 случайных байт в base64url: 22 символа. */
+/** 16 16 random bytes in base64url: 22 characters. */
 export const ID_PATTERN = /^[A-Za-z0-9_-]{22}$/;
 
 export function isId(value: string): boolean {
@@ -1849,12 +1849,12 @@ export function generateId(): string {
 }
 ```
 
-- [ ] **Step 7: Убедиться, что тесты проходят**
+- [ ] **Step 7: Confirm the tests pass**
 
 Run: `pnpm --filter @clicker/protocol test`
 Expected: `Test Files 1 passed (1)`, `Tests 4 passed (4)`.
 
-- [ ] **Step 8: Закоммитить**
+- [ ] **Step 8: Commit**
 
 ```bash
 pnpm format
@@ -1864,13 +1864,13 @@ git commit -m "feat(protocol): add id helpers"
 
 ---
 
-### Task 13: Разбор сообщений клиента
+### Task 13: Parsing client messages
 
 **Files:**
 - Create: `packages/protocol/src/client.ts`
 - Test: `packages/protocol/test/client.test.ts`
 
-- [ ] **Step 1: Написать падающий тест `packages/protocol/test/client.test.ts`**
+- [ ] **Step 1: Write the failing test `packages/protocol/test/client.test.ts`**
 
 ```ts
 import { describe, expect, it } from 'vitest';
@@ -1909,7 +1909,7 @@ describe('parseClientMessage', () => {
   });
 
   it('measures the name in code points, not in UTF-16 units', () => {
-    const name = '😀'.repeat(11); // 11 символов, но 22 единицы UTF-16
+    const name = '😀'.repeat(11); // 11 characters, but 22 UTF-16 units
 
     expect(parseClientMessage(encode({ type: 'join', playerId, name }))).not.toBeNull();
   });
@@ -1946,24 +1946,24 @@ describe('parseClientMessage', () => {
 });
 ```
 
-- [ ] **Step 2: Убедиться, что тест падает**
+- [ ] **Step 2: Confirm the test fails**
 
 Run: `pnpm --filter @clicker/protocol test`
 Expected: FAIL, `Cannot find module "../src/client"`.
 
-- [ ] **Step 3: Создать `packages/protocol/src/client.ts`**
+- [ ] **Step 3: Create `packages/protocol/src/client.ts`**
 
 ```ts
 import * as v from 'valibot';
 import { ID_PATTERN } from './ids';
 
-/** Всё, что длиннее, до разбора не доходит. */
+/** Anything longer never reaches parsing. */
 export const MAX_MESSAGE_BYTES = 1024;
 export const MAX_NAME_LENGTH = 20;
 
 const idSchema = v.pipe(v.string(), v.regex(ID_PATTERN));
 
-/** Ник хранится обрезанным, длина считается в code points. */
+/** The nickname is stored trimmed, the length is counted in code points. */
 const nameSchema = v.pipe(
   v.string(),
   v.trim(),
@@ -2004,12 +2004,12 @@ export function parseClientMessage(raw: string): ClientMessage | null {
 }
 ```
 
-- [ ] **Step 4: Убедиться, что тесты проходят**
+- [ ] **Step 4: Confirm the tests pass**
 
 Run: `pnpm --filter @clicker/protocol test`
 Expected: `Test Files 2 passed (2)`, `Tests 16 passed (16)`.
 
-- [ ] **Step 5: Закоммитить**
+- [ ] **Step 5: Commit**
 
 ```bash
 pnpm format
@@ -2019,20 +2019,20 @@ git commit -m "feat(protocol): parse client messages"
 
 ---
 
-### Task 14: Сообщения сервера и снимок состояния
+### Task 14: Server messages and the state snapshot
 
 **Files:**
 - Create: `packages/protocol/src/server.ts`
 - Test: `packages/protocol/test/server.test.ts`
 
-- [ ] **Step 1: Написать падающий тест `packages/protocol/test/server.test.ts`**
+- [ ] **Step 1: Write the failing test `packages/protocol/test/server.test.ts`**
 
 ```ts
 import { apply, createRoomState, type RoomState } from '@clicker/game';
 import { describe, expect, it } from 'vitest';
 import { parseServerMessage, toSnapshot } from '../src/server';
 
-/** Хост «secret-1» и игрок «secret-2», раунд отыгран. */
+/** Host "secret-1" and player "secret-2", the round has been played. */
 function playedRoom(): RoomState {
   const host = apply(
     createRoomState(),
@@ -2142,12 +2142,12 @@ describe('parseServerMessage', () => {
 });
 ```
 
-- [ ] **Step 2: Убедиться, что тест падает**
+- [ ] **Step 2: Confirm the test fails**
 
 Run: `pnpm --filter @clicker/protocol test`
 Expected: FAIL, `Cannot find module "../src/server"`.
 
-- [ ] **Step 3: Создать `packages/protocol/src/server.ts`**
+- [ ] **Step 3: Create `packages/protocol/src/server.ts`**
 
 ```ts
 import type { RoomState } from '@clicker/game';
@@ -2221,7 +2221,7 @@ export function parseServerMessage(raw: string): ServerMessage | null {
   return result.success ? result.output : null;
 }
 
-/** Секретные playerId и hostKey наружу не попадают. */
+/** The secret playerId and hostKey do not go out. */
 export function toSnapshot(state: RoomState, now: number): SnapshotMessage {
   return {
     type: 'snapshot',
@@ -2250,12 +2250,12 @@ export function toSnapshot(state: RoomState, now: number): SnapshotMessage {
 }
 ```
 
-- [ ] **Step 4: Убедиться, что тесты проходят**
+- [ ] **Step 4: Confirm the tests pass**
 
 Run: `pnpm --filter @clicker/protocol test`
 Expected: `Test Files 3 passed (3)`, `Tests 23 passed (23)`.
 
-- [ ] **Step 5: Закоммитить**
+- [ ] **Step 5: Commit**
 
 ```bash
 pnpm format
@@ -2265,12 +2265,12 @@ git commit -m "feat(protocol): build and parse server messages"
 
 ---
 
-### Task 15: Публичный вход пакета protocol и общая проверка
+### Task 15: The public entry point of the protocol package and the overall check
 
 **Files:**
 - Create: `packages/protocol/src/index.ts`
 
-- [ ] **Step 1: Создать `packages/protocol/src/index.ts`**
+- [ ] **Step 1: Create `packages/protocol/src/index.ts`**
 
 ```ts
 export {
@@ -2298,7 +2298,7 @@ export {
 } from './server';
 ```
 
-- [ ] **Step 2: Прогнать все проверки репозитория**
+- [ ] **Step 2: Run all the repository's checks**
 
 ```bash
 pnpm check
@@ -2307,10 +2307,10 @@ pnpm test
 ```
 Expected:
 - `pnpm check`: `Checked N files ... No fixes applied.`
-- `pnpm typecheck`: две строки `$ tsc --noEmit` и больше ничего;
-- `pnpm test`: `Tests 45 passed (45)` для game и `Tests 23 passed (23)` для protocol.
+- `pnpm typecheck`: two lines `$ tsc --noEmit` and nothing else;
+- `pnpm test`: `Tests 45 passed (45)` for game and `Tests 23 passed (23)` for protocol.
 
-- [ ] **Step 3: Закоммитить**
+- [ ] **Step 3: Commit**
 
 ```bash
 git add packages/protocol
@@ -2319,12 +2319,12 @@ git commit -m "feat(protocol): expose the package entry point"
 
 ---
 
-### Task 16: CI в GitHub Actions
+### Task 16: CI in GitHub Actions
 
 **Files:**
 - Create: `.github/workflows/ci.yml`
 
-- [ ] **Step 1: Создать `.github/workflows/ci.yml`**
+- [ ] **Step 1: Create `.github/workflows/ci.yml`**
 
 ```yaml
 name: CI
@@ -2350,14 +2350,14 @@ jobs:
       - run: pnpm test
 ```
 
-Версия pnpm берётся из поля `packageManager` в корневом `package.json`, отдельно её указывать не нужно.
+The pnpm version is taken from the `packageManager` field in the root `package.json`; it does not need to be specified separately.
 
-- [ ] **Step 2: Проверить, что установка воспроизводится с замороженным файлом блокировок**
+- [ ] **Step 2: Check that the install reproduces with a frozen lockfile**
 
 Run: `pnpm install --frozen-lockfile`
-Expected: `Lockfile is up to date, resolution step is skipped` и `Done in ...`. Если команда падает, значит `pnpm-lock.yaml` не закоммичен целиком.
+Expected: `Lockfile is up to date, resolution step is skipped` and `Done in ...`. If the command fails, `pnpm-lock.yaml` was not committed in full.
 
-- [ ] **Step 3: Закоммитить**
+- [ ] **Step 3: Commit**
 
 ```bash
 pnpm format
@@ -2367,9 +2367,9 @@ git commit -m "ci: run lint, typecheck and tests on push"
 
 ---
 
-## Проверка результата
+## Checking the result
 
-Выполнить в корне репозитория:
+Run in the repository root:
 
 ```bash
 pnpm install --frozen-lockfile
@@ -2378,25 +2378,25 @@ pnpm typecheck
 pnpm test
 ```
 
-Ожидается:
-- линтер и форматтер без замечаний;
-- обе проверки типов молчат;
-- 45 тестов в `@clicker/game` и 23 теста в `@clicker/protocol`, ноль падений.
+Expected:
+- the linter and formatter have no remarks;
+- both type checks are silent;
+- 45 tests in `@clicker/game` and 23 tests in `@clicker/protocol`, zero failures.
 
-Сверить с разделами спецификации:
-- §5 «Ядро» — реализовано в `packages/game`, включая `apply`, `nextDeadline`, `abortRound`, `syncConnections`;
-- §6 «Протокол» — реализовано в `packages/protocol`, кроме отправки сообщений: она появится в плане 2 вместе с сервером;
-- §10 «Тестирование» — закрыты пункты про `packages/game` и `packages/protocol`; тесты сервера, e2e и деплой относятся к планам 2 и 3;
-- §11 «Инструменты» — сделаны pnpm workspaces, TypeScript, Biome и CI. Playwright и деплой появятся в плане 3.
+Check against the specification sections:
+- §5 "Core" — implemented in `packages/game`, including `apply`, `nextDeadline`, `abortRound`, `syncConnections`;
+- §6 "Protocol" — implemented in `packages/protocol`, except sending messages: it appears in plan 2 together with the server;
+- §10 "Testing" — the items about `packages/game` and `packages/protocol` are closed; the server tests, e2e and deploy belong to plans 2 and 3;
+- §11 "Tooling" — pnpm workspaces, TypeScript, Biome and CI are done. Playwright and deploy appear in plan 3.
 
-CI проверяется только после первого пуша в GitHub: локально workflow не запускается.
+CI is checked only after the first push to GitHub: the workflow cannot be run locally.
 
-## Что нужно от тебя
+## What I need from you
 
-- **Перед первым таском:** выполнить `corepack enable pnpm` (Node стоит через nvm, root не нужен).
-- **После Task 16:** запушить ветку в `tjuana/clicker` и посмотреть, что workflow «CI» прошёл. Пуш я делаю только с твоего разрешения.
-- **Не нужно для этого плана:** аккаунт Cloudflare, `wrangler login` и поддомен. Они понадобятся в плане 2, когда появится сервер.
+- **Before the first task:** run `corepack enable pnpm` (Node is installed through nvm, root is not needed).
+- **After Task 16:** push the branch to `tjuana/clicker` and check that the "CI" workflow passed. I push only with your permission.
+- **Not needed for this plan:** a Cloudflare account, `wrangler login` and a subdomain. They are needed in plan 2, when the server appears.
 
-## Что дальше
+## What's next
 
-План 2 (сервер на partyserver): `Room extends Server`, маршрутизация комнат, будильники, рассылка снимков 10 раз в секунду, интеграционные тесты через `@cloudflare/vitest-plugin`, локальный `wrangler dev`. Пишется после того, как этот план выполнен: так версии `partyserver`, `wrangler` и плагина тестов будут проверены в момент написания, а не заранее.
+Plan 2 (the server on partyserver): `Room extends Server`, room routing, alarms, snapshot broadcast 10 times a second, integration tests through `@cloudflare/vitest-plugin`, local `wrangler dev`. It is written after this plan is executed: that way the versions of `partyserver`, `wrangler` and the test plugin are checked at the time of writing, not in advance.
