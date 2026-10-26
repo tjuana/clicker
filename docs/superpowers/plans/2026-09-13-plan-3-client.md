@@ -386,8 +386,8 @@ export function rememberHostKey(roomId: string, key: string): void {
 
 /**
  * The host key arrives in the URL fragment: it does not go to the server.
- * Right after reading it we erase it from the browser's address bar — at the daily the screen is
- * shown to everyone.
+ * Right after reading it we erase it from the browser's address bar — on a screen share at the
+ * daily stand-up, everyone sees it.
  */
 export function takeHostKeyFromHash(roomId: string): void {
   const match = window.location.hash.match(/^#host=([A-Za-z0-9_-]{22})$/);

@@ -26,7 +26,8 @@ this one.
 - A registry of game modes and a shared mode interface: we will extract them when a second mode
   appears.
 - ECS, physics, a binary protocol, matchmaking.
-- Multiple languages: the interface texts are in Russian, kept in one file.
+- Multiple languages: the interface has one language, kept in one file (Russian when this was
+  written, English since).
 - An autoclicker detector: fairness rests on trust, the server only limits the rate.
 
 ## 3. Architecture
@@ -528,7 +529,8 @@ export const theme = {
 
 ### Texts
 
-All interface strings are in `strings.ts`, in Russian.
+All interface strings are in `strings.ts`, in one language (Russian when this was written, English
+since).
 
 ## 9. Errors and edge cases
 
