@@ -1,134 +1,138 @@
-# Световые байки: второй режим и живой тик — дизайн
+# Light cycles: the second mode and a live tick — design
 
-Дата: 2026-10-10 · Статус: части 1–2 утверждены в брейншторме, часть 3 и файл ждут ревью
+Date: 2026-10-10 · Status: parts 1–2 approved in the brainstorm, part 3 and the file await review
 
-Дорожная карта, исследование чужих проектов и замеры прототипа тика:
-[план 5](../plans/2026-10-10-plan-5-roadmap-realtime-modes.md). Основа платформы:
-[спецификация кликера](2026-09-11-clicker-foundation-design.md).
+The roadmap, the research into other people's projects and the tick prototype's measurements:
+[plan 5](../plans/2026-10-10-plan-5-roadmap-realtime-modes.md). The platform's base:
+[the clicker spec](2026-09-11-clicker-foundation-design.md).
 
-## 1. Контекст и цель
+## 1. Context and goal
 
-Второй режим платформы — байки, оставляющие за собой след. Врезался в след — выбыл и через пару
-секунд вернулся. Раунд идёт на время, очки — за соперников, которые врезались в твой след. Стиль —
-неоновая сетка в духе «Трон: Наследие». Музыка и название — свои: саундтрек Daft Punk и имя Tron
-принадлежат Disney. Рабочее имя режима — «Неоновые байки», в коде — `cycles`.
+The platform's second mode is bikes that leave a trail behind them. Crash into a trail and you are
+out, and back in a couple of seconds. The round runs on a clock, and points go for rivals who crash
+into your trail. The style is a neon grid in the spirit of *Tron: Legacy*. The music and the name
+are our own: the Daft Punk soundtrack and the name Tron belong to Disney. The working name of the
+mode is "Neon bikes", in code `cycles`.
 
-Режим нужен не только сам по себе. На нём впервые появляются серверный тик, интерфейс режимов и
-мир, который живёт без ввода игроков. Всё это потом понадобится кольцевой гонке.
+The mode is needed for more than itself. It brings the server tick, the mode interface and a world
+that lives without player input for the first time. The ring race will need all of this later.
 
-Версия готова, когда:
-- хост создаёт комнату с режимом «байки», добавляет ботов, и раунд играется с клавиатуры;
-- у всех игроков одинаковое поле, одинаковые смерти и одинаковая таблица;
-- в одиночку с ботами играется так же, как с людьми;
-- правила, боты и стоимость тика покрыты тестами, включая тесты асимптотики и детерминизма;
-- оформление неоновое: меню режима, HUD, лидерборд, процедурная музыка;
-- 20 участников (люди плюс боты) держат 60 fps на M2 и укладываются в замеренный бюджет трафика.
+The version is ready when:
+- the host creates a room with the "bikes" mode, adds bots, and a round is played from the keyboard;
+- all players have the same field, the same deaths and the same table;
+- playing alone with bots works the same as with people;
+- the rules, the bots and the cost of a tick are covered by tests, including asymptotics and
+  determinism tests;
+- the look is neon: the mode menu, HUD, leaderboard, procedural music;
+- 20 participants (people plus bots) hold 60 fps on an M2 and fit the measured traffic budget.
 
-## 2. Что сейчас не делаем
+## 2. What we are not doing now
 
-- **Предсказание своего байка на клиенте.** Сначала играем без него и меряем, насколько ощутима
-  задержка. Отдельная спецификация, этап 4 дорожной карты.
-- **Бэкдейтинг поворотов** по схеме Armagetron. Задержку прощает резина (раздел 4); перемотка
-  состояния на сервере — только если резины не хватит на живой игре.
-- Перевод всей платформы в неон: решаем после того, как поиграем в байков.
-- Управление с телефона: только клавиатура.
-- Бинарный протокол: дельты в JSON укладываются в бюджет (раздел 6).
+- **Predicting the player's own bike on the client.** We play without it first and measure how
+  noticeable the delay is. A separate spec, stage 4 of the roadmap.
+- **Backdating turns** by the Armagetron scheme. Rubber forgives the delay (section 4); rewinding
+  the state on the server only if rubber is not enough in a live game.
+- Moving the whole platform to neon: we decide after we have played the bikes.
+- Phone controls: keyboard only.
+- A binary protocol: JSON deltas fit the budget (section 6).
 
-## 3. Слои: что где меняется
+## 3. Layers: what changes where
 
-Слои и их запреты прежние. Правила остаются чистыми.
+The layers and their prohibitions are as before. The rules stay pure.
 
 ```
-packages/game/src/modes/cycles   правила байков и боты              новое
-packages/game/src/modes/index    интерфейс режима и выбор по ModeId  новое
-packages/game/src/room           комната вызывает режим через интерфейс, тик
-packages/protocol                сообщения full, delta, ввод байков
-apps/game/src/worker             накопитель тика в комнате
-apps/game/src/client             сцена, HUD, лидерборд, музыка байков
+packages/game/src/modes/cycles   the bikes' rules and the bots      new
+packages/game/src/modes/index    the mode interface, chosen by ModeId  new
+packages/game/src/room           the room calls the mode through the interface, the tick
+packages/protocol                the messages full, delta, bike input
+apps/game/src/worker             the tick accumulator in the room
+apps/game/src/client             scene, HUD, leaderboard, bike music
 ```
 
-## 4. Правила (`packages/game/src/modes/cycles`)
+## 4. The rules (`packages/game/src/modes/cycles`)
 
-### Поле
+### The field
 
-- Сетка `Uint16Array`, индекс клетки — `y * side + x`. Хеш не нужен: поле ограничено.
-- В клетке `0` (пусто) или номер слота владельца следа (1…n). Номер слота, а не `publicId`:
-  слотов не больше `maxPlayers`, а `publicId` растут без предела.
-- Сторона поля фиксируется на старте раунда: `side = max(40, round(k · √n))`, где n — участники с
-  ботами. На игрока приходится k² клеток независимо от их числа. При `k = 28,6` и хвосте 200
-  занято около 24 % поля. Граница поля — стена.
+- A `Uint16Array` grid, the cell index is `y * side + x`. No hash is needed: the field is bounded.
+- A cell holds `0` (empty) or the slot number of the trail's owner (1…n). The slot number, not the
+  `publicId`: there are at most `maxPlayers` slots, while `publicId`s grow without limit.
+- The side of the field is fixed at the start of the round: `side = max(40, round(k · √n))`, where
+  n is the participants including bots. Each player gets k² cells regardless of their number. With
+  `k = 28.6` and a tail of 200, about 24% of the field is occupied. The edge of the field is a wall.
 
-### Байк
+### The bike
 
-- Голова `(x, y)`, направление `dir` 0–3; поворот — `(dir ± 1) & 3`.
-- **Хвост — кольцевой буфер** клеток фиксированной длины L (по умолчанию 200). Новая клетка
-  записывается на место самой старой, та освобождается.
-- Очередь поворотов глубиной 2. Применяется не больше одного поворота за тик, поэтому разворот
-  занимает два тика с шагом между ними: байк уходит в соседнюю полосу и в себя не въезжает.
-- Резина: запас R тиков (по умолчанию 3, это 150 мс при 20 Гц). Вдали от препятствий
-  восстанавливается на 1 тик в секунду.
-- Рывок: 1 с двойной скорости, перезарядка 4 с.
+- The head `(x, y)`, the direction `dir` 0–3; a turn is `(dir ± 1) & 3`.
+- **The tail is a ring buffer** of cells of a fixed length L (200 by default). A new cell is
+  written in place of the oldest one, which is freed.
+- A turn queue of depth 2. At most one turn is applied per tick, so a U-turn takes two ticks with a
+  step between them: the bike moves into the neighbouring lane and does not drive into itself.
+- Rubber: a reserve of R ticks (3 by default, which is 150 ms at 20 Hz). Away from obstacles it
+  regrows by 1 tick per second.
+- Boost: 1 s of double speed, a 4 s cooldown.
 
-### Тик — все байки одновременно
+### The tick — all bikes at once
 
-1. Из очереди каждого байка применяется один поворот.
-2. **Подшаг 1** для всех живых байков, **подшаг 2** только для тех, у кого рывок. Внутри подшага:
-   1. освободить последние клетки хвостов — за чужим хвостом можно ехать впритык;
-   2. посчитать новую голову каждого;
-   3. две и больше головы в одной клетке — гибнут все;
-   4. голова в клетке, занятой **до хода** (чужой или свой след, другая голова, стена), — это
-      препятствие. Встречные байки из соседних клеток врезаются друг в друга, а не проезжают
-      насквозь;
-   5. перед препятствием байк не гибнет, а стоит на месте и тратит единицу резины (одну за
-      подшаг, так что на рывке она тратится вдвое быстрее). Пока он стоит, хвост
-      не двигается. Кончилась резина — гибнет, и **виновник** — владелец клетки впереди.
-3. Обход игроков — по возрастанию слота, но порядок на результат не влияет: каждый подшаг сначала
-   вычисляется целиком, а потом применяется.
+1. One turn from each bike's queue is applied.
+2. **Substep 1** for all living bikes, **substep 2** only for those with a boost. Inside a substep:
+   1. free the last cells of the tails — you can drive right up against another's tail;
+   2. compute each bike's new head;
+   3. two or more heads in one cell — all of them die;
+   4. a head in a cell occupied **before the move** (another's or its own trail, another head, a
+      wall) is an obstacle. Bikes coming head-on from adjacent cells crash into each other instead
+      of passing through;
+   5. in front of an obstacle the bike does not die but stands still and spends one unit of rubber
+      (one per substep, so on a boost it is spent twice as fast). While it stands, the tail does not
+      move. When the rubber runs out it dies, and the **culprit** is the owner of the cell ahead.
+3. The players are walked in ascending slot order, but the order does not affect the result: each
+   substep is first computed in full and then applied.
 
-Все числа целые. Случайность — только сидированный ГПСЧ (mulberry32 на `Math.imul` и сдвигах)
-внутри состояния режима.
+All numbers are integers. Randomness is only the seeded PRNG (mulberry32 on `Math.imul` and shifts)
+inside the mode state.
 
-### Смерть, очки, респаун
+### Death, points, respawn
 
-- Врезался в чужой след — виновник получает **+1** и **+25 клеток хвоста** (потолок L = 400).
-  Стена или свой след — очков никому, но смерть засчитывается.
-- След погибшего гаснет сразу.
-- Через 2 с — респаун **в самой свободной точке**. Многоисточниковый BFS от всех занятых клеток
-  даёт расстояние до ближайшего препятствия за O(клеток); берём клетку с максимумом, равенство
-  разбивает ГПСЧ. Направление — в ту сторону, где до препятствия дальше. Хвост начинается с длины 0
-  и дорастает до своего L.
-- **Старт раунда — решёткой, а не поиском.** √n колонок и столько рядов, сколько нужно под всех, каждый
-  байк в середине своего блока и лицом туда, где по полю на этот момент дальше всего до препятствия
-  (при равенстве — меньший индекс направления). Поиск самой свободной точки для каждого байка
-  стоил бы O(n × клеток), а клеток тем больше, чем больше игроков, — квадрат (план 6, находка 4).
-- После смерти хвост возвращается к базовой длине: удлинения за убийства живут одну жизнь.
-- Ушедший из раунда игрок только помечается. Байк снимает следующий тик — как смерть без виновника,
-  поэтому его клетки и событие уходят в `changes`, как и всё остальное. Вернувшийся занимает прежний
-  слот и ждёт обычное время возрождения.
-- Таблица мест: убийства по убыванию, затем смерти по возрастанию, затем самая долгая жизнь.
+- Crash into another's trail — the culprit gets **+1** and **+25 tail cells** (a cap of L = 400).
+  A wall or your own trail — no points to anyone, but the death counts.
+- The dead bike's trail goes out at once.
+- After 2 s — a respawn **at the freest point**. A multi-source BFS from all occupied cells gives
+  the distance to the nearest obstacle in O(cells); we take the cell with the maximum, and the PRNG
+  breaks a tie. The direction is toward the side where the obstacle is farther. The tail starts at
+  length 0 and grows to its L.
+- **The start of a round is a lattice, not a search.** √n columns and as many rows as are needed to
+  seat everyone, each bike in the middle of its block and facing where, on the field at that
+  moment, it is farthest to an obstacle (on a tie, the smaller direction index). Searching for the
+  freest point for each bike would cost O(n × cells), and the more players, the more cells — a
+  square (plan 6, finding 4).
+- After a death the tail returns to the base length: the extensions for kills live for one life.
+- A player who leaves the round is only marked. The bike is taken off by the next tick — as a death
+  with no culprit, so its cells and the event go into `changes` like everything else. One who comes
+  back takes the former slot and waits the usual respawn time.
+- The standings table: kills descending, then deaths ascending, then the longest life.
 
-### Раунд
+### The round
 
-Обратный отсчёт и фазы — общие для платформы (лобби → отсчёт → игра → результаты). Длина раунда —
-3 минуты. Тик — 50 мс (20 Гц).
+The countdown and the phases are common to the platform (lobby → countdown → play → results). The
+round is 3 minutes long. The tick is 50 ms (20 Hz).
 
-### Боты
+### Bots
 
-- Бот — участник со слотом, как игрок, но решение за него принимает чистая функция
-  `decide(state, slot)` на каждом тике, до шага.
-- Решение — заливка пространства (BFS) для трёх вариантов: прямо, влево, вправо. Выбирается вариант
-  с наибольшей достижимой областью. Заливка **ограничена бюджетом** в 256 клеток на вариант и
-  запускается, только когда препятствие ближе 8 клеток; иначе бот едет прямо с небольшой
-  случайностью из ГПСЧ.
-- Ничья по площади решается длиной свободного прогона (до 32 клеток), затем случайно из ГПСЧ;
-  случайный поворот на простом участке проходит ту же проверку площадью. Без этого боты въезжали в
-  стены, в тупики и закручивались спиралью внутрь (план 6, находки 1–3). Одиночный бот гибнет в
-  среднем 0,7 раза за раунд — гейт от ухудшения, а не цель.
-- Сложность — бюджет заливки и доля случайных ошибок. На первую версию один уровень.
+- A bot is a participant with a slot, like a player, but the decision for it is made by the pure
+  function `decide(state, slot)` on every tick, before the step.
+- The decision is a space fill (BFS) for three options: straight, left, right. The option with the
+  largest reachable area is chosen. The fill is **limited by a budget** of 256 cells per option and
+  runs only when an obstacle is closer than 8 cells; otherwise the bot drives straight with a
+  little randomness from the PRNG.
+- A tie on area is settled by the length of the free run (up to 32 cells), then randomly from the
+  PRNG; a random turn on a simple stretch passes the same area check. Without this the bots drove
+  into walls, into dead ends and curled inward in a spiral (plan 6, findings 1–3). A lone bot dies
+  0.7 times per round on average — a gate against getting worse, not a goal.
+- Difficulty is the fill budget and the share of random mistakes. One level for the first version.
 
-## 5. Комната и интерфейс режимов
+## 5. The room and the mode interface
 
-Интерфейс выводится из двух реализаций, кликера и байков, как предписывает CLAUDE.md:
+The interface is derived from two implementations, the clicker and the bikes, as CLAUDE.md
+prescribes:
 
 ```ts
 interface Mode<State, Input> {
@@ -138,132 +142,139 @@ interface Mode<State, Input> {
   startRound(state: State, goAt: number, config: GameConfig): State;
   applyInput(state: State, publicId: string, input: Input, now: number, config: GameConfig): State;
   /**
-   * Есть только у живых режимов. Возвращает и то, что изменилось за тик: шаг и так это знает,
-   * а сравнение полей до и после было бы лишним проходом по всем клеткам.
+   * Only live modes have it. It also returns what changed during the tick: the step knows this
+   * anyway, and comparing the fields before and after would be an extra pass over all the cells.
    */
   step?(state: State, now: number, config: GameConfig): { state: State; changes: TickChanges };
   finish(state: State, names: Record<string, string>): State;
 }
 ```
 
-- `RoomState.mode` выбирается при создании комнаты и не меняется. `modeState` становится
-  объединением состояний режимов. `room/*` перестаёт импортировать кликер напрямую.
-- Новая команда комнаты — `addBot` / `removeBot`, доступна только хосту и только в лобби.
-- `TickChanges` — клетки, которые тик записал, каждая со значением после тика (0 — пусто; список
-  «добавлено/освобождено» терял порядок, когда клетку занимали и освобождали за один тик), головы
-  живых байков (слот, клетка, направление) и события тика. Комната пересылает их в `delta`, не
-  заглядывая внутрь.
-- `tick` с живым режимом вызывает `step` столько раз, сколько тиков задолжал накопитель (раздел 7).
-- Ввод байков — `{ type: 'turn', side: 'left' | 'right' }` и `{ type: 'boost' }`. Token bucket
-  настраивается для режима: 10 действий в секунду, запас 4.
-- Предел участников режима — 20, вместе с ботами.
+- `RoomState.mode` is chosen when the room is created and does not change. `modeState` becomes a
+  union of the modes' states. `room/*` stops importing the clicker directly.
+- A new room command is `addBot` / `removeBot`, available only to the host and only in the lobby.
+- `TickChanges` is the cells the tick wrote, each with its value after the tick (0 — empty; a list
+  of "added/freed" lost the order when a cell was occupied and freed within one tick), the heads of
+  the living bikes (slot, cell, direction) and the tick's events. The room forwards them in
+  `delta` without looking inside.
+- `tick` with a live mode calls `step` as many times as the accumulator is behind by (section 7).
+- The bike input is `{ type: 'turn', side: 'left' | 'right' }` and `{ type: 'boost' }`. The token
+  bucket is configured per mode: 10 actions per second, a reserve of 4.
+- The mode's participant limit is 20, bots included.
 
-## 6. Протокол
+## 6. The protocol
 
-Новые типы сообщений. Старые не ломаются, поэтому `v` остаётся `1`. *(Superseded: the protocol moved to version 2 — see "Decisions made while building plan 7".)*
+New message types. The old ones do not break, so `v` stays `1`. *(Superseded: the protocol moved to version 2 — see "Decisions made while building plan 7".)*
 
-- **`full`** — всё состояние раунда: сторона поля, байки (слот, публичный id, голова, направление,
-  хвост списком клеток, резина, рывок), счёт. Шлётся при входе, переподключении и по запросу
-  клиента, который заметил разрыв в номерах тиков.
-- **`delta`** — каждый тик, **одна строка на всю комнату**: номер тика `t`; новые клетки
-  `[cell, slot]`; освобождённые клетки; события (`died`, `killed`, `respawned`, `boost`).
-- Клиент проверяет, что `t` идёт подряд. Разрыв — запрос `full`. Сам WebSocket упорядочен и надёжен:
-  в прототипе на 20 сокетах пропусков не было.
-- Бюджет по прототипу: ~234 Б на дельту, 4,6 КБ/с на игрока, ~91 КБ/с из комнаты при 20 участниках.
+- **`full`** — the whole state of the round: the side of the field, the bikes (slot, public id,
+  head, direction, tail as a list of cells, rubber, boost), the score. Sent on joining, on
+  reconnecting and at the request of a client that noticed a gap in the tick numbers.
+- **`delta`** — every tick, **one string for the whole room**: the tick number `t`; new cells
+  `[cell, slot]`; freed cells; events (`died`, `killed`, `respawned`, `boost`).
+- The client checks that `t` runs consecutively. A gap — a `full` request. The WebSocket itself is
+  ordered and reliable: the prototype with 20 sockets had no gaps.
+- The budget from the prototype: ~234 B per delta, 4.6 KB/s per player, ~91 KB/s out of the room
+  with 20 participants.
 
-## 7. Сервер (`apps/game/src/worker/room.ts`)
+## 7. The server (`apps/game/src/worker/room.ts`)
 
-- Пока раунд живого режима идёт, таймер `setInterval(tickMs)` **только будит** комнату. Сколько
-  шагов сделать, решает накопитель: `while (now >= next) { run tick; next += tickMs }`. Прототип
-  показал, что таймер ошибается в обе стороны: локальный workerd опаздывает на 1–2 мс за период (шаг
-  на пробуждение терял 2–5 % тиков), а в проде таймер иногда будит раньше срока. Накопитель дал
-  ровно ожидаемое число шагов в обоих случаях.
-- Нагон после паузы ограничен 10 шагами. Если долг больше, лишнее время пропускается, а не
-  догоняется пачкой — урок ошибки Armagetron #321694 про неограниченную поправку.
-- Дельта собирается и рассылается один раз за шаг. В хранилище на тик ничего не пишется.
-- Таймер гаснет вместе с раундом, и комната снова может уснуть.
+- While a live-mode round runs, the `setInterval(tickMs)` timer **only wakes** the room. How many
+  steps to take is decided by the accumulator: `while (now >= next) { run tick; next += tickMs }`.
+  The prototype showed that the timer errs in both directions: the local workerd is late by 1–2 ms
+  per period (one step per wake-up lost 2–5% of the ticks), and in production the timer sometimes
+  wakes early. The accumulator gave exactly the expected number of steps in both cases.
+- Catching up after a pause is limited to 10 steps. If the debt is larger, the extra time is
+  skipped rather than caught up in a burst — the lesson of the Armagetron bug #321694 about an
+  unbounded correction.
+- The delta is built and broadcast once per step. Nothing is written to storage per tick.
+- The timer goes out together with the round, and the room can fall asleep again.
 
-## 8. Клиент
+## 8. The client
 
-### Сцена
+### The scene
 
-- Чёрный пол с неоновой сеткой, края поля — светящаяся стена.
-- **Следы — `InstancedMesh`**, по одному инстансу на клетку хвоста. Слот инстанса совпадает с
-  индексом кольцевого буфера хвоста, поэтому дельта обновляет ровно те инстансы, что изменились, —
-  без пересоздания и без аллокаций в кадре. Предел — 20 × 400 = 8000 инстансов.
-- Байки — низкополигональные светящиеся модели из примитивов. Цвет из палитры слотов; свой байк
-  ярче остальных.
-- Свечение — bloom-проход постобработки. Если он съедает fps на M2 по замеру, его ослабляем.
+- A black floor with a neon grid, the edges of the field are a glowing wall.
+- **Trails are an `InstancedMesh`**, one instance per tail cell. The instance slot matches the index
+  in the tail's ring buffer, so a delta updates exactly the instances that changed — without
+  recreating them and without allocations in the frame. The limit is 20 × 400 = 8000 instances.
+- The bikes are low-poly glowing models built from primitives. The colour comes from the slot
+  palette; the player's own bike is brighter than the others.
+- The glow is a bloom post-processing pass. If a measurement shows it eating fps on an M2, we turn
+  it down.
 
-### Камера
+### The camera
 
-За спиной своего байка, с затуханием, как сейчас в гонке (`MathUtils.damp`). На повороте плавно
-доворачивается. Пока ждёшь респауна — смотрит на того, кто тебя сбил.
+Behind the player's own bike, with damping, as in the race now (`MathUtils.damp`). It turns
+smoothly into a turn. While you wait for a respawn, it looks at whoever knocked you out.
 
-### Интерполяция
+### Interpolation
 
-Клиент рисует мир на 100 мс в прошлом, между двумя полученными тиками. Пачка дельт после паузы
-сервера не даёт рывка, а плавно нагоняется. Свой байк интерполируется так же: предсказания в этой
-версии нет.
+The client draws the world 100 ms in the past, between two received ticks. A burst of deltas after
+a server pause gives no jerk but catches up smoothly. The player's own bike is interpolated the
+same way: there is no prediction in this version.
 
-### HUD и лидерборд
+### HUD and leaderboard
 
-- Таймер раунда, свои убийства и смерти, кольцо перезарядки рывка, полоска резины.
-- Лента событий: «A срезал B».
-- Живой топ-5 в углу. Полная таблица — на экране результатов.
-- В лобби: выбор режима при создании комнаты, кнопки хоста «+ бот» и «− бот».
+- The round timer, your own kills and deaths, the boost cooldown ring, the rubber bar.
+- An event feed: "A cut off B".
+- A live top 5 in the corner. The full table is on the results screen.
+- In the lobby: choosing the mode when the room is created, the host's buttons "+ bot" and "− bot".
 
-### Звук
+### Sound
 
-- **Процедурный синтвейв на WebAudio**: бас-арпеджио на пиле через фильтр, 120 BPM. Последние
-  30 секунд раунда темп растёт. Килобайты кода вместо мегабайтов файлов.
-- Синтезированные эффекты: поворот, рывок, взрыв.
-- Кнопка «звук» — состояние в `localStorage`.
+- **A procedural synthwave on WebAudio**: a bass arpeggio on a sawtooth through a filter, 120 BPM.
+  In the last 30 seconds of the round the tempo rises. Kilobytes of code instead of megabytes of
+  files.
+- Synthesized effects: a turn, a boost, an explosion.
+- A "sound" button — its state in `localStorage`.
 
-### Ввод
+### Input
 
-A/D или ←/→ — поворот, пробел — рывок. `event.repeat` игнорируется, как в кликере.
+A/D or ←/→ — turn, space — boost. `event.repeat` is ignored, as in the clicker.
 
-## 9. Ошибки и крайние случаи
+## 9. Errors and edge cases
 
-- Игрок вышел посреди раунда — байк гибнет без виновника, слот освобождается в конце раунда.
-- Переподключение в течение отведённого времени — тот же слот, клиент получает `full`.
-- Респаун, когда свободных клеток нет: возрождение откладывается до следующего тика.
-- Все люди вышли, остались только боты — раунд завершается досрочно.
-- Сообщения с неизвестным полем или неправильным типом отвергаются парсером протокола, как сейчас.
+- A player left in the middle of a round — the bike dies with no culprit, the slot is freed at the
+  end of the round.
+- Reconnecting within the allotted time — the same slot, the client receives `full`.
+- A respawn when there are no free cells: the respawn is postponed to the next tick.
+- All people left, only bots remain — the round ends early.
+- Messages with an unknown field or a wrong type are rejected by the protocol parser, as now.
 
-## 10. Тестирование
+## 10. Testing
 
-- **Правила** — юнит-тесты на каждое правило тика: встречное движение, две головы в одной клетке,
-  езда за хвостом впритык, резина спасает и кончается, виновник смерти, рывок через два подшага,
-  разворот без самоубийства.
-- **Детерминизм** — один и тот же набор вводов, проигранный дважды, даёт бит в бит одинаковое
-  состояние; перестановка порядка игроков в состоянии результат не меняет.
-- **Асимптотика** (`complexity.ts`) — шаг O(клеток + игроков); решение бота не растёт с размером
-  поля; респаун O(клеток).
-- **Чистота** — скан расширяется на трансцендентные функции (`Math.sin`, `cos`, `atan2`, `exp`,
-  `pow`) в `modes/cycles`.
-- **Боты** — бот на пустом поле живёт до конца раунда; два бота сами доигрывают раунд без ошибок.
-- **Сервер** — интеграционный тест в workerd: тик идёт, дельты подряд, `full` при входе.
-- **Сквозной** — один браузер против ботов: войти, выбрать режим, добавить ботов, сыграть раунд,
-  увидеть таблицу.
-- **Глазами** — снимки сцены на 2 и 20 участниках, как для гонки.
-- Каждый новый тест сначала проверяется на неисправном коде: он должен упасть.
+- **The rules** — unit tests for every tick rule: head-on movement, two heads in one cell, driving
+  right up against a tail, rubber saves and runs out, the culprit of a death, a boost across two
+  substeps, a U-turn without suicide.
+- **Determinism** — the same set of inputs, played twice, gives a bit-for-bit identical state;
+  permuting the order of the players in the state does not change the result.
+- **Asymptotics** (`complexity.ts`) — a step is O(cells + players); a bot's decision does not grow
+  with the size of the field; a respawn is O(cells).
+- **Purity** — the scan is extended to transcendental functions (`Math.sin`, `cos`, `atan2`,
+  `exp`, `pow`) in `modes/cycles`.
+- **Bots** — a bot on an empty field lives to the end of the round; two bots play a round out on
+  their own without errors.
+- **Server** — an integration test in workerd: the tick runs, the deltas are consecutive, `full` on
+  joining.
+- **End to end** — one browser against bots: join, choose the mode, add bots, play a round, see the
+  table.
+- **By eye** — screenshots of the scene with 2 and 20 participants, as for the race.
+- Every new test is first checked against broken code: it must fail.
 
-## 11. Риски
+## 11. Risks
 
-- ~~Тик на настоящем Cloudflare не проверен~~ — проверен 2026-10-10 на временном аккаунте: 600 из
-  600 шагов на 20 Гц, интервал таймера ровно 50 мс; разрывы до 180 мс у клиента — это сеть
-  (план 5, этап 2).
-- **Без предсказания поворот ощущается с задержкой** в RTT плюс до одного тика. Резина прощает
-  смерти, но не ощущение. Меряем на живой игре; если мешает — этап 4.
-- **Bloom на слабых ноутбуках.** Включаем по замеру.
-- Объём: спецификация разворачивается в несколько планов — правила и боты; комната, тик и
-  протокол; клиент и оформление.
+- ~~The tick is not verified on real Cloudflare~~ — verified on 2026-10-10 on a temporary account:
+  600 of 600 steps at 20 Hz, the timer interval exactly 50 ms; gaps of up to 180 ms at the client
+  are the network (plan 5, stage 2).
+- **Without prediction a turn feels delayed** by the RTT plus up to one tick. Rubber forgives the
+  deaths, but not the feel. We measure in a live game; if it gets in the way — stage 4.
+- **Bloom on weak laptops.** We turn it on by measurement.
+- Scope: the spec unfolds into several plans — the rules and bots; the room, the tick and the
+  protocol; the client and the look.
 
 ## Decisions made while building plan 7
 
-Recorded in English from here on; the sections above stay as written.
+Recorded in English from the start; the sections above were translated from Russian on 2026-10-26.
 
 - **The host picks the mode in the lobby** with `setMode`, rather than when the room is created:
   rooms are created by a link. Switching recreates the mode state and reseats every player;
