@@ -1,72 +1,72 @@
-# Clicker Client Implementation Plan (план 3 из 3: клиент, сцена, деплой)
+# Clicker Client Implementation Plan (plan 3 of 3: client, scene, deploy)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Довести проект до играбельного состояния: браузерный клиент на React с 3D-сценой, сквозные тесты в двух настоящих браузерах и деплой одной командой на бесплатный тариф Cloudflare.
+**Goal:** Bring the project to a playable state: a React browser client with a 3D scene, end-to-end tests in two real browsers, and a one-command deploy to the Cloudflare free tier.
 
-**Architecture:** Клиент и Worker живут одним приложением `apps/game`. Плагин `@cloudflare/vite-plugin` запускает Worker прямо внутри dev-сервера Vite и собирает обе части в один деплой: клиент в `dist/client`, Worker и сгенерированный конфиг в `dist/clicker`. Клиент — тонкий: он не знает правил игры, а отправляет команды и рисует снимки, которые присылает сервер.
+**Architecture:** The client and the Worker live in one app, `apps/game`. The `@cloudflare/vite-plugin` plugin runs the Worker inside the Vite dev server and builds both parts into one deploy: the client into `dist/client`, the Worker and the generated config into `dist/clicker`. The client is thin: it knows no game rules, it sends commands and draws the snapshots the server sends.
 
 **Tech Stack:** Vite 8.3.0, React 19.2.8, @vitejs/plugin-react 6.1.1, @cloudflare/vite-plugin 1.54.8, three 0.186.0, @react-three/fiber 9.7.0, @react-three/drei 10.7.8, zustand 5.0.15, partysocket 1.3.0, Playwright 1.63.0, TypeScript 7.0.2.
 
-Спецификация: [2026-09-11-clicker-foundation-design.md](../specs/2026-09-11-clicker-foundation-design.md), разделы 3, 4, 8, 10, 11. Планы 1 и 2 выполнены и влиты в `main`.
+Spec: [2026-09-11-clicker-foundation-design.md](../specs/2026-09-11-clicker-foundation-design.md), sections 3, 4, 8, 10, 11. Plans 1 and 2 are done and merged into `main`.
 
 ---
 
-## Проверено перед написанием плана
+## What was verified before this plan
 
-Прототип собран и прогнан на этой машине целиком: сборка, проверка типов, сквозной тест в двух браузерах (18,3 с, реальные тайминги раунда), `wrangler deploy --dry-run` и совместная работа двух бегунков тестов.
+The prototype was built and run on this machine end to end: build, typecheck, an end-to-end test in two browsers (18.3 s, real round timings), `wrangler deploy --dry-run`, and two test runners working side by side.
 
-Шесть находок, которые определили этот план:
+Six findings that shaped this plan:
 
-1. **Плагин Cloudflare собирает клиент и Worker вместе.** `vite build` даёт `dist/client` со статикой и `dist/<имя>/index.js` с Worker и сгенерированным `wrangler.json`; после этого `wrangler deploy` уезжает без единой дополнительной настройки — проверено сухим прогоном, он нашёл статику, привязку Durable Object и переменные. Поэтому клиент и сервер — одно приложение, а описанное раньше проксирование `/parties` на отдельный `wrangler dev` отменяется.
-2. **Два конфига Vite в одном пакете уживаются**, но `vitest` по умолчанию хватает и сквозные тесты Playwright и пытается запустить их внутри workerd — падает на `playwright-core`. Лечится одной строкой: `test: { include: ['test/**/*.test.ts'] }`.
-3. **React закрепляем на 19.2.8.** `@react-three/fiber@9.7.0` требует `react >=19 <19.3`, а последний React — 19.3. Ставить 19.3 нельзя, пока R3F не выпустит совместимую версию.
-4. **Браузеры Playwright должны совпадать с его версией.** На машине лежали сборки 1193 и 1208, Playwright 1.63 потребовал 1243 и отказался стартовать, пока не выполнить `playwright install chromium`.
-5. **Клиентский бандл — 1,1 МБ (302 КБ сжатым)**, почти целиком three.js. Сцена подключается лениво, чтобы экран входа не тянул её за собой.
-6. **`THREE.Clock: This module has been deprecated`** — предупреждение из внутренностей react-three-fiber, не из нашего кода. Ничего не ломает, исправить нечем.
-7. **Первая версия сцены выглядела сломанной, и это нашлось только глазами.** Три ошибки, все учтены в коде ниже: высота столбика считалась относительно лидера, поэтому игрок, который в комнате один, всегда упирался в максимум и роста не видел; камере не задавали, куда смотреть, и кадр получался случайным — столбик уезжал за верхний край; полотно во всю ширину при высоте 240 пикселей давало соотношение сторон около 8:1 и сплющивало сцену в полоску. Отсюда правило: сцену проверять снимком экрана из настоящего браузера, а не только тестами.
+1. **The Cloudflare plugin builds the client and the Worker together.** `vite build` produces `dist/client` with the static files and `dist/<name>/index.js` with the Worker and a generated `wrangler.json`; after that `wrangler deploy` goes out with no extra configuration — checked with a dry run, which found the static files, the Durable Object binding and the variables. So the client and the server are one app, and the earlier idea of proxying `/parties` to a separate `wrangler dev` is dropped.
+2. **Two Vite configs in one package get along**, but by default `vitest` also picks up the Playwright end-to-end tests and tries to run them inside workerd — it fails on `playwright-core`. One line fixes it: `test: { include: ['test/**/*.test.ts'] }`.
+3. **React is pinned at 19.2.8.** `@react-three/fiber@9.7.0` requires `react >=19 <19.3`, and the latest React is 19.3. 19.3 must not be installed until R3F releases a compatible version.
+4. **Playwright browsers must match its version.** The machine had builds 1193 and 1208; Playwright 1.63 needed 1243 and refused to start until `playwright install chromium` was run.
+5. **The client bundle is 1.1 MB (302 KB gzipped)**, almost all of it three.js. The scene is loaded lazily so that the entry screen does not drag it in.
+6. **`THREE.Clock: This module has been deprecated`** is a warning from inside react-three-fiber, not from our code. It breaks nothing and there is nothing to fix it with.
+7. **The first version of the scene looked broken, and only eyes found it.** Three mistakes, all accounted for in the code below: the column height was computed relative to the leader, so a player alone in the room always sat at the maximum and never saw any growth; the camera was not told where to look, so the frame came out random — the column drifted off the top edge; a full-width canvas at a height of 240 pixels gave an aspect ratio of about 8:1 and squashed the scene into a strip. Hence the rule: check the scene with a screenshot from a real browser, not only with tests.
 
-## Как выполнять
+## How to execute
 
-- Ветка `feat/client`, работаем в самом репозитории.
-- Один таск — один коммит. Conventional Commits, английский, **без подписей Claude**.
-- Проверки перед каждым коммитом: `pnpm format`, затем `pnpm check`, `pnpm typecheck`, `pnpm test`.
+- Branch `feat/client`, we work in the repository itself.
+- One task, one commit. Conventional Commits, English, **no Claude attribution**.
+- Checks before every commit: `pnpm format`, then `pnpm check`, `pnpm typecheck`, `pnpm test`.
 
-## Файловая структура
+## File structure
 
 ```
-apps/game/                     (переезжает из apps/server)
+apps/game/                     (moves from apps/server)
   index.html
   vite.config.ts               react() + cloudflare()
-  vitest.config.ts             тесты Worker, область ограничена test/
-  playwright.config.ts         сквозные тесты, сам поднимает dev-сервер
+  vitest.config.ts             Worker tests, scope limited to test/
+  playwright.config.ts         end-to-end tests, starts the dev server itself
   wrangler.jsonc               main → src/worker/worker.ts, assets, Durable Object
-  tsconfig.client.json         DOM и JSX
-  tsconfig.worker.json         типы Workers
-  src/worker/worker.ts         маршрутизация комнат   (переезжает)
-  src/worker/room.ts           комната                (переезжает)
-  src/client/main.tsx          точка входа
-  src/client/app.tsx           выбор экрана по фазе
-  src/client/net.ts            соединение и команды
-  src/client/store.ts          состояние клиента (zustand)
-  src/client/room-link.ts      идентификаторы комнаты, ключ хоста, ссылки
-  src/client/theme.ts          палитра
-  src/client/strings.ts        тексты интерфейса
+  tsconfig.client.json         DOM and JSX
+  tsconfig.worker.json         Workers types
+  src/worker/worker.ts         room routing           (moves)
+  src/worker/room.ts           the room               (moves)
+  src/client/main.tsx          entry point
+  src/client/app.tsx           screen choice by phase
+  src/client/net.ts            connection and commands
+  src/client/store.ts          client state (zustand)
+  src/client/room-link.ts      room ids, host key, links
+  src/client/theme.ts          palette
+  src/client/strings.ts        interface texts
   src/client/screens/*.tsx     Landing, Join, Lobby, Arena, Results
-  src/client/scene/race.tsx    сцена на react-three-fiber
-  test/*.test.ts               тесты Worker            (переезжают)
-  e2e/round.spec.ts            сквозной тест
+  src/client/scene/race.tsx    scene on react-three-fiber
+  test/*.test.ts               Worker tests            (move)
+  e2e/round.spec.ts            end-to-end test
 ```
 
 ---
 
-### Task 1: Превратить apps/server в apps/game
+### Task 1: Turn apps/server into apps/game
 
 **Files:**
-- Move: `apps/server` → `apps/game`, внутри — `src/worker.ts` и `src/room.ts` в `src/worker/`
+- Move: `apps/server` → `apps/game`, inside it `src/worker.ts` and `src/room.ts` into `src/worker/`
 - Modify: `apps/game/package.json`, `apps/game/wrangler.jsonc`, `apps/game/tsconfig.json`, `apps/game/vitest.config.ts`
 
-- [ ] **Step 1: Переместить приложение и исходники Worker**
+- [ ] **Step 1: Move the app and the Worker sources**
 
 ```bash
 git mv apps/server apps/game
@@ -75,39 +75,39 @@ git mv apps/game/src/room.ts apps/game/src/worker/room.ts
 git mv apps/game/src/worker.ts apps/game/src/worker/worker.ts
 ```
 
-- [ ] **Step 2: Переименовать пакет в `apps/game/package.json`**
+- [ ] **Step 2: Rename the package in `apps/game/package.json`**
 
-Имя `@clicker/game` уже занято пакетом с правилами, поэтому приложение называется `@clicker/app`.
+The name `@clicker/game` is already taken by the rules package, so the app is called `@clicker/app`.
 
 ```json
   "name": "@clicker/app",
 ```
 
-- [ ] **Step 3: Поправить путь входа в `apps/game/wrangler.jsonc`**
+- [ ] **Step 3: Fix the entry path in `apps/game/wrangler.jsonc`**
 
 ```jsonc
   "main": "src/worker/worker.ts",
 ```
 
-- [ ] **Step 4: Ограничить область vitest в `apps/game/vitest.config.ts`**
+- [ ] **Step 4: Limit the scope of vitest in `apps/game/vitest.config.ts`**
 
-Добавить после массива `plugins`:
+Add after the `plugins` array:
 
 ```ts
-  // Сквозные тесты лежат в e2e/ и запускаются Playwright: внутрь workerd им нельзя.
+  // End-to-end tests live in e2e/ and are run by Playwright: they cannot go inside workerd.
   test: { include: ['test/**/*.test.ts'] },
 ```
 
-- [ ] **Step 5: Проверить, что ничего не сломалось**
+- [ ] **Step 5: Check that nothing broke**
 
 ```bash
 pnpm install
 pnpm --filter @clicker/app test
 pnpm check
 ```
-Expected: `Test Files 2 passed (2)`, `Tests 15 passed (15)`; Biome без замечаний.
+Expected: `Test Files 2 passed (2)`, `Tests 15 passed (15)`; Biome reports nothing.
 
-- [ ] **Step 6: Закоммитить**
+- [ ] **Step 6: Commit**
 
 ```bash
 pnpm format
@@ -117,15 +117,15 @@ git commit -m "refactor: turn the server app into the game app"
 
 ---
 
-### Task 2: Каркас клиента на Vite и React
+### Task 2: The client skeleton on Vite and React
 
 **Files:**
-- Modify: `apps/game/package.json`, `apps/game/wrangler.jsonc`, `apps/game/tsconfig.json` → удалить, заменив на два новых
+- Modify: `apps/game/package.json`, `apps/game/wrangler.jsonc`, `apps/game/tsconfig.json` → delete, replacing it with two new ones
 - Create: `apps/game/vite.config.ts`, `apps/game/index.html`, `apps/game/tsconfig.client.json`, `apps/game/tsconfig.worker.json`, `apps/game/src/client/main.tsx`, `apps/game/src/client/app.tsx`
 
-- [ ] **Step 1: Добавить зависимости клиента в `apps/game/package.json`**
+- [ ] **Step 1: Add the client dependencies to `apps/game/package.json`**
 
-Версии закреплены точно: React именно 19.2.8, иначе react-three-fiber откажется ставиться.
+Versions are pinned exactly: React must be exactly 19.2.8, otherwise react-three-fiber refuses to install.
 
 ```json
   "dependencies": {
@@ -156,7 +156,7 @@ git commit -m "refactor: turn the server app into the game app"
   }
 ```
 
-И скрипты:
+And the scripts:
 
 ```json
   "scripts": {
@@ -171,7 +171,7 @@ git commit -m "refactor: turn the server app into the game app"
   },
 ```
 
-- [ ] **Step 2: Создать `apps/game/vite.config.ts`**
+- [ ] **Step 2: Create `apps/game/vite.config.ts`**
 
 ```ts
 import { cloudflare } from '@cloudflare/vite-plugin';
@@ -183,9 +183,9 @@ export default defineConfig({
 });
 ```
 
-- [ ] **Step 3: Добавить статику в `apps/game/wrangler.jsonc`**
+- [ ] **Step 3: Add the static files to `apps/game/wrangler.jsonc`**
 
-Каталог собранной статики подставляет плагин, руками его не указываем.
+The plugin fills in the directory of the built static files; we do not set it by hand.
 
 ```jsonc
   "assets": {
@@ -194,7 +194,7 @@ export default defineConfig({
   },
 ```
 
-- [ ] **Step 4: Создать `apps/game/index.html`**
+- [ ] **Step 4: Create `apps/game/index.html`**
 
 ```html
 <!doctype html>
@@ -211,9 +211,9 @@ export default defineConfig({
 </html>
 ```
 
-- [ ] **Step 5: Заменить `apps/game/tsconfig.json` двумя конфигами**
+- [ ] **Step 5: Replace `apps/game/tsconfig.json` with two configs**
 
-Удалить `tsconfig.json` и создать `apps/game/tsconfig.client.json`:
+Delete `tsconfig.json` and create `apps/game/tsconfig.client.json`:
 
 ```json
 {
@@ -234,7 +234,7 @@ export default defineConfig({
 }
 ```
 
-и `apps/game/tsconfig.worker.json`:
+and `apps/game/tsconfig.worker.json`:
 
 ```json
 {
@@ -254,7 +254,7 @@ export default defineConfig({
 }
 ```
 
-- [ ] **Step 6: Создать `apps/game/src/client/main.tsx`**
+- [ ] **Step 6: Create `apps/game/src/client/main.tsx`**
 
 ```tsx
 import { StrictMode } from 'react';
@@ -271,9 +271,9 @@ createRoot(container).render(
 );
 ```
 
-- [ ] **Step 7: Создать временный `apps/game/src/client/app.tsx`**
+- [ ] **Step 7: Create a temporary `apps/game/src/client/app.tsx`**
 
-Настоящие экраны появятся в Task 4; сейчас нужен минимум, чтобы проверить сборку.
+The real screens arrive in Task 4; for now the minimum is enough to check the build.
 
 ```tsx
 export function App() {
@@ -281,7 +281,7 @@ export function App() {
 }
 ```
 
-- [ ] **Step 8: Проверить установку и сборку**
+- [ ] **Step 8: Check the install and the build**
 
 ```bash
 pnpm install
@@ -289,9 +289,9 @@ pnpm --filter @clicker/app run build
 pnpm --filter @clicker/app typecheck
 pnpm --filter @clicker/app test
 ```
-Expected: сборка печатает две части — `dist/clicker/index.js` с Worker и `dist/client/…` со статикой; проверки типов молчат; тесты Worker по-прежнему 15.
+Expected: the build prints two parts — `dist/clicker/index.js` with the Worker and `dist/client/…` with the static files; the typecheck is silent; the Worker tests are still 15.
 
-- [ ] **Step 9: Добавить в `.gitignore` сборку и закоммитить**
+- [ ] **Step 9: Add the build output to `.gitignore` and commit**
 
 ```gitignore
 dist/
@@ -305,19 +305,19 @@ git commit -m "feat(app): serve the client and the worker from one vite app"
 
 ---
 
-### Task 3: Соединение, состояние и ссылки на комнату
+### Task 3: Connection, state and room links
 
-> **Выполнено, но частично устарело.** Код этой задачи уже в репозитории. Формат сообщений после неё
-> изменился: у каждого сообщения появилось поле версии `v`, а `{ type: 'click' }` стал
-> `{ type: 'input', input: { type: 'click' } }`. Приводит их в порядок план 4 — здесь снипеты
-> оставлены как есть, чтобы история задачи совпадала с тем, что было сделано.
+> **Done, but partly out of date.** The code of this task is already in the repository. The message
+> format changed after it: every message gained a version field `v`, and `{ type: 'click' }` became
+> `{ type: 'input', input: { type: 'click' } }`. Plan 4 brings them in order — the snippets here are
+> left as they are, so that the history of the task matches what was done.
 
 **Files:**
 - Create: `apps/game/src/client/room-link.ts`, `apps/game/src/client/store.ts`, `apps/game/src/client/net.ts`
 
-- [ ] **Step 1: Создать `apps/game/src/client/room-link.ts`**
+- [ ] **Step 1: Create `apps/game/src/client/room-link.ts`**
 
-Идентификаторы берём из пакета протокола — там же, где их проверяет сервер.
+Ids come from the protocol package — the same place where the server checks them.
 
 ```ts
 import { generateId, isId } from '@clicker/protocol';
@@ -338,11 +338,11 @@ function write(key: string, value: string): void {
   try {
     window.localStorage.setItem(key, value);
   } catch {
-    // Приватное окно или запрет на хранилище: играть это не мешает.
+    // A private window or a ban on storage: this does not stop play.
   }
 }
 
-/** Постоянный идентификатор игрока. Это секрет сессии, наружу он не уходит. */
+/** The player's permanent id. It is a session secret and never leaves the client. */
 export function playerId(): string {
   const stored = read(PLAYER_ID);
   if (stored !== null && isId(stored)) return stored;
@@ -359,7 +359,7 @@ export function saveName(name: string): void {
   write(NAME, name);
 }
 
-/** `/r/<roomId>` — сама ссылка и есть приглашение. */
+/** `/r/<roomId>` — the link itself is the invitation. */
 export function roomIdFromPath(): string | null {
   const match = window.location.pathname.match(/^\/r\/([A-Za-z0-9_-]{22})$/);
   return match?.[1] ?? null;
@@ -385,8 +385,9 @@ export function rememberHostKey(roomId: string, key: string): void {
 }
 
 /**
- * Ключ хоста приходит во фрагменте адреса: он не уходит на сервер.
- * Сразу после чтения стираем его из строки браузера — на дейли экран показывают всем.
+ * The host key arrives in the URL fragment: it does not go to the server.
+ * Right after reading it we erase it from the browser's address bar — at the daily the screen is
+ * shown to everyone.
  */
 export function takeHostKeyFromHash(roomId: string): void {
   const match = window.location.hash.match(/^#host=([A-Za-z0-9_-]{22})$/);
@@ -411,7 +412,7 @@ export function hostLink(roomId: string, hostKey: string): string {
 }
 ```
 
-- [ ] **Step 2: Создать `apps/game/src/client/store.ts`**
+- [ ] **Step 2: Create `apps/game/src/client/store.ts`**
 
 ```ts
 import type { ServerErrorCode, SnapshotMessage } from '@clicker/protocol';
@@ -424,7 +425,7 @@ interface ClientState {
   you: string | null;
   isHost: boolean;
   snapshot: SnapshotMessage | null;
-  /** Разница между часами сервера и браузера, по максимуму последних значений. */
+  /** The difference between the server and browser clocks, by the maximum of the latest values. */
   offset: number;
   localClicks: number;
   lastError: ServerErrorCode | 'invalid_message' | null;
@@ -449,7 +450,7 @@ export const useClient = create<ClientState>((set) => ({
   setStatus: (status) => set({ status }),
   welcome: (you, isHost) => set({ you, isHost }),
   receive: (snapshot) => {
-    // Задержка сети только уменьшает разницу, поэтому берём максимум из последних замеров.
+    // Network delay only shrinks the difference, so we take the maximum of the latest samples.
     samples.push(snapshot.serverNow - Date.now());
     if (samples.length > OFFSET_SAMPLES) samples.shift();
     set((state) => ({
@@ -462,13 +463,13 @@ export const useClient = create<ClientState>((set) => ({
   countClick: () => set((state) => ({ localClicks: state.localClicks + 1 })),
 }));
 
-/** Серверное время по часам браузера. */
+/** Server time by the browser's clock. */
 export function serverNow(): number {
   return Date.now() + useClient.getState().offset;
 }
 ```
 
-- [ ] **Step 3: Создать `apps/game/src/client/net.ts`**
+- [ ] **Step 3: Create `apps/game/src/client/net.ts`**
 
 ```ts
 import { parseServerMessage } from '@clicker/protocol';
@@ -490,7 +491,7 @@ export function connect(roomId: string, name: string): Connection {
   });
 
   const send = (message: unknown): void => {
-    // Копить нажатия во время обрыва нельзя: они долетят пачкой после конца раунда.
+    // Presses must not pile up during a drop: they would land in a bunch after the round ends.
     if (socket.readyState !== WebSocket.OPEN) return;
     socket.send(JSON.stringify(message));
   };
@@ -528,7 +529,7 @@ export function connect(roomId: string, name: string): Connection {
 }
 ```
 
-- [ ] **Step 4: Проверить типы и закоммитить**
+- [ ] **Step 4: Check the types and commit**
 
 ```bash
 pnpm format
@@ -539,34 +540,37 @@ git commit -m "feat(app): connect to a room and keep client state"
 
 ---
 
-### Task 4: Меню, вход по имени и экраны
+### Task 4: Menu, name entry and screens
 
 **Files:**
 - Create: `apps/game/src/client/theme.ts`, `apps/game/src/client/strings.ts`, `apps/game/src/client/clock.ts`, `apps/game/src/client/ui.tsx`, `apps/game/src/client/hud.tsx`, `apps/game/src/client/screens/{landing,join,lobby,arena,results}.tsx`
 - Modify: `apps/game/src/client/app.tsx`
 
-Интерфейс на обычном React и inline-стилях из `theme.ts`: отдельная система стилей этому проекту не нужна. Тексты — только на английском и только через `strings.ts`, чтобы язык менялся в одном месте.
+The interface is plain React with inline styles from `theme.ts`: this project needs no separate styling system. Texts are English only and only through `strings.ts`, so the language changes in one place.
 
-**Путь игрока.** Главная → «Create room» → адрес комнаты → **имя спрашиваем до входа в комнату** →
-лобби → отсчёт и раунд → результаты → «Play again». Имя запоминается, и во второй раз экран входа
-не показывается; сменить имя можно из лобби.
+**The player's path.** Home → "Create room" → room address → **we ask for the name before entering
+the room** → lobby → countdown and round → results → "Play again". The name is remembered, and the
+second time the entry screen is not shown; the name can be changed from the lobby.
 
-**HUD** виден в отсчёте, раунде и результатах и всегда отвечает на четыре вопроса: какая фаза,
-сколько осталось, сколько у меня, кто ведёт. Он же показывает число игроков и состояние связи.
+**HUD** is visible in the countdown, the round and the results, and always answers four questions:
+which phase, how much time is left, how many I have, who is leading. It also shows the number of
+players and the state of the connection.
 
-> **Поправки по факту (2026-09-14).** План писался до плана 4, и три места устарели:
+> **Corrections after the fact (2026-09-14).** The plan was written before plan 4, and three places
+> went out of date:
 >
-> 1. **`strings.errors` неполон.** `ServerErrorCode` теперь включает `invalid_message` и
->    `bad_version`. Нужны оба ключа: игрок со старой вкладкой должен прочитать, что её надо
->    перезагрузить, а не увидеть пустоту.
-> 2. **`index.html` объявляет `lang="ru"`**, хотя весь интерфейс английский. Правильно `lang="en"` —
->    иначе браузер предлагает перевести страницу с несуществующего языка, а скринридер читает
->    английский текст с русской фонетикой.
-> 3. **Счёт лежит в слоте режима.** У игрока в `players[]` только `{ id, name, connected }`, а число
->    кликов — в `snapshot.data.scores[id]`. Код HUD в Step 5 уже правильный; проза в Step 6 местами
->    говорит о старом формате, и верить надо коду.
+> 1. **`strings.errors` is incomplete.** `ServerErrorCode` now includes `invalid_message` and
+>    `bad_version`. Both keys are needed: a player with an old tab must read that it needs a reload,
+>    not see emptiness.
+> 2. **`index.html` declares `lang="ru"`**, although the whole interface is English. The right value
+>    is `lang="en"` — otherwise the browser offers to translate the page from a language that is not
+>    there, and a screen reader reads English text with Russian phonetics.
+> 3. **The score lives in the mode's slot.** A player in `players[]` has only
+>    `{ id, name, connected }`, and the click count is in `snapshot.data.scores[id]`. The HUD code in
+>    Step 5 is already right; the prose in Step 6 sometimes speaks of the old format, and the code is
+>    the one to trust.
 
-- [ ] **Step 1: Создать `apps/game/src/client/theme.ts`**
+- [ ] **Step 1: Create `apps/game/src/client/theme.ts`**
 
 ```ts
 export const theme = {
@@ -581,7 +585,7 @@ export const theme = {
 };
 ```
 
-- [ ] **Step 2: Создать `apps/game/src/client/strings.ts`**
+- [ ] **Step 2: Create `apps/game/src/client/strings.ts`**
 
 ```ts
 export const strings = {
@@ -619,11 +623,11 @@ export const strings = {
 };
 ```
 
-- [ ] **Step 3: Создать часы `apps/game/src/client/clock.ts`**
+- [ ] **Step 3: Create the clock `apps/game/src/client/clock.ts`**
 
-Снимки приходят десять раз в секунду, а таймер должен идти плавно и по серверному времени.
-Отдельный тик на 100 мс держит только те компоненты, которым нужно время, — перерисовывать из-за
-него весь экран незачем.
+Snapshots arrive ten times a second, while the timer must run smoothly and by server time.
+A separate 100 ms tick feeds only the components that need the time — there is no reason to redraw
+the whole screen because of it.
 
 ```ts
 import { useEffect, useState } from 'react';
@@ -647,18 +651,19 @@ export function secondsLeft(until: number, now: number): number {
 }
 ```
 
-- [ ] **Step 4: Создать общие элементы `apps/game/src/client/ui.tsx`**
+- [ ] **Step 4: Create the shared elements `apps/game/src/client/ui.tsx`**
 
-Три штуки, которые повторяются на всех экранах: `Screen` (тёмный фон, центральная колонка шириной до
-860 пикселей, отступы), `Button` (крупная кнопка, `touch-action: manipulation`, состояние
-`disabled`), `CopyButton` (копирует строку в буфер и на две секунды меняет надпись на `Copied`).
-`CopyButton` обязан переживать отказ `navigator.clipboard`: в этом случае показывает саму ссылку,
-чтобы её можно было выделить руками.
+Three pieces that repeat on every screen: `Screen` (a dark background, a central column up to
+860 pixels wide, padding), `Button` (a large button, `touch-action: manipulation`, a `disabled`
+state), `CopyButton` (copies a string to the clipboard and for two seconds changes the label to
+`Copied`). `CopyButton` must survive a `navigator.clipboard` refusal: in that case it shows the link
+itself, so that it can be selected by hand.
 
-- [ ] **Step 5: Создать HUD `apps/game/src/client/hud.tsx`**
+- [ ] **Step 5: Create the HUD `apps/game/src/client/hud.tsx`**
 
-Одна строка на широком экране, две — на узком. Слева фаза и таймер, в центре свой счёт, справа
-лидер и число игроков. Значения берутся из снимка, время — из `useServerClock`.
+One row on a wide screen, two on a narrow one. Phase and timer on the left, the player's own score
+in the centre, the leader and the number of players on the right. Values come from the snapshot,
+time from `useServerClock`.
 
 ```tsx
 import { strings } from './strings';
@@ -727,47 +732,50 @@ export function Hud() {
 }
 ```
 
-- [ ] **Step 6: Создать экраны в `apps/game/src/client/screens/`**
+- [ ] **Step 6: Create the screens in `apps/game/src/client/screens/`**
 
-- **`landing.tsx`** — название, строка `tagline`, одна кнопка `createRoom` с `data-testid="create-room"`.
-  По нажатию: `createRoom()` из `room-link.ts`, затем `history.pushState` на `/r/<roomId>`.
-- **`join.tsx`** — заголовок с номером комнаты, поле `data-testid="name-input"` (значение из
-  `savedName()`, `maxLength` из `MAX_NAME_LENGTH` протокола) и кнопка `data-testid="enter"`.
-  Кнопка неактивна, пока в поле после `trim` пусто. По нажатию: `saveName(name)` и вход в комнату.
-- **`lobby.tsx`** — список игроков `data-testid="players"` (у отключённых приглушённый цвет),
-  `CopyButton` с приглашением, у хоста ещё `CopyButton` со ссылкой хоста и кнопка
-  `data-testid="start"`. Не хосту вместо кнопки — строка `waiting`. Плюс ссылка `changeName`,
-  возвращающая на экран входа.
-- **`arena.tsx`** — `Hud`, сцена (Task 5) и кнопка `data-testid="click"` во всю ширину, высотой не
-  меньше 96 пикселей, по `onPointerDown`. Кнопка активна строго внутри раунда по серверному времени:
+- **`landing.tsx`** — the title, the `tagline` line, one `createRoom` button with
+  `data-testid="create-room"`. On press: `createRoom()` from `room-link.ts`, then `history.pushState`
+  to `/r/<roomId>`.
+- **`join.tsx`** — a heading with the room number, a `data-testid="name-input"` field (value from
+  `savedName()`, `maxLength` from the protocol's `MAX_NAME_LENGTH`) and a `data-testid="enter"`
+  button. The button is disabled while the field is empty after `trim`. On press: `saveName(name)`
+  and entering the room.
+- **`lobby.tsx`** — a `data-testid="players"` list of players (disconnected ones in a muted
+  colour), a `CopyButton` with the invite, and for the host also a `CopyButton` with the host link
+  and a `data-testid="start"` button. A non-host gets the `waiting` line instead of the button. Plus
+  a `changeName` link that returns to the entry screen.
+- **`arena.tsx`** — `Hud`, the scene (Task 5) and a `data-testid="click"` button of full width, at
+  least 96 pixels tall, on `onPointerDown`. The button is active strictly inside the round, by
+  server time:
 
 ```tsx
 const live = snapshot.round !== null && now >= snapshot.round.goAt && now <= snapshot.round.endsAt;
 ```
 
-- **`results.tsx`** — `Hud`, сцена с подсвеченным победителем, баннер `data-testid="winner"`
-  (`«<name> wins!»` или `nobodyClicked`, если у первого места ноль кликов) и таблица мест
-  `data-testid="results"`. У хоста — кнопка `again` с тем же `data-testid="start"`, чтобы сквозной
-  тест не зависел от того, первый это раунд или второй.
+- **`results.tsx`** — `Hud`, the scene with the winner highlighted, a `data-testid="winner"` banner
+  (`"<name> wins!"` or `nobodyClicked` if first place has zero clicks) and a table of places
+  `data-testid="results"`. The host gets an `again` button with the same `data-testid="start"`, so
+  that the end-to-end test does not depend on whether this is the first round or the second.
 
-- [ ] **Step 7: Собрать `apps/game/src/client/app.tsx`**
+- [ ] **Step 7: Assemble `apps/game/src/client/app.tsx`**
 
-Порядок выбора экрана: нет комнаты в адресе → `Landing`; имя не сохранено → `Join`; снимка ещё нет →
-`Lobby` со списком из одного себя; дальше по фазе — `lobby`, `arena` (`countdown` и `running`),
-`results`.
+The order of screen choice: no room in the address → `Landing`; name not saved → `Join`; no
+snapshot yet → `Lobby` with a list of just yourself; after that by phase — `lobby`, `arena`
+(`countdown` and `running`), `results`.
 
-Поверх всего два оповещения: плашка `reconnecting`, когда `status !== 'open'`, и `roundAborted`,
-когда `notice === 'round_aborted'`. Ошибка из `lastError` показывается текстом из `strings.errors`
-рядом с той кнопкой, которая её вызвала, и гаснет при следующем действии игрока.
+On top of everything two notices: a `reconnecting` banner when `status !== 'open'`, and
+`roundAborted` when `notice === 'round_aborted'`. An error from `lastError` is shown with the text
+from `strings.errors` next to the button that caused it, and goes away at the player's next action.
 
-- [ ] **Step 8: Проверить глазами**
+- [ ] **Step 8: Check by eye**
 
-Собрать (`pnpm --filter @clicker/app run build`), поднять `pnpm --filter @clicker/app dev`, открыть
-две вкладки в одной комнате и пройти путь целиком: создание, ввод имени, лобби, отсчёт, раунд,
-результаты. Отдельно посмотреть на узком экране (в браузере — режим телефона): HUD должен
-переноситься на две строки, кнопка клика оставаться во всю ширину, зум по двойному тапу не срабатывать.
+Build (`pnpm --filter @clicker/app run build`), start `pnpm --filter @clicker/app dev`, open
+two tabs in one room and walk the whole path: creation, name entry, lobby, countdown, round,
+results. Look separately at a narrow screen (in the browser, phone mode): the HUD must wrap onto two
+lines, the click button must stay full width, double-tap zoom must not trigger.
 
-- [ ] **Step 9: Закоммитить**
+- [ ] **Step 9: Commit**
 
 ```bash
 pnpm format
@@ -779,24 +787,25 @@ git commit -m "feat(app): add the menu, name entry, hud and screens"
 
 ---
 
-### Task 5: Сцена гонки на three.js
+### Task 5: The race scene on three.js
 
-> **Выполнено и проверено (2026-09-15), коммит `1ef26d7`.** Метафора выбрана другая, чем была
-> изначально: не столбики, растущие со счётом, а **честная гонка** — игроки едут по дорожке,
-> положение = число кликов, камера держит в кадре всё поле.
+> **Done and verified (2026-09-15), commit `1ef26d7`.** A different metaphor was chosen than the
+> original one: not columns growing with the score, but an **honest race** — players run down a lane,
+> position = number of clicks, the camera keeps the whole field in frame.
 >
-> Порядок здесь обратный обычному намеренно: сцена сперва заработала и была снята с экрана, и только
-> потом её код попал в план. В прошлый раз задача была написана «из головы» — получились столбики,
-> которые прошли все проверки и выглядели сломанными. Ниже дословный код из репозитория.
+> The order here is deliberately the reverse of the usual: the scene first worked and was captured
+> from the screen, and only then did its code go into the plan. Last time the task was written off
+> the cuff — the result was columns that passed every check and looked broken. Below is the verbatim
+> code from the repository.
 
 **Files:**
 - Create: `apps/game/src/client/scene/race.tsx`
 - Modify: `apps/game/src/client/screens/arena.tsx`, `apps/game/src/client/screens/results.tsx`
 
-- [x] **Step 1: Создать `apps/game/src/client/scene/race.tsx`**
+- [x] **Step 1: Create `apps/game/src/client/scene/race.tsx`**
 
-Положение бегуна догоняет цель каждый кадр через `damp`, без `setState`: так снимки, приходящие
-десять раз в секунду, превращаются в плавное движение.
+A runner's position catches up with its target every frame through `damp`, without `setState`:
+this turns snapshots arriving ten times a second into smooth motion.
 
 ```tsx
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
@@ -942,9 +951,9 @@ export default function Race({ racers, you }: { racers: Racer[]; you: string | n
 }
 ```
 
-- [x] **Step 2: Подключить сцену лениво**
+- [x] **Step 2: Hook the scene up lazily**
 
-В `arena.tsx` и `results.tsx` — рядом с импортами:
+In `arena.tsx` and `results.tsx`, next to the imports:
 
 ```tsx
 import { lazy, Suspense } from 'react';
@@ -953,13 +962,13 @@ import { lazy, Suspense } from 'react';
 const Race = lazy(() => import('../scene/race'));
 ```
 
-и в теле компонента ещё одна строка, без которой подсветка «своего» работать не будет:
+and one more line in the component body, without which highlighting "your own" will not work:
 
 ```tsx
   const you = useClient((state) => state.you);
 ```
 
-Контейнер сцены обязан держать пропорции — иначе она сплющивается в полоску во всю ширину экрана:
+The scene container must keep its proportions — otherwise it is squashed into a strip the full width of the screen:
 
 ```tsx
 <div
@@ -984,24 +993,24 @@ const Race = lazy(() => import('../scene/race'));
 </div>
 ```
 
-- [x] **Step 3: Проверить размер сборки**
+- [x] **Step 3: Check the build size**
 
 Run: `pnpm --filter @clicker/app run build`
-Фактический результат:
+Actual result:
 
 ```
 dist/client/assets/index-DM0_z0xy.js  224.32 kB │ gzip:  71.13 kB
 dist/client/assets/race-gis0Yue6.js   894.80 kB │ gzip: 236.44 kB
 ```
 
-Сцена уезжает отдельным чанком, вход остаётся 224 КБ — в этом и весь смысл ленивой загрузки.
+The scene ships as a separate chunk, the entry stays at 224 KB — which is the whole point of lazy loading.
 
-- [x] **Step 4: Проверить глазами**
+- [x] **Step 4: Check by eye**
 
-Пройти раунд целиком в двух контекстах настоящего браузера (десктоп 1280×860 и Pixel 7) и посмотреть
-на снимки. Зелёная сборка о внешнем виде не говорит ничего.
+Play a whole round in two contexts of a real browser (desktop 1280×860 and Pixel 7) and look at
+the screenshots. A green build says nothing about how it looks.
 
-- [x] **Step 5: Закоммитить**
+- [x] **Step 5: Commit**
 
 ```bash
 pnpm format
@@ -1009,61 +1018,64 @@ git add apps/game/src/client
 git commit -m "feat(app): draw the round as a race on a lane, framed to keep the field in view"
 ```
 
-## Что выяснилось на этой задаче
+## What came out of this task
 
-1. **Масштаб фиксированный, а не относительно лидера.** При относительном игрок, который в комнате
-   один, всегда упёрт в максимум и роста не видит — этим и были плохи столбики.
-2. **Движение не читается без разметки.** Бегун над однотонной плоскостью выглядит неподвижным;
-   поперечные отметки через метр и линия старта дают глазу за что зацепиться.
-3. **Камера ведёт поле, а не лидера.** Первая версия следила за лидером, и отстающий уезжал за левый
-   край кадра — пропадало ровно то, ради чего гонка и нужна.
-4. **Подписи имён в 3D не делаем.** `drei/Text` тянет шрифт с внешнего CDN: лишняя сетевая
-   зависимость на Cloudflare. Имя лидера и так в HUD.
-5. **Ключ для отметок — расстояние, а не индекс массива.** Biome справедливо ругается на `key={index}`;
-   правильный ответ здесь не подавить правило, а взять настоящий идентификатор.
-6. **three.js сыплет предупреждениями из своих внутренностей** — `PCFSoftShadowMap has been removed`
-   и `THREE.Clock deprecated`. Это react-three-fiber, не наш код, и исправить их нечем.
+1. **A fixed scale, not one relative to the leader.** With a relative one a player alone in the
+   room is always pinned at the maximum and sees no growth — which is what was wrong with the
+   columns.
+2. **Motion does not read without markings.** A runner over a plain-coloured plane looks motionless;
+   cross marks every metre and a start line give the eye something to catch on.
+3. **The camera leads the field, not the leader.** The first version followed the leader, and the
+   one behind slid past the left edge of the frame — exactly what a race exists to show vanished.
+4. **No name labels in 3D.** `drei/Text` pulls a font from an external CDN: an extra network
+   dependency on Cloudflare. The leader's name is in the HUD anyway.
+5. **The key for the marks is the distance, not the array index.** Biome rightly complains about
+   `key={index}`; the right answer here is not to suppress the rule but to take a real identifier.
+6. **three.js spews warnings from its own internals** — `PCFSoftShadowMap has been removed` and
+   `THREE.Clock deprecated`. That is react-three-fiber, not our code, and there is nothing to fix
+   them with.
 
-### Про съёмку экранов
+### About taking screenshots
 
-Инструмент съёмки оказался источником трёх ложных диагнозов подряд, и это стоит помнить:
+The screenshot tool turned out to be the source of three false diagnoses in a row, and this is worth remembering:
 
-- **Опрос страницы локаторами Playwright во время раунда залипает на минуты.** Сама страница при этом
-  держит 60 кадров в секунду — проверено счётчиком `requestAnimationFrame` внутри страницы. Все
-  ожидания в сценарии должны быть на стороне node, а не через `waitForTimeout`/локаторы.
-- **Две вкладки одного контекста — это один игрок.** У них общий `localStorage`, а значит общий
-  `playerId`: гость молча входит под хостом. Нужны два разных контекста браузера.
-- **Нажатия по отключённой кнопке пропадают бесследно.** `dispatchEvent` на `disabled` элементе не
-  делает ничего, и раунд заканчивается со счётом 0:0 без единой ошибки. Сценарий обязан сообщать,
-  что кнопка была отключена, иначе это читается как «игра не считает клики».
+- **Polling the page with Playwright locators during a round hangs for minutes.** The page itself
+  holds 60 frames per second meanwhile — checked with a `requestAnimationFrame` counter inside the
+  page. All waits in the script must be on the node side, not through `waitForTimeout`/locators.
+- **Two tabs of one context are one player.** They share `localStorage`, so they share `playerId`:
+  the guest silently joins as the host. Two different browser contexts are needed.
+- **Presses on a disabled button vanish without a trace.** `dispatchEvent` on a `disabled` element
+  does nothing, and the round ends with a score of 0:0 without a single error. The script must
+  report that the button was disabled, otherwise it reads as "the game does not count clicks".
 
 ---
 
-### Task 6: Сквозной тест в двух браузерах
+### Task 6: End-to-end test in two browsers
 
-> **Выполнено (2026-09-15), коммит `1fd01b0`.** Прогон: **4 passed за 33,3 с** — два теста в двух
-> проектах. Отличия от написанного ниже, все по факту работы:
+> **Done (2026-09-15), commit `1fd01b0`.** Run: **4 passed in 33.3 s** — two tests in two
+> projects. Differences from what is written below, all from the work itself:
 >
-> - таймаут теста 90 с, а не 60: раунд идёт на настоящих серверных таймингах, 3 + 10 секунд;
-> - `workers: 1` — два игрока в одном раунде уже занимают два контекста, параллельные раунды
->   только дрались бы за dev-сервер;
-> - `trace: 'retain-on-failure'` — упавший раунд по одному логу не разобрать;
-> - проекты названы `desktop` и `mobile`;
-> - тестов два: сам раунд и выход из комнаты.
+> - the test timeout is 90 s, not 60: the round runs on real server timings, 3 + 10 seconds;
+> - `workers: 1` — two players in one round already take two contexts, parallel rounds would only
+>   fight over the dev server;
+> - `trace: 'retain-on-failure'` — a failed round cannot be figured out from the log alone;
+> - the projects are named `desktop` and `mobile`;
+> - there are two tests: the round itself and leaving the room.
 >
-> **Ошибка, на которой сценарий упал с первого раза:** хелпер входа шёл на `/` и сразу искал поле
-> имени, но на `/` находится главная с кнопкой Create room — поле появляется только после создания
-> комнаты. Оба «race» теста висели до таймаута, весь прогон занимал 3,1 минуты вместо 33 секунд.
+> **The error the script failed on the first time:** the login helper went to `/` and immediately
+> looked for the name field, but `/` is the home page with the Create room button — the field
+> appears only after a room is created. Both "race" tests hung until the timeout, and the whole run
+> took 3.1 minutes instead of 33 seconds.
 
 **Files:**
 - Create: `apps/game/playwright.config.ts`, `apps/game/e2e/round.spec.ts`
 
-- [ ] **Step 1: Установить браузер**
+- [ ] **Step 1: Install the browser**
 
 Run: `pnpm --filter @clicker/app exec playwright install chromium`
-Expected: скачивается сборка, совпадающая с версией Playwright. Без этого тесты не стартуют.
+Expected: a build matching the Playwright version is downloaded. Without it the tests do not start.
 
-- [ ] **Step 2: Создать `apps/game/playwright.config.ts`**
+- [ ] **Step 2: Create `apps/game/playwright.config.ts`**
 
 ```ts
 import { defineConfig, devices } from '@playwright/test';
@@ -1086,16 +1098,16 @@ export default defineConfig({
 });
 ```
 
-- [ ] **Step 3: Написать `apps/game/e2e/round.spec.ts`**
+- [ ] **Step 3: Write `apps/game/e2e/round.spec.ts`**
 
-Сценарий: хост открывает главную и создаёт комнату; второй игрок заходит по её адресу; оба вводят ники и видят друг друга в лобби; хост запускает раунд; после отсчёта второй кликает пять раз; оба дожидаются результатов и видят одинаковую таблицу с победителем. Ждать фазу нужно по снимку, а не по таймеру: `await expect(page.getByTestId('hud-phase')).toContainText('Go!')`.
+The scenario: the host opens the home page and creates a room; the second player enters by its address; both enter nicknames and see each other in the lobby; the host starts a round; after the countdown the second clicks five times; both wait for the results and see the same table with the winner. The phase must be awaited by the snapshot, not by a timer: `await expect(page.getByTestId('hud-phase')).toContainText('Go!')`.
 
-- [ ] **Step 4: Прогнать**
+- [ ] **Step 4: Run**
 
 Run: `pnpm --filter @clicker/app run e2e`
-Expected: тесты проходят в обоих проектах. Раунд идёт с настоящими длительностями, поэтому один прогон занимает около 20 секунд.
+Expected: the tests pass in both projects. The round runs with real durations, so one run takes about 20 seconds.
 
-- [ ] **Step 5: Закоммитить**
+- [ ] **Step 5: Commit**
 
 ```bash
 pnpm format
@@ -1107,19 +1119,19 @@ git commit -m "test(app): play a round in two real browsers"
 
 ### Task 7: CI
 
-> **Выполнено (2026-09-15), коммит `139626e`.** В workflow добавлены сборка, установка браузера
-> с системными зависимостями и сквозной прогон; отчёт и трассы выгружаются артефактом при падении.
-> Заодно переведён на английский единственный оставшийся русский комментарий в файле.
+> **Done (2026-09-15), commit `139626e`.** The workflow gained a build, a browser install with
+> system dependencies and an end-to-end run; the report and traces are uploaded as an artifact on
+> failure. Along the way the only remaining Russian comment in the file was translated into English.
 >
-> **Не проверено машиной:** в системе нет ни PyYAML, ни `js-yaml`, поэтому синтаксис YAML
-> подтверждён только глазами. Настоящая проверка — первый же push, который запустит workflow.
+> **Not checked by a machine:** the system has neither PyYAML nor `js-yaml`, so the YAML syntax is
+> confirmed by eye only. The real check is the first push, which will start the workflow.
 
 **Files:**
 - Modify: `.github/workflows/ci.yml`
 
-- [ ] **Step 1: Добавить сборку, браузер и сквозные тесты**
+- [ ] **Step 1: Add the build, the browser and the end-to-end tests**
 
-После шага `pnpm test`:
+After the `pnpm test` step:
 
 ```yaml
       - run: pnpm --filter @clicker/app run build
@@ -1133,7 +1145,7 @@ git commit -m "test(app): play a round in two real browsers"
           retention-days: 7
 ```
 
-- [ ] **Step 2: Закоммитить**
+- [ ] **Step 2: Commit**
 
 ```bash
 git add .github/workflows/ci.yml
@@ -1142,33 +1154,33 @@ git commit -m "ci: build the app and run the end-to-end round"
 
 ---
 
-### Task 8: Деплой
+### Task 8: Deploy
 
-**Files:** нет новых, только запуск
+**Files:** none new, only running
 
-- [ ] **Step 1: Убедиться, что сборка деплоится**
+- [ ] **Step 1: Make sure the build deploys**
 
 Run: `pnpm --filter @clicker/app run build && pnpm --filter @clicker/app exec wrangler deploy --dry-run`
-Expected: wrangler читает сгенерированный `dist/clicker/wrangler.json`, находит статику в `dist/client`, показывает привязку `env.Room` и переменные, затем выходит.
+Expected: wrangler reads the generated `dist/clicker/wrangler.json`, finds the static files in `dist/client`, shows the `env.Room` binding and the variables, then exits.
 
-- [ ] **Step 2: 👤 Твои шаги перед первым настоящим деплоем**
+- [ ] **Step 2: 👤 Your steps before the first real deploy**
 
-1. Завести личный аккаунт на dash.cloudflare.com, карту не привязывать.
-2. Задать поддомен `<имя>.workers.dev` в разделе Workers & Pages.
-3. Выполнить `npx wrangler@latest login` и подтвердить вход в браузере.
+1. Create a personal account at dash.cloudflare.com, do not attach a card.
+2. Set the `<name>.workers.dev` subdomain in the Workers & Pages section.
+3. Run `npx wrangler@latest login` and confirm the login in the browser.
 
-- [ ] **Step 3: Задеплоить**
+- [ ] **Step 3: Deploy**
 
 Run: `pnpm --filter @clicker/app run deploy`
-Expected: wrangler печатает адрес вида `https://clicker.<поддомен>.workers.dev`.
+Expected: wrangler prints an address of the form `https://clicker.<subdomain>.workers.dev`.
 
-- [ ] **Step 4: Проверить игру вживую**
+- [ ] **Step 4: Check the game live**
 
-Открыть адрес, создать комнату, отправить ссылку на телефон, сыграть раунд вдвоём. Проверить: обе стороны видят друг друга, отсчёт совпадает, победитель одинаковый, кнопка на телефоне не вызывает зум.
+Open the address, create a room, send the link to a phone, play a round with two. Check: both sides see each other, the countdown matches, the winner is the same, the button on the phone does not trigger zoom.
 
 ---
 
-## Проверка результата
+## Verifying the result
 
 ```bash
 pnpm install --frozen-lockfile
@@ -1179,18 +1191,18 @@ pnpm --filter @clicker/app run build
 pnpm --filter @clicker/app run e2e
 ```
 
-Ожидается: линтер и типы чистые, 107 тестов (60 + 32 + 15), сборка даёт две части, сквозной тест проходит в десктопном и мобильном проектах.
+Expected: the linter and types are clean, 107 tests (60 + 32 + 15), the build gives two parts, the end-to-end test passes in the desktop and mobile projects.
 
-> **Поправка по факту (2026-09-14).** Здесь стояло 106 (60 + 31 + 15). План 4 добавил в протокол
-> проверку на чужую версию сообщения, и тестов в `packages/protocol` стало 32.
+> **Correction after the fact (2026-09-14).** This used to say 106 (60 + 31 + 15). Plan 4 added a
+> check for a foreign message version to the protocol, and `packages/protocol` now has 32 tests.
 
-Сверить со спецификацией: §4 (ссылки-приглашения и ключ хоста во фрагменте), §8 (экраны, ввод, сцена, палитра), §10 (сквозные тесты), §11 (одна команда для разработки, CI, деплой).
+Check against the spec: §4 (invite links and the host key in the fragment), §8 (screens, input, scene, palette), §10 (end-to-end tests), §11 (one command for development, CI, deploy).
 
-## Что нужно от тебя
+## What is needed from you
 
-- **Во время плана:** ничего, кроме `playwright install chromium` — это можно сделать и командой из Task 6.
-- **В конце:** аккаунт Cloudflare, поддомен и `wrangler login`, чтобы задеплоить. Пуш в GitHub, как и раньше, за тобой.
+- **During the plan:** nothing except `playwright install chromium` — which can also be done with the command from Task 6.
+- **At the end:** a Cloudflare account, a subdomain and `wrangler login`, to deploy. The push to GitHub is up to you, as before.
 
-## Что дальше
+## What next
 
-Основа закрыта: правила, протокол, сервер, клиент, тесты на всех уровнях и деплой. Дальше проект растёт вширь — второй игровой режим, звук, история победителей, доводка сцены гонки. Границы слоёв под это уже готовы: правила не знают про транспорт, транспорт не знает про рендер.
+The foundation is closed: rules, protocol, server, client, tests at every level, and deploy. Next the project grows wider — a second game mode, sound, a winners' history, polishing the race scene. The layer boundaries are already ready for that: the rules know nothing about transport, transport knows nothing about rendering.
