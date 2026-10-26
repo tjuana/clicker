@@ -1,45 +1,45 @@
-# Platform Seams Implementation Plan (план 4: одна база — много игр)
+# Platform Seams Implementation Plan (plan 4: one base, many games)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Развести общую комнату и конкретную игру так, чтобы второй режим — тест на реакцию, змейка, что угодно — добавлялся, не ломая ни протокол, ни клиент.
+**Goal:** Separate the shared room from the concrete game so that a second mode — a reaction test, a snake, anything — can be added without breaking either the protocol or the client.
 
-**Architecture:** `packages/game` делится на `room/` (игроки, хост, фазы, время, сроки) и `modes/clicker/` (ввод, ведро токенов, итоги). Комната зовёт режим через одну точку входа и не знает слова «клик». В протоколе появляется версия, обобщённый `input`, слот `data` для данных режима и отдельное личное сообщение. Реестра режимов нет и не будет, пока не появится второй: интерфейс выводится из двух реализаций, а не из одной.
+**Architecture:** `packages/game` is split into `room/` (players, host, phases, time, deadlines) and `modes/clicker/` (input, token bucket, results). The room calls the mode through a single entry point and does not know the word "click". The protocol gets a version, a generic `input`, a `data` slot for the mode's data and a separate private message. There is no mode registry and there will not be one until a second mode appears: the interface is derived from two implementations, not from one.
 
-**Tech Stack:** без новых зависимостей. TypeScript 7.0.2, Vitest 4.1.11, valibot 1.5.0.
+**Tech Stack:** no new dependencies. TypeScript 7.0.2, Vitest 4.1.11, valibot 1.5.0.
 
-Спецификация: [2026-09-11-clicker-foundation-design.md](../specs/2026-09-11-clicker-foundation-design.md), разделы 3, 5, 6, 7.
-
----
-
-## Проверено перед написанием плана
-
-Задачи 1–3 собраны и прогнаны во временной папке целиком: `tsc --noEmit` без ошибок, 60 тестов в `packages/game`, 32 в `packages/protocol` (31 перенесённый плюс новый на версию), Biome чист. Весь код этих задач приведён ниже дословно из рабочего прототипа.
-
-Две находки оттуда, обе стоили бы дорого:
-
-1. **Ссылочное равенство состояния — это контракт, а не случайность.** Отбитый лимитом клик обязан вернуть тот же самый объект комнаты: на этом держится дешёвая проверка «ничего не изменилось, снимок можно не рассылать». Первая версия перекладки его потеряла, и перенесённый тест это поймал.
-2. **Ключ данных режима — `publicId`, а не секретный `playerId`.** Иначе счёт пришлось бы перекладывать при каждой сборке снимка, а секрет — таскать через слой, которому он не нужен.
-
-**Чего прототип не проверял:** задачи 4 и 5 — сервер и клиент. Их код выведен из проверенного, но не исполнялся. Гейт для них — 15 интеграционных тестов сервера в настоящем рантайме Workers и сборка клиента.
-
-## Как выполнять
-
-- Ветка `feat/platform-seams`.
-- Один таск — один коммит. Conventional Commits, английский, **без подписей Claude**.
-- Перед каждым коммитом: `pnpm format`, затем `pnpm check`, `pnpm typecheck`, `pnpm test`.
-- Задачи 1–3 идут подряд: между ними репозиторий не собирается, это нормально — они одна перекладка, разбитая для обозримости. Зелёным всё становится в конце задачи 3.
+Spec: [2026-09-11-clicker-foundation-design.md](../specs/2026-09-11-clicker-foundation-design.md), sections 3, 5, 6, 7.
 
 ---
 
-### Task 1: Разделить правила на комнату и режим
+## Verified before writing the plan
+
+Tasks 1–3 were built and run in full in a temporary folder: `tsc --noEmit` with no errors, 60 tests in `packages/game`, 32 in `packages/protocol` (31 carried over plus a new one for the version), Biome clean. All the code of these tasks is given below verbatim from the working prototype.
+
+Two findings from it, both of which would have been expensive:
+
+1. **Reference equality of the state is a contract, not an accident.** A click refused by the limit must return the very same room object: the cheap check "nothing changed, no need to broadcast a snapshot" rests on it. The first version of the move lost it, and a ported test caught that.
+2. **The key of the mode's data is `publicId`, not the secret `playerId`.** Otherwise the score would have to be re-keyed every time a snapshot is built, and the secret would have to be dragged through a layer that does not need it.
+
+**What the prototype did not check:** tasks 4 and 5 — the server and the client. Their code is derived from what was verified, but has not been run. The gate for them is the 15 integration tests of the server in the real Workers runtime and the client build.
+
+## How to execute
+
+- Branch `feat/platform-seams`.
+- One task, one commit. Conventional Commits, English, **no Claude signatures**.
+- Before each commit: `pnpm format`, then `pnpm check`, `pnpm typecheck`, `pnpm test`.
+- Tasks 1–3 go one after another: between them the repository does not build, and that is fine — they are one move, split up to keep it readable. Everything turns green at the end of task 3.
+
+---
+
+### Task 1: Split the rules into a room and a mode
 
 **Files:**
 - Create: `packages/game/src/room/{state,commands,config,advance,apply,deadline,recovery}.ts`, `packages/game/src/modes/clicker/{state,results,index}.ts`
 - Delete: `packages/game/src/{state,commands,config,advance,apply,deadline,recovery,results}.ts`
 - Modify: `packages/game/src/index.ts`
 
-- [ ] **Step 1: Создать `packages/game/src/modes/clicker/state.ts`**
+- [ ] **Step 1: Create `packages/game/src/modes/clicker/state.ts`**
 
 ```ts
 /** What the clicker counts for one player. Keyed by publicId, like everything the mode shows. */
@@ -74,7 +74,7 @@ export function emptyScore(now: number, burst: number): ClickerScore {
 }
 ```
 
-- [ ] **Step 2: Создать `packages/game/src/modes/clicker/results.ts`**
+- [ ] **Step 2: Create `packages/game/src/modes/clicker/results.ts`**
 
 ```ts
 import type { ClickerScore, ResultRow } from './state';
@@ -113,7 +113,7 @@ export function computeResults(
 }
 ```
 
-- [ ] **Step 3: Создать `packages/game/src/room/config.ts`**
+- [ ] **Step 3: Create `packages/game/src/room/config.ts`**
 
 ```ts
 export interface GameConfig {
@@ -151,7 +151,7 @@ export const DEFAULT_CONFIG: GameConfig = {
 };
 ```
 
-- [ ] **Step 4: Создать `packages/game/src/room/state.ts`**
+- [ ] **Step 4: Create `packages/game/src/room/state.ts`**
 
 ```ts
 import type { ClickerState } from '../modes/clicker/state';
@@ -210,7 +210,7 @@ export function createRoomState(): RoomState {
 }
 ```
 
-- [ ] **Step 5: Создать `packages/game/src/room/commands.ts`**
+- [ ] **Step 5: Create `packages/game/src/room/commands.ts`**
 
 ```ts
 import type { ClickerInput } from '../modes/clicker/state';
@@ -246,7 +246,7 @@ export type GameEvent =
   | { type: 'phaseChanged'; phase: Phase };
 ```
 
-- [ ] **Step 6: Создать `packages/game/src/modes/clicker/index.ts`** — единственная дверь между комнатой и игрой
+- [ ] **Step 6: Create `packages/game/src/modes/clicker/index.ts`** — the single door between the room and the game
 
 ```ts
 import type { GameConfig } from '../../room/config';
@@ -361,7 +361,7 @@ export function toData(state: ClickerState): {
 }
 ```
 
-- [ ] **Step 7: Создать `packages/game/src/room/advance.ts`**
+- [ ] **Step 7: Create `packages/game/src/room/advance.ts`**
 
 ```ts
 import * as mode from '../modes/clicker';
@@ -447,9 +447,9 @@ function removeExpired(state: RoomState, now: number, config: GameConfig): RoomS
 }
 ```
 
-- [ ] **Step 8: Создать `packages/game/src/room/apply.ts`**
+- [ ] **Step 8: Create `packages/game/src/room/apply.ts`**
 
-Обрати внимание на конец `input`: при отбитом клике возвращается тот же объект состояния. Это контракт, а не мелочь.
+Note the end of `input`: when a click is refused, the same state object is returned. This is a contract, not a detail.
 
 ```ts
 import * as mode from '../modes/clicker';
@@ -622,9 +622,9 @@ function input(
 }
 ```
 
-- [ ] **Step 9: Создать `packages/game/src/room/deadline.ts`**
+- [ ] **Step 9: Create `packages/game/src/room/deadline.ts`**
 
-Содержимое прежнее, меняются только импорты: `./config` и `./state` теперь лежат рядом, а условие про соединения читает `connectionIds.length === 0`.
+The content is the same as before; only the imports change: `./config` and `./state` now sit next to it, and the condition on connections reads `connectionIds.length === 0`.
 
 ```ts
 import { DEFAULT_CONFIG, type GameConfig } from './config';
@@ -655,7 +655,7 @@ export function nextDeadline(state: RoomState, config: GameConfig = DEFAULT_CONF
 }
 ```
 
-- [ ] **Step 10: Создать `packages/game/src/room/recovery.ts`**
+- [ ] **Step 10: Create `packages/game/src/room/recovery.ts`**
 
 ```ts
 import * as mode from '../modes/clicker';
@@ -699,7 +699,7 @@ export function syncConnections(
 }
 ```
 
-- [ ] **Step 11: Заменить `packages/game/src/index.ts`**
+- [ ] **Step 11: Replace `packages/game/src/index.ts`**
 
 ```ts
 export {
@@ -725,18 +725,18 @@ export type { ModeId, Notice, Phase, Player, RoomState, Round } from './room/sta
 export { createRoomState } from './room/state';
 ```
 
-- [ ] **Step 12: Удалить старые плоские файлы**
+- [ ] **Step 12: Delete the old flat files**
 
 ```bash
 git rm packages/game/src/{state,commands,config,advance,apply,deadline,recovery,results}.ts
 ```
 
-- [ ] **Step 13: Убедиться, что исходники компилируются**
+- [ ] **Step 13: Make sure the sources compile**
 
 Run: `pnpm --filter @clicker/game exec tsc --noEmit`
-Expected: ошибки **только** в `test/` — это устаревшие пути импорта, их чинит Task 3. В `src/` ошибок быть не должно; если они есть, останавливайся и разбирайся, дальше идти нельзя.
+Expected: errors **only** in `test/` — these are outdated import paths, and Task 3 fixes them. There must be no errors in `src/`; if there are, stop and sort it out, you cannot go further.
 
-- [ ] **Step 14: Закоммитить**
+- [ ] **Step 14: Commit**
 
 ```bash
 git add packages/game/src
@@ -745,14 +745,14 @@ git commit -m "refactor(game): split the rules into a room and a game mode"
 
 ---
 
-### Task 2: Протокол — версия, обобщённый ввод, слот режима
+### Task 2: Protocol — a version, a generic input, a mode slot
 
 **Files:**
 - Modify: `packages/protocol/src/client.ts`, `packages/protocol/src/server.ts`, `packages/protocol/src/index.ts`
 
-- [ ] **Step 1: Заменить `packages/protocol/src/client.ts`**
+- [ ] **Step 1: Replace `packages/protocol/src/client.ts`**
 
-**Важно:** `FORBIDDEN_NAME_CHARS` и весь `nameSchema` переносятся из текущего файла как есть — их правка в эту задачу не входит. В блоке ниже невидимые символы диапазонов могли исказиться при копировании; верная форма строки ровно та, что уже лежит в репозитории:
+**Important:** `FORBIDDEN_NAME_CHARS` and the whole `nameSchema` are carried over from the current file as they are — changing them is not part of this task. In the block below the invisible characters of the ranges may have been distorted by copying; the correct form of the line is exactly the one already in the repository:
 
 ```ts
 const FORBIDDEN_NAME_CHARS = /[\p{Cc}\u202A-\u202E\u2066-\u2069]/u;
@@ -844,7 +844,7 @@ export function parseClientMessage(raw: string): ParsedClientMessage {
 }
 ```
 
-- [ ] **Step 2: Заменить `packages/protocol/src/server.ts`**
+- [ ] **Step 2: Replace `packages/protocol/src/server.ts`**
 
 ```ts
 import { comparePublicIds, type RoomState, toModeData } from '@clicker/game';
@@ -971,7 +971,7 @@ export function toSnapshot(state: RoomState, now: number): SnapshotMessage {
 export { MAX_MESSAGE_BYTES };
 ```
 
-- [ ] **Step 3: Заменить `packages/protocol/src/index.ts`**
+- [ ] **Step 3: Replace `packages/protocol/src/index.ts`**
 
 ```ts
 export {
@@ -1006,12 +1006,12 @@ export {
 } from './server';
 ```
 
-- [ ] **Step 4: Проверить компиляцию исходников**
+- [ ] **Step 4: Check that the sources compile**
 
 Run: `pnpm --filter @clicker/protocol exec tsc --noEmit`
-Expected: ошибки только в `test/`.
+Expected: errors only in `test/`.
 
-- [ ] **Step 5: Закоммитить**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add packages/protocol/src
@@ -1020,14 +1020,14 @@ git commit -m "feat(protocol): add a version, a generic input and a slot for mod
 
 ---
 
-### Task 3: Перенести тесты
+### Task 3: Port the tests
 
 **Files:**
-- Modify: все файлы в `packages/game/test` и `packages/protocol/test`
+- Modify: all the files in `packages/game/test` and `packages/protocol/test`
 
-Это перенос, а не переписывание: смысл каждой проверки сохраняется, меняется только форма. Ни одного теста не удалять и не ослаблять.
+This is a port, not a rewrite: the meaning of every check is kept, only the form changes. Do not delete or weaken a single test.
 
-- [ ] **Step 1: Заменить `packages/game/test/support.ts`**
+- [ ] **Step 1: Replace `packages/game/test/support.ts`**
 
 ```ts
 import { type ClickerScore, emptyScore } from '../src/modes/clicker/state';
@@ -1067,9 +1067,9 @@ export function room(overrides: Partial<RoomState> = {}): RoomState {
 }
 ```
 
-- [ ] **Step 2: Обновить пути импорта во всех тестах**
+- [ ] **Step 2: Update the import paths in all the tests**
 
-| Было | Стало |
+| Was | Becomes |
 |---|---|
 | `../src/apply` | `../src/room/apply` |
 | `../src/advance` | `../src/room/advance` |
@@ -1079,23 +1079,23 @@ export function room(overrides: Partial<RoomState> = {}): RoomState {
 | `../src/recovery` | `../src/room/recovery` |
 | `../src/results` | `../src/modes/clicker/results` |
 
-Файлы `leave.test.ts`, `deadline.test.ts` и `ids.test.ts` этим и ограничиваются — больше в них менять нечего.
+The files `leave.test.ts`, `deadline.test.ts` and `ids.test.ts` stop at this — there is nothing more to change in them.
 
-- [ ] **Step 3: Перевести команды и обращения к счёту**
+- [ ] **Step 3: Convert the commands and the score accesses**
 
-Во всех тестах `packages/game/test`:
+In all the tests of `packages/game/test`:
 
-- Команда `{ type: 'click', playerId: 'secret-1' }` → `{ type: 'input', playerId: 'secret-1', input: { type: 'click' } }`.
-- Обращения `state.players['secret-1']?.clicks` и `?.lastCountedAt` → `state.modeState.scores['1']?.clicks` и `?.lastCountedAt`. Ключ `'1'` — это `publicId` первого вошедшего игрока, он детерминирован.
+- The command `{ type: 'click', playerId: 'secret-1' }` → `{ type: 'input', playerId: 'secret-1', input: { type: 'click' } }`.
+- The accesses `state.players['secret-1']?.clicks` and `?.lastCountedAt` → `state.modeState.scores['1']?.clicks` and `?.lastCountedAt`. The key `'1'` is the `publicId` of the first player to join; it is deterministic.
 - `state.results` → `state.modeState.results`.
-- В `join.test.ts` поле `clicks: 0` больше не может лежать внутри `toMatchObject` по игроку: вынеси его отдельной проверкой на `result.state.modeState.scores['1']?.clicks`.
-- В `start.test.ts` «грязный» счёт перед раундом (`clicks: 42`, `lastCountedAt: 900`) строится в `modeState.scores['1']`, а `results: []` — в `modeState.results`.
-- В `advance.test.ts` фикстура отсчёта должна завести счёт игроку: `modeState: { scores: { '1': score() }, results: null }`, иначе итоги считать не из чего.
-- В `recovery.test.ts` комната в фазе результатов строится с `modeState: { scores: {}, results: [...] }`.
+- In `join.test.ts` the field `clicks: 0` can no longer sit inside the player's `toMatchObject`: move it into a separate check on `result.state.modeState.scores['1']?.clicks`.
+- In `start.test.ts` the "dirty" score before a round (`clicks: 42`, `lastCountedAt: 900`) is built in `modeState.scores['1']`, and `results: []` in `modeState.results`.
+- In `advance.test.ts` the countdown fixture must give the player a score: `modeState: { scores: { '1': score() }, results: null }`, otherwise there is nothing to compute the results from.
+- In `recovery.test.ts` a room in the results phase is built with `modeState: { scores: {}, results: [...] }`.
 
-- [ ] **Step 4: Заменить два файла целиком**
+- [ ] **Step 4: Replace two files in full**
 
-У этих двух сменилась не форма записи, а сигнатура проверяемого, поэтому они приводятся дословно, а не правилами замены.
+For these two it is not the form of the code but the signature of what is tested that changed, so they are given verbatim, not as replacement rules.
 
 `packages/game/test/state.test.ts`:
 
@@ -1120,7 +1120,7 @@ describe('createRoomState', () => {
 });
 ```
 
-`packages/game/test/results.test.ts` — `computeResults(scores, names)` принимает две записи, обе с ключом `publicId`:
+`packages/game/test/results.test.ts` — `computeResults(scores, names)` takes two records, both keyed by `publicId`:
 
 ```ts
 import { describe, expect, it } from 'vitest';
@@ -1190,17 +1190,17 @@ describe('comparePublicIds', () => {
 });
 ```
 
-`click.test.ts` имя сохраняет: он и проверяет клик — теперь как ввод режима.
+`click.test.ts` keeps its name: it still tests the click — now as a mode input.
 
-- [ ] **Step 5: Обновить тесты протокола**
+- [ ] **Step 5: Update the protocol tests**
 
-- Каждому сообщению добавить `v: PROTOCOL_VERSION`.
+- Add `v: PROTOCOL_VERSION` to every message.
 - `{ type: 'click' }` → `{ type: 'input', input: { type: 'click' } }`.
-- `parseClientMessage` теперь возвращает результат: `expect(...).toBeNull()` → `expect(...).toEqual({ ok: false, reason: 'invalid_message' })`, а удачный разбор → `{ ok: true, message: {...} }`.
+- `parseClientMessage` now returns a result: `expect(...).toBeNull()` → `expect(...).toEqual({ ok: false, reason: 'invalid_message' })`, and a successful parse → `{ ok: true, message: {...} }`.
 - `snapshot.results` → `snapshot.data.results`.
-- **Добавить новый тест:** сообщение с `v: 2` даёт `{ ok: false, reason: 'bad_version' }`. Ради этого поля всё и затевалось.
+- **Add a new test:** a message with `v: 2` gives `{ ok: false, reason: 'bad_version' }`. This field is what the whole change is for.
 
-- [ ] **Step 6: Прогнать и сверить пофайлово**
+- [ ] **Step 6: Run and compare file by file**
 
 ```bash
 pnpm --filter @clicker/game test
@@ -1208,9 +1208,9 @@ pnpm --filter @clicker/protocol test
 pnpm typecheck
 ```
 
-Общего числа мало: перенос легко «проходит», потеряв пару проверок. Сверяй пофайлово — числа те же, что были до переноса, кроме `client.test.ts`, где прибавился тест на версию:
+The total alone is not enough: a port easily "passes" after losing a couple of checks. Compare file by file — the numbers are the same as before the port, except `client.test.ts`, which gained the version test:
 
-| Файл | Тестов |
+| File | Tests |
 |---|---|
 | `game/test/advance.test.ts` | 8 |
 | `game/test/click.test.ts` | 11 |
@@ -1221,15 +1221,15 @@ pnpm typecheck
 | `game/test/results.test.ts` | 6 |
 | `game/test/start.test.ts` | 6 |
 | `game/test/state.test.ts` | 1 |
-| **game — всего** | **60** |
+| **game — total** | **60** |
 | `protocol/test/client.test.ts` | 20 |
 | `protocol/test/ids.test.ts` | 4 |
 | `protocol/test/server.test.ts` | 8 |
-| **protocol — всего** | **32** |
+| **protocol — total** | **32** |
 
-Не сходится хоть одна строка — ищи потерянный тест, а не подгоняй итог. Проверка типов при этом молчит.
+If even one row does not match, look for the lost test, do not adjust the total. The typecheck stays silent about it.
 
-- [ ] **Step 7: Закоммитить**
+- [ ] **Step 7: Commit**
 
 ```bash
 pnpm format
@@ -1239,24 +1239,24 @@ git commit -m "test: port the suites to the room and mode layout"
 
 ---
 
-### Task 4: Сервер под новый протокол
+### Task 4: The server for the new protocol
 
 **Files:**
 - Modify: `apps/game/src/worker/room.ts`
 
-Код этой задачи выведен из проверенного, но в прототипе не исполнялся. Гейт — 15 интеграционных тестов в настоящем рантайме Workers.
+The code of this task is derived from what was verified but was not run in the prototype. The gate is the 15 integration tests in the real Workers runtime.
 
-- [ ] **Step 1: Импортировать версию протокола**
+- [ ] **Step 1: Import the protocol version**
 
-Строка 13, добавить `PROTOCOL_VERSION`:
+Line 13, add `PROTOCOL_VERSION`:
 
 ```ts
 import { PROTOCOL_VERSION, parseClientMessage, type ServerMessage, toSnapshot } from '@clicker/protocol';
 ```
 
-- [ ] **Step 2: Обновить разбор сообщения в `onMessage`**
+- [ ] **Step 2: Update the message parsing in `onMessage`**
 
-`parseClientMessage` больше не возвращает `null`, а различает мусор и чужую версию. Строки 65–74 целиком:
+`parseClientMessage` no longer returns `null`; it tells garbage from a foreign version. Lines 65–74 in full:
 
 ```ts
     if (typeof message !== 'string') {
@@ -1272,13 +1272,13 @@ import { PROTOCOL_VERSION, parseClientMessage, type ServerMessage, toSnapshot } 
     const incoming = parsed.message;
 ```
 
-- [ ] **Step 3: Переименовать `parsed` в ветке join**
+- [ ] **Step 3: Rename `parsed` in the join branch**
 
-Строки 76–95 обращаются к разобранному сообщению как `parsed`; теперь оно называется `incoming`. Заменить `parsed.type`, `parsed.playerId`, `parsed.name` и оба `parsed.hostKey` — сама логика ветки не меняется.
+Lines 76–95 refer to the parsed message as `parsed`; now it is called `incoming`. Replace `parsed.type`, `parsed.playerId`, `parsed.name` and both `parsed.hostKey` — the logic of the branch itself does not change.
 
-- [ ] **Step 4: Перевести хвост `onMessage` на `input`**
+- [ ] **Step 4: Switch the tail of `onMessage` to `input`**
 
-Строки 97–103 сейчас перебрасывают `start` и `click` одной строкой, потому что у обоих одна форма. У `input` есть полезная нагрузка, поэтому ветки расходятся:
+Lines 97–103 currently forward `start` and `click` in one line, because both have the same shape. `input` has a payload, so the branches part ways:
 
 ```ts
     const session = connection.state;
@@ -1297,11 +1297,11 @@ import { PROTOCOL_VERSION, parseClientMessage, type ServerMessage, toSnapshot } 
     await this.#run({ type: 'start', playerId: session.playerId }, connection);
 ```
 
-- [ ] **Step 5: Поправить условие записи в хранилище**
+- [ ] **Step 5: Fix the condition for writing to storage**
 
-Строки 141–145. Это то самое место, где раньше терялся результат раунда: клик, закрывший раунд, не сохранялся. Условие обязано остаться таким же по смыслу — просто команда теперь зовётся иначе.
+Lines 141–145. This is the very place where the round result used to be lost: the click that closed the round was not persisted. The condition must stay the same in meaning — the command is just called something else now.
 
-> **Поправка по факту (2026-09-14).** Здесь было написано, что забытый `'click'` TypeScript пропустит молча. Это неверно: после задач 1–3 компилятор даёт на этой строке `TS2367 — This comparison appears to be unintentional because the types '"input" | "join" | "leave" | "start" | "tick"' and '"click"' have no overlap`. Сеть безопасности тут есть. Шаг всё равно остаётся отдельным: важно не просто убрать ошибку типов, а сохранить смысл условия — соблазн «починить» его, выкинув проверку целиком, вернёт потерю результатов раунда.
+> **Correction after the fact (2026-09-14).** It used to say here that TypeScript would silently let a forgotten `'click'` through. That is wrong: after tasks 1–3 the compiler reports on this line `TS2367 — This comparison appears to be unintentional because the types '"input" | "join" | "leave" | "start" | "tick"' and '"click"' have no overlap`. There is a safety net here. The step still stays separate: what matters is not just to remove the type error but to keep the meaning of the condition — the temptation to "fix" it by throwing the check out altogether would bring back the loss of round results.
 
 ```ts
     // An input can also close the round: advance runs before every command.
@@ -1311,9 +1311,9 @@ import { PROTOCOL_VERSION, parseClientMessage, type ServerMessage, toSnapshot } 
     }
 ```
 
-- [ ] **Step 6: Добавить версию в исходящие сообщения `#handleEvent`**
+- [ ] **Step 6: Add the version to the outgoing messages of `#handleEvent`**
 
-Строки 156–165:
+Lines 156–165:
 
 ```ts
   #handleEvent(event: GameEvent, source?: Connection<Session>): void {
@@ -1333,14 +1333,14 @@ import { PROTOCOL_VERSION, parseClientMessage, type ServerMessage, toSnapshot } 
   }
 ```
 
-Снимок трогать не нужно: `toSnapshot` проставляет версию сам.
+No need to touch the snapshot: `toSnapshot` sets the version itself.
 
-- [ ] **Step 7: Прогнать тесты сервера**
+- [ ] **Step 7: Run the server tests**
 
 Run: `pnpm --filter @clicker/app test`
-Expected: `Test Files 2 passed (2)`, `Tests 15 passed (15)`. Тесты сервера строят сообщения сами — если они падают на отсутствии `v`, поправь тесты: это часть той же смены формата.
+Expected: `Test Files 2 passed (2)`, `Tests 15 passed (15)`. The server tests build messages themselves — if they fail on a missing `v`, fix the tests: that is part of the same format change.
 
-- [ ] **Step 5: Закоммитить**
+- [ ] **Step 5: Commit**
 
 ```bash
 pnpm format
@@ -1350,20 +1350,20 @@ git commit -m "feat(server): speak the versioned protocol with generic input"
 
 ---
 
-### Task 5: Клиент под новый протокол
+### Task 5: The client for the new protocol
 
 **Files:**
 - Modify: `apps/game/src/client/net.ts`, `apps/game/src/client/store.ts`
 
-- [ ] **Step 1: Импортировать версию протокола в `net.ts`**
+- [ ] **Step 1: Import the protocol version in `net.ts`**
 
-Строка 1:
+Line 1:
 
 ```ts
 import { PROTOCOL_VERSION, parseServerMessage } from '@clicker/protocol';
 ```
 
-- [ ] **Step 2: Добавить версию и обобщённый ввод в `net.ts`**
+- [ ] **Step 2: Add the version and the generic input to `net.ts`**
 
 ```ts
   socket.addEventListener('open', () => {
@@ -1379,7 +1379,7 @@ import { PROTOCOL_VERSION, parseServerMessage } from '@clicker/protocol';
   });
 ```
 
-и в возвращаемом объекте:
+and in the returned object:
 
 ```ts
   return {
@@ -1397,18 +1397,18 @@ import { PROTOCOL_VERSION, parseServerMessage } from '@clicker/protocol';
   };
 ```
 
-- [ ] **Step 2: Ничего не менять в `store.ts`, кроме типа ошибки**
+- [ ] **Step 2: Change nothing in `store.ts` except the error type**
 
-`ServerErrorCode` теперь включает `bad_version`; отдельной правки не требуется, но убедись, что `pnpm --filter @clicker/app typecheck` проходит.
+`ServerErrorCode` now includes `bad_version`; no separate edit is needed, but make sure `pnpm --filter @clicker/app typecheck` passes.
 
-- [ ] **Step 3: Проверить**
+- [ ] **Step 3: Check**
 
 ```bash
 pnpm --filter @clicker/app typecheck
 pnpm --filter @clicker/app run build
 ```
 
-- [ ] **Step 4: Закоммитить**
+- [ ] **Step 4: Commit**
 
 ```bash
 pnpm format
@@ -1418,9 +1418,9 @@ git commit -m "feat(app): send versioned messages and generic input"
 
 ---
 
-### Task 6: Общая проверка
+### Task 6: Whole-repository check
 
-- [ ] **Step 1: Прогнать всё**
+- [ ] **Step 1: Run everything**
 
 ```bash
 pnpm install --frozen-lockfile
@@ -1429,13 +1429,13 @@ pnpm typecheck
 pnpm test
 pnpm --filter @clicker/app run build
 ```
-Expected: линтер и типы чисты, 60 + 32 + 15 = 107 тестов, обе части сборки на месте.
+Expected: the linter and the types are clean, 60 + 32 + 15 = 107 tests, both parts of the build in place.
 
-- [ ] **Step 2: Сверить со спецификацией**
+- [ ] **Step 2: Check against the spec**
 
-Разделы 3, 5, 6 и 7 описывают ровно то, что теперь в коде: режим как поле комнаты, состояние режима в отдельном слоте, обобщённый ввод, версия протокола, личное сообщение и тик симуляции в конфиге. Личное сообщение и тик пока никем не используются — это заложенные швы, и так и задумано.
+Sections 3, 5, 6 and 7 describe exactly what is now in the code: the mode as a field of the room, the mode's state in a separate slot, a generic input, the protocol version, a private message and a simulation tick in the config. Nothing uses the private message and the tick yet — they are seams laid in advance, and that is intended.
 
-- [ ] **Step 3: Закоммитить, если формат что-то поправил**
+- [ ] **Step 3: Commit if the formatter changed anything**
 
 ```bash
 git add -A && git commit -m "style: apply formatting after the seams"
@@ -1443,16 +1443,16 @@ git add -A && git commit -m "style: apply formatting after the seams"
 
 ---
 
-## Проверка результата
+## Checking the result
 
 ```bash
 pnpm check && pnpm typecheck && pnpm test && pnpm --filter @clicker/app run build
 ```
 
-Ожидается: 107 тестов, ноль падений, обе части сборки.
+Expected: 107 tests, zero failures, both parts of the build.
 
-Главный признак, что швы получились: в `packages/game/src/room/` не встречается ни слова о кликах, а в `apps/game/src/worker/room.ts` — ни одного `if` про игровые правила.
+The main sign that the seams worked out: `packages/game/src/room/` contains not a single word about clicks, and `apps/game/src/worker/room.ts` contains not a single `if` about game rules.
 
-## Что дальше
+## What next
 
-С этими швами второй режим — тест на реакцию или змейка — добавляется, не трогая ни комнату, ни протокол: новый каталог в `modes/`, своя схема ввода и данных, своя арена на клиенте. Тогда же появятся и настоящий интерфейс режима, и реестр — выведенные из двух реализаций.
+With these seams a second mode — a reaction test or a snake — is added without touching either the room or the protocol: a new directory in `modes/`, its own input and data schema, its own arena on the client. That is also when the real mode interface and the registry appear — derived from two implementations.

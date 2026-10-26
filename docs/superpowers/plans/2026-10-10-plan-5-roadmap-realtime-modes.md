@@ -1,283 +1,299 @@
-# Дорожная карта: живые режимы — арена, затем кольцевая гонка (план 5)
+# Roadmap: live modes — the arena, then the ring race (plan 5)
 
-> Это **дорожная карта**, а не пошаговый план. Каждый этап ниже перед началом работы
-> разворачивается в свой план в формате планов 1–4 (TDD, задачи, команды). Рискованные стыки
-> сначала прогоняются прототипом — скилл `prototype-before-planning`.
+> This is a **roadmap**, not a step-by-step plan. Before work starts, each stage below is expanded
+> into its own plan in the format of plans 1–4 (TDD, tasks, commands). Risky seams are run first as
+> a prototype — the `prototype-before-planning` skill.
 
-**Цель:** превратить кликер в платформу для игр, где мир живёт сам: арена на сетке как режим №2,
-затем кольцевая гонка с управлением с клавиатуры.
+**Goal:** turn the clicker into a platform for games where the world lives on its own: a grid arena
+as mode no. 2, then a ring race driven from the keyboard.
 
-**Почему в таком порядке:** гонке нужны серверный тик, интерфейс режимов, предсказание на клиенте,
-столкновения и подсчёт кругов. Арена требует того же, кроме физики, а её логика двумерная и
-целочисленная. Поэтому сетевой код и тики обкатываются на простом режиме, и гонка ложится на
-проверенный фундамент, а не становится первым экспериментом со всем сразу.
+**Why this order:** the race needs a server tick, a mode interface, client-side prediction,
+collisions and lap counting. The arena needs the same, except the physics, and its logic is
+two-dimensional and integer. So the netcode and the ticks are proven on the simple mode, and the
+race lands on a tested foundation instead of being the first experiment with everything at once.
 
 ---
 
-## 1. Стек: three.js оставляем
+## 1. The stack: we keep three.js
 
-### Чем мы выбираем
+### What we choose by
 
-1. **Общий TypeScript у сервера и клиента.** Правила живут в `packages/game`, и их же должен
-   исполнять клиент для предсказания своей машины. Движок на другом языке рвёт это: правила
-   пришлось бы писать дважды и держать бит в бит одинаковыми.
-2. **Открыл ссылку — играешь.** Первая загрузка важнее богатства движка.
-3. **Физика наша, а не движка.** Авторитетная симуляция идёт на сервере, в чистых функциях.
-   Встроенная физика движка на клиенте нам не нужна: она не авторитетна.
-4. **React-оболочка** для экранов, лобби и HUD уже есть и работает.
+1. **One TypeScript for server and client.** The rules live in `packages/game`, and the client has
+   to run the same ones to predict its own car. An engine in another language breaks this: the
+   rules would have to be written twice and kept bit-for-bit identical.
+2. **Open a link — play.** The first load matters more than a rich engine.
+3. **The physics is ours, not the engine's.** The authoritative simulation runs on the server, in
+   pure functions. We do not need the engine's built-in physics on the client: it is not
+   authoritative.
+4. **The React shell** for screens, the lobby and the HUD already exists and works.
 
-### Варианты
+### Options
 
-| Вариант | Плюсы | Почему не он |
+| Option | Pros | Why not this one |
 |---|---|---|
-| **three.js + R3F** (сейчас) | TS; крупнейшая экосистема; это рендер-библиотека, без чужой физики и игрового цикла; `WebGPURenderer` с откатом на WebGL | — |
-| Babylon.js | Полноценный движок на TS: инспектор, Havok, зрелый WebGPU | Больше бандл; его физика на клиенте не авторитетна, а значит не пригодится; связка с React слабее |
-| PlayCanvas | Компактный рантайм, хорош на мобильных, есть облачный редактор | Экосистема меньше; сильная сторона — редактор, а он пока не нужен |
-| Godot / Unity (WASM) | Настоящие редакторы и пайплайн контента | Клиентская симуляция не на TS — правила с сервером не общие; загрузка в десятки МБ против «открыл ссылку» |
-| Bevy + workers-rs | Rust с обеих сторон, общий код возможен | Переписать всё, включая сервер; тяжёлая сборка ради выгоды, которой пока нет |
+| **three.js + R3F** (now) | TS; the largest ecosystem; it is a rendering library, with no foreign physics or game loop; `WebGPURenderer` with a fallback to WebGL | — |
+| Babylon.js | A full engine in TS: inspector, Havok, mature WebGPU | A bigger bundle; its client-side physics is not authoritative, so it would go unused; a weaker fit with React |
+| PlayCanvas | A compact runtime, good on mobile, has a cloud editor | A smaller ecosystem; its strong side is the editor, and we do not need one yet |
+| Godot / Unity (WASM) | Real editors and a content pipeline | The client simulation is not in TS — the rules are not shared with the server; a load of tens of MB against "open a link" |
+| Bevy + workers-rs | Rust on both sides, shared code is possible | Rewrite everything, the server included; a heavy build for a benefit we do not have yet |
 
-### Вердикт
+### Verdict
 
-**Стек выбран верно.** Проблемы, которые видны сейчас, — в использовании, а не в библиотеке:
+**The stack was chosen correctly.** The problems visible now are in how it is used, not in the
+library:
 
-- 20 клонов модели вместо `InstancedMesh` — это 20 наборов draw call вместо одного;
-- `drei` тянется ради одного `useGLTF`;
-- чанк сцены весит 969 КБ (258 КБ gzip) и не разбит.
+- 20 clones of the model instead of an `InstancedMesh` — that is 20 sets of draw calls instead of
+  one;
+- `drei` is pulled in for a single `useGLTF`;
+- the scene chunk weighs 969 KB (258 KB gzip) and is not split.
 
-**Когда пересмотреть:** понадобится редактор уровней (сначала посмотреть на собственный — в
-DooM_42 он уже был), упрёмся в производительность на мобильных по замеру или контента станет
-столько, что нужен пайплайн ассетов.
+**When to revisit:** we need a level editor (look at our own first — DooM_42 already had one), we
+hit a performance limit on mobile that a measurement confirms, or there is so much content that we
+need an asset pipeline.
 
 ---
 
-## 2. Что берём из старых проектов
+## 2. What we take from the old projects
 
-Все три проекта прочитаны целиком: [DooM_42](https://github.com/tjuana/DooM_42) — портальный
-движок по секторам с редактором карт, около 9 700 строк C; [wolf3d](https://github.com/tjuana/wolf3d) —
-рейкастер на сетке, около 1 850 строк C; [RTv1](https://github.com/tjuana/RTv1) — трассировщик
-лучей со сценой из файла, около 3 650 строк C.
+All three projects were read in full: [DooM_42](https://github.com/tjuana/DooM_42) — a portal
+engine over sectors with a map editor, about 9,700 lines of C; [wolf3d](https://github.com/tjuana/wolf3d) —
+a raycaster on a grid, about 1,850 lines of C; [RTv1](https://github.com/tjuana/RTv1) — a ray
+tracer with a scene loaded from a file, about 3,650 lines of C.
 
-### Переносим
+### What we carry over
 
-| Приём | Где в старом коде | Куда у нас |
+| Technique | Where in the old code | Where it goes here |
 |---|---|---|
-| Сектора и порталы: карта — граф выпуклых секторов, общие рёбра — порталы | DooM `neighbors[i]`, обход BFS | Трасса гонки — кольцо секторов |
-| Столкновения только со стенами текущего сектора, переход через портал меняет сектор | DooM `game_motion_*.c` | Сервер гонки: O(стен сектора) вместо O(всей трассы) |
-| Знак векторного произведения: с какой стороны прямой точка | DooM `ft_math_pointside` | Чекпоинты, финиш, выпуклость |
-| Отрезок движения за тик против линии | DooM `intersectbox` + `pointside` | Подсчёт кругов: не проскочить линию между тиками |
-| Проекция скорости на стену | DooM `ft_game_motion_slide` | Отбойники: скольжение вместо остановки (**с исправлением**, см. ниже) |
-| Сторож в массиве вершин: первая вершина продублирована в конце | DooM `vertex[i + 1]` | Многоугольники секторов — без `%` в цикле |
-| Плоская сетка `map[x + y * width]` | wolf3d `map.map` | Арена — `Uint8Array`, построчно, кэш-дружелюбно |
-| DDA — обход клеток вдоль луча | wolf3d `ray_casting.c` | Арена: ход за тик через несколько клеток без телепорта сквозь стену; лучи видимости |
-| Проверка по осям раздельно — скольжение по сетке бесплатно | wolf3d `move.c` | Движение на арене |
-| Сортировка по квадрату расстояния, без `sqrt`; сортируется массив индексов | wolf3d `ft_sort` (comb sort) | Порядок отрисовки, ближайший противник |
-| Кольцевой буфер фиксированного размера | DooM `cycle.queue` | Буфер вводов и история снимков на клиенте |
-| Упаковка в биты, флаги, XOR для переключения | DooM `func_color.c`, `gui_elem_set_status.c` | Маска ввода, флаги состояния |
-| Пересечение луча со сферой (квадратное уравнение) и с плоскостью | RTv1 `render_redraw.c` | Подбор бонусов, попадания, видимость — на сервере |
-| Обратная матрица поворота — это транспонированная: дёшево и точно | RTv1 `ft_oppositive_matrix` | Переход в систему координат машины без общего обращения матрицы |
-| Сцена описана данными в файле, а не кодом | RTv1 `scenes/`, парсер | Трассы и арены — файлы данных **с валидатором** (см. A16) |
+| Sectors and portals: the map is a graph of convex sectors, shared edges are portals | DooM `neighbors[i]`, BFS traversal | The race track is a ring of sectors |
+| Collisions only with the walls of the current sector; crossing a portal changes the sector | DooM `game_motion_*.c` | The race server: O(walls of the sector) instead of O(the whole track) |
+| The sign of the cross product: which side of a line a point is on | DooM `ft_math_pointside` | Checkpoints, the finish, convexity |
+| The movement segment per tick against a line | DooM `intersectbox` + `pointside` | Lap counting: do not skip over a line between ticks |
+| Projecting velocity onto a wall | DooM `ft_game_motion_slide` | Barriers: sliding instead of stopping (**with a fix**, see below) |
+| A sentinel in the vertex array: the first vertex is duplicated at the end | DooM `vertex[i + 1]` | Sector polygons — no `%` in the loop |
+| A flat grid `map[x + y * width]` | wolf3d `map.map` | The arena is a `Uint8Array`, row by row, cache-friendly |
+| DDA — walking the cells along a ray | wolf3d `ray_casting.c` | The arena: a move of several cells per tick without teleporting through a wall; visibility rays |
+| Checking each axis separately — sliding along the grid comes free | wolf3d `move.c` | Movement in the arena |
+| Sorting by squared distance, no `sqrt`; an array of indices is sorted | wolf3d `ft_sort` (comb sort) | Draw order, nearest opponent |
+| A fixed-size ring buffer | DooM `cycle.queue` | The input buffer and the snapshot history on the client |
+| Packing into bits, flags, XOR to toggle | DooM `func_color.c`, `gui_elem_set_status.c` | The input mask, state flags |
+| Ray–sphere intersection (a quadratic equation) and ray–plane | RTv1 `render_redraw.c` | Picking up bonuses, hits, visibility — on the server |
+| The inverse of a rotation matrix is its transpose: cheap and exact | RTv1 `ft_oppositive_matrix` | Moving into the car's coordinate system without a general matrix inversion |
+| The scene is described by data in a file, not by code | RTv1 `scenes/`, the parser | Tracks and arenas are data files **with a validator** (see A16) |
 
-### Не переносим, и это осознанно
+### What we do not carry over, on purpose
 
-- **`x >> 1` вместо `/ 2`** и пиксельные интерполяторы в стиле Брезенхема (DooM `scr_nxt`) — это
-  делают компилятор и GPU. В JS `>>` ещё и обрезает число до int32.
-- **pthreads по столбцам экрана** (wolf3d) — у нас ось параллелизма другая: каждая комната — свой
-  Durable Object, свой поток. Масштабируемся комнатами, а не потоками внутри комнаты.
-- **Одна структура на всё** (`t_new_player` в DooM хранит и рендер, и физику, и карту) — именно
-  поэтому физику оттуда нельзя вынести на сервер или проверить без окна. У нас физика — чистые
-  функции в `packages/game`, рендер только рисует.
+- **`x >> 1` instead of `/ 2`** and Bresenham-style pixel interpolators (DooM `scr_nxt`) — the
+  compiler and the GPU do this. In JS, `>>` also truncates the number to int32.
+- **pthreads over screen columns** (wolf3d) — our axis of parallelism is different: each room is
+  its own Durable Object, its own thread. We scale by rooms, not by threads inside a room.
+- **One structure for everything** (`t_new_player` in DooM holds the rendering, the physics and the
+  map) — which is exactly why the physics cannot be moved to a server or tested there without a
+  window. Here the physics is pure functions in `packages/game`, and the renderer only draws.
 
-### Ошибки, которые нашлись при чтении
+### Bugs found while reading
 
-Записаны, потому что каждая — готовый тест.
+Recorded because each one is a ready-made test.
 
-1. **Скольжение по стене считается неверно** (DooM `ft_game_motion_slide`). `velo.x`
-   перезаписывается, а затем используется при вычислении `velo.y`, так что скалярное произведение
-   для `y` берёт уже новый `x`. В результате вектор не параллелен стене, и игрока под углом
-   тормозит или уводит. Та же ошибка есть в исходнике Bisqwit, с которого взята схема.
-   **Исправление:** посчитать `dot` один раз. **Тест-свойство:** результат параллелен стене и не
-   длиннее исходного вектора.
-2. **`malloc` и обнуление циклом на каждый кадр** (DooM `ft_game_engine_preset`, `rend_sec`).
-   Правильно — выделить один раз при загрузке карты, а в кадре делать `memset`. В JS аналог —
-   `new Vector3()` внутри `useFrame`: мусор в каждом кадре и паузы сборщика.
-3. **Утечка бита между каналами цвета** (wolf3d `floor.c`: `(color >> 2) & 0x7F7F7F`). После
-   сдвига на 2 младшие биты красного попадают в старшие биты зелёного, а маска `0x7F` один из них
-   оставляет. Для деления каждого канала на 4 нужна `0x3F3F3F`. Урок: маска выводится из сдвига, а
-   не подбирается на глаз.
-4. **Первое попадание вместо ближайшего** (RTv1 `render_get_pixel_color`). Цикл возвращает цвет
-   первого объекта в списке, у которого `t > 0`, а не объекта с наименьшим `t`. Что окажется
-   впереди, решает порядок строк в файле сцены, а не геометрия. **Урок:** «ближайший» — это
-   минимум по всем кандидатам (A15). **Тест:** переставить объекты в списке — результат не меняется.
-5. **Нормаль и свет считаются не от точки попадания** (RTv1). Нормаль — это
-   `hit + (0, 0, −1)`, а должна быть `(hit − center) / r`; вектор на свет берётся от камеры, а не от
-   точки поверхности. Освещение верно только для сферы в одной конкретной позиции. Кроме того,
-   плоскость и сфера трассируются из разных начал луча (`(0, 0, −10)` против `(0, 0, 0)`).
-   **Урок:** каждая формула — с тестом на объекте не в начале координат.
-6. **Утечки и неинвариантная работа в цикле по пикселям** (RTv1). На каждую перерисовку
-   выделяется `orig` и не освобождается; массивы из `ft_strsplit` не освобождаются (в коде так и
-   написано — `need to delete array`). Константы камеры через `pow` и `sqrt` пересчитываются для
-   каждого пикселя, хотя от пикселя не зависят. Объекты сцены хранятся связным списком, и горячий
-   цикл ходит по указателям. **Урок:** инварианты выносить из цикла, в горячем цикле — массив.
-7. **Парсер без проверок** (RTv1 `render_set.c`). Координаты читаются через `ft_atoi` — только
-   целые; строка `"1,2"` даёт `array[2] == NULL` и падение; цвет делится на 256 вместо 255, так что
-   белый никогда не равен 1.0. **Урок:** любой файл с картой — это ввод извне, его валидируют
-   (A16).
+1. **Wall sliding is computed wrongly** (DooM `ft_game_motion_slide`). `velo.x` is overwritten and
+   then used to compute `velo.y`, so the dot product for `y` already takes the new `x`. As a
+   result the vector is not parallel to the wall, and a player moving at an angle is slowed or
+   pushed off course. The same bug is in the Bisqwit source this scheme was taken from.
+   **Fix:** compute `dot` once. **Property test:** the result is parallel to the wall and no longer
+   than the original vector.
+2. **`malloc` and a zeroing loop on every frame** (DooM `ft_game_engine_preset`, `rend_sec`). The
+   right way is to allocate once when the map loads and do a `memset` in the frame. The JS
+   analogue is `new Vector3()` inside `useFrame`: garbage every frame and garbage-collector
+   pauses.
+3. **A bit leaks between colour channels** (wolf3d `floor.c`: `(color >> 2) & 0x7F7F7F`). After the
+   shift by 2, the low bits of red land in the high bits of green, and the `0x7F` mask keeps one of
+   them. Dividing each channel by 4 needs `0x3F3F3F`. The lesson: derive the mask from the shift,
+   do not pick it by eye.
+4. **The first hit instead of the nearest** (RTv1 `render_get_pixel_color`). The loop returns the
+   colour of the first object in the list with `t > 0`, not of the object with the smallest `t`.
+   What ends up in front is decided by the order of lines in the scene file, not by the geometry.
+   **The lesson:** "nearest" is a minimum over all candidates (A15). **Test:** reorder the objects
+   in the list — the result does not change.
+5. **The normal and the light are not computed from the hit point** (RTv1). The normal is
+   `hit + (0, 0, −1)`, but it should be `(hit − center) / r`; the vector to the light is taken from
+   the camera, not from the surface point. The lighting is correct only for a sphere in one
+   particular position. Besides, the plane and the sphere are traced from different ray origins
+   (`(0, 0, −10)` against `(0, 0, 0)`). **The lesson:** every formula gets a test on an object that
+   is not at the origin.
+6. **Leaks and non-invariant work in the pixel loop** (RTv1). Every redraw allocates `orig` and
+   never frees it; the arrays from `ft_strsplit` are not freed (the code says so itself —
+   `need to delete array`). The camera constants through `pow` and `sqrt` are recomputed for every
+   pixel, although they do not depend on the pixel. The scene objects are stored in a linked list,
+   and the hot loop walks pointers. **The lesson:** hoist invariants out of the loop; in a hot
+   loop, use an array.
+7. **A parser with no checks** (RTv1 `render_set.c`). Coordinates are read through `ft_atoi` —
+   integers only; the string `"1,2"` gives `array[2] == NULL` and a crash; the colour is divided
+   by 256 instead of 255, so white is never 1.0. **The lesson:** any map file is outside input and
+   is validated (A16).
 
 ---
 
-## 3. Алгоритмы и структуры данных
+## 3. Algorithms and data structures
 
-У каждого пункта есть место, оценка и **гейт** — тест, который падает при нарушении (см. память
-«правила фиксируются гейтами, а не абзацами»).
+Each item has a place, an estimate and a **gate** — a test that fails on a violation (see the
+memory note "rules are enforced by gates, not paragraphs").
 
-| # | Что | Где | Сложность | Гейт |
+| # | What | Where | Complexity | Gate |
 |---|---|---|---|---|
-| A1 | `Map`/`Set` для поиска и членства; `Record` — только для сериализуемого состояния | везде | O(1) | `complexity.ts` на каждую новую функцию hot path |
-| A2 | **Пространственная хеш-сетка** для broadphase: ключ клетки упакован в одно число `(cx & 0xFFFF) \| (cy << 16)` — уникален, пока обе координаты в int16 (±32 767 клеток); для **ограниченного** поля хеш не нужен вовсе, индекс — `y * width + x` (как карта wolf3d); сетка пересобирается за тик подсчётом (`cellStart`/`cellCount` в `Int32Array`), без аллокаций | столкновения машин | O(n) в среднем вместо O(n²) | рост ×10 на десятикратном входе |
-| A3 | DDA по клеткам | арена, лучи | O(пройденных клеток) | свойство: путь непрерывен, клетки не пропускаются |
-| A4 | Сектора и порталы, поиск сектора шагом от предыдущего | трасса | O(1) амортизированно | рост не зависит от длины трассы |
-| A5 | Пересечение отрезков, знак векторного произведения | круги, чекпоинты | O(1) | свойства: симметрия, касание по концу, вырожденные отрезки |
-| A6 | Проекция на стену (исправленная) | отбойники | O(1) | свойство: параллельна стене, `\|v'\| ≤ \|v\|` |
-| A7 | **Ввод — намерение, а не позиция.** Гонка: маска газ/тормоз/влево/вправо/нитро — 5 бит в байте, шлём *состояние зажатых клавиш*, повтор безвреден. Tron: поворот — это **событие**, поэтому оно несёт номер тика, на который игрок его задумал (см. раздел 5, «бэкдейтинг») | протокол | O(1) | версия протокола; тест: неизвестные биты отвергаются |
-| A8 | **Целочисленные углы**: 1024 направления, обёртка `& 1023`, синусы из таблицы. `+ − × ÷` и `sqrt` в IEEE детерминированы, а `Math.sin`/`cos`/`atan2` в разных движках не обязаны совпадать бит в бит | симуляция | O(1) | скан чистоты запрещает `Math.sin\|cos\|tan\|atan2\|exp\|pow` в модуле симуляции |
-| A9 | **Сидированный ГПСЧ** (mulberry32/xorshift — на битовых операциях) внутри `modeState` | точки спавна, бонусы | O(1) | уже есть: `Math.random` в `packages/game` запрещён |
-| A10 | Кольцевой буфер, размер — степень двойки, индекс `seq & (N - 1)` | клиент: вводы, снимки | O(1), ноль аллокаций | тест обёртки на переполнении |
-| A11 | **Таблица мест каждый тик — встроенный `sort`.** В V8 это TimSort: стабильный (так требует ES2019), адаптивный — на почти отсортированном входе близок к O(n), короткие отрезки сортирует бинарными вставками. Своя сортировка вставками дала бы то же самое, но больше кода. Ценное из wolf3d `ft_sort` — не comb sort, а **сортировка индексов** вместо объектов. Для «топ-10 из многих» — куча на k элементов, O(n log k) | гонка, лидерборд | O(n log n), на почти отсортированном ≈ O(n) | рост на почти отсортированном входе |
-| A12 | Structure of Arrays на `Float32Array`; `fill` — это наш `memset`; никаких `new` в `useFrame` | частицы, следы | — | ревью; замер кадра |
-| A13 | `InstancedMesh` — одна модель на все машины | сцена | 1 draw call вместо n | замер fps до/после на 20 машинах |
-| A14 | Бинарные снимки (`DataView`, позиции в `Int16`), дельта от последнего подтверждённого | протокол | — | **только после замера трафика**: на 20 машин JSON пока не узкое место |
-| A15 | **Ближайшее попадание** — минимум `t` по кандидатам; кандидаты — из хеш-сетки (A2) или DDA (A3), а не все объекты | лучи, попадания | O(кандидатов) | свойство: перестановка объектов не меняет результат; рост на числе объектов |
-| A16 | **Валидатор карт**: контуры замкнуты, сектора выпуклы (знаки векторных произведений одинаковы), порталы симметричны (`a` ссылается на `b` ⇔ `b` на `a`), числа конечны | загрузка трасс и арен | O(вершин) | тест на каждое нарушение; битые карты в фикстурах |
+| A1 | `Map`/`Set` for lookup and membership; `Record` only for serializable state | everywhere | O(1) | `complexity.ts` for every new hot-path function |
+| A2 | **Spatial hash grid** for the broadphase: the cell key is packed into one number `(cx & 0xFFFF) \| (cy << 16)` — unique while both coordinates are in int16 (±32,767 cells); for a **bounded** field no hash is needed at all, the index is `y * width + x` (like the wolf3d map); the grid is rebuilt every tick by counting (`cellStart`/`cellCount` in an `Int32Array`), with no allocations | car collisions | O(n) on average instead of O(n²) | growth of ×10 on a tenfold input |
+| A3 | DDA over cells | arena, rays | O(cells traversed) | property: the path is continuous, no cell is skipped |
+| A4 | Sectors and portals, finding the sector by a step from the previous one | track | amortized O(1) | growth does not depend on the track length |
+| A5 | Segment intersection, the sign of the cross product | laps, checkpoints | O(1) | properties: symmetry, touching at an endpoint, degenerate segments |
+| A6 | Projection onto a wall (fixed) | barriers | O(1) | property: parallel to the wall, `\|v'\| ≤ \|v\|` |
+| A7 | **Input is an intent, not a position.** Race: a throttle/brake/left/right/nitro mask — 5 bits in a byte, we send the *state of the held keys*, a repeat is harmless. Tron: a turn is an **event**, so it carries the tick number it was meant for (see section 5, "backdating") | protocol | O(1) | protocol version; test: unknown bits are rejected |
+| A8 | **Integer angles**: 1024 directions, wrap-around with `& 1023`, sines from a table. `+ − × ÷` and `sqrt` are deterministic in IEEE, but `Math.sin`/`cos`/`atan2` are not required to match bit for bit across engines | simulation | O(1) | the purity scan forbids `Math.sin\|cos\|tan\|atan2\|exp\|pow` in the simulation module |
+| A9 | **Seeded PRNG** (mulberry32/xorshift — on bit operations) inside `modeState` | spawn points, bonuses | O(1) | already in place: `Math.random` is forbidden in `packages/game` |
+| A10 | Ring buffer, the size a power of two, index `seq & (N - 1)` | client: inputs, snapshots | O(1), zero allocations | a wrap-around test on overflow |
+| A11 | **The standings table every tick — the built-in `sort`.** In V8 this is TimSort: stable (ES2019 requires it), adaptive — close to O(n) on nearly sorted input, and it sorts short runs with binary insertion. A hand-written insertion sort would give the same, with more code. What is valuable in wolf3d `ft_sort` is not the comb sort but **sorting indices** instead of objects. For "top 10 out of many" — a heap of k elements, O(n log k) | race, leaderboard | O(n log n), ≈ O(n) on nearly sorted input | growth on nearly sorted input |
+| A12 | Structure of Arrays on `Float32Array`; `fill` is our `memset`; no `new` in `useFrame` | particles, trails | — | review; a frame measurement |
+| A13 | `InstancedMesh` — one model for all cars | scene | 1 draw call instead of n | fps measured before/after on 20 cars |
+| A14 | Binary snapshots (`DataView`, positions in `Int16`), a delta from the last acknowledged one | protocol | — | **only after measuring traffic**: for 20 cars JSON is not the bottleneck yet |
+| A15 | **Nearest hit** — the minimum `t` over the candidates; the candidates come from the hash grid (A2) or DDA (A3), not from all objects | rays, hits | O(candidates) | property: reordering the objects does not change the result; growth in the number of objects |
+| A16 | **Map validator**: the contours are closed, the sectors are convex (the cross-product signs are equal), the portals are symmetric (`a` refers to `b` ⇔ `b` to `a`), the numbers are finite | loading tracks and arenas | O(vertices) | a test for each violation; broken maps in the fixtures |
 
-**Горячий цикл:** инварианты вынесены, `x * x` вместо `pow(x, 2)`, данные в массиве, а не в
-связном списке (уроки RTv1).
+**The hot loop:** invariants hoisted out, `x * x` instead of `pow(x, 2)`, data in an array rather
+than a linked list (the RTv1 lessons).
 
-**Особенности битов в JS:** битовые операции приводят число к int32. Значит, флагов в одном
-числе не больше 32, для беззнакового результата нужен `>>> 0`, а для большего числа флагов —
-`BigInt` или несколько слов.
+**Bit quirks in JS:** bit operations coerce a number to int32. So there are at most 32 flags in one
+number, an unsigned result needs `>>> 0`, and for more flags use `BigInt` or several words.
 
 ---
 
-## 4. Этапы
+## 4. Stages
 
-### Этап 0. Привести в порядок то, что есть
-- ~~Запушить локальные коммиты и убедиться, что CI зелёный~~ — сделано: прогон на `ad64213`
-  прошёл, исправление порядка `corepack` подтверждено на GitHub.
-- Гейт границ слоёв: импорты только вниз — `packages/game` → ничего, `packages/protocol` → ничего,
-  `worker` → не `client`, `client` → не `worker`.
-- Бюджет бандла в CI: текущий размер плюс запас; рост — только осознанным коммитом.
+### Stage 0. Put what exists in order
+- ~~Push the local commits and make sure CI is green~~ — done: the run on `ad64213` passed, the
+  `corepack` order fix is confirmed on GitHub.
+- A layer-boundary gate: imports only point down — `packages/game` → nothing, `packages/protocol`
+  → nothing, `worker` → not `client`, `client` → not `worker`.
+- A bundle budget in CI: the current size plus headroom; growth only by a deliberate commit.
 
-### Этап 1. `packages/game/src/geometry` — чистая 2D-математика
-Векторы, векторное произведение, пересечение отрезков, сторона прямой, исправленная проекция,
-точка в выпуклом многоугольнике, луч против сферы и плоскости с ближайшим попаданием (A15),
-целочисленные углы с таблицей синусов (A5, A6, A8), ГПСЧ (A9), валидатор карт (A16).
-Тесты-свойства — нужна библиотека property-based тестов (`fast-check`), это решение принять в
-плане этапа. Расширить скан чистоты на трансцендентные функции.
+### Stage 1. `packages/game/src/geometry` — pure 2D maths
+Vectors, the cross product, segment intersection, the side of a line, the fixed projection, a
+point in a convex polygon, a ray against a sphere and a plane with the nearest hit (A15), integer
+angles with a sine table (A5, A6, A8), the PRNG (A9), the map validator (A16). Property tests —
+this needs a property-based testing library (`fast-check`); that decision is taken in the stage's
+plan. Extend the purity scan to transcendental functions.
 
-### Этап 2. Серверный тик — прототип прогнан (2026-10-10)
+### Stage 2. The server tick — prototype run (2026-10-10)
 
-Прототип: Durable Object на partyserver 0.5.10 в локальном workerd (wrangler 4.131.1), 20 байков
-на поле 128×128, иммутабельный шаг с копией поля, дельты в JSON, 20 сокетов, по 20 секунд на
-частоту.
+The prototype: a Durable Object on partyserver 0.5.10 in a local workerd (wrangler 4.131.1), 20
+bikes on a 128×128 field, an immutable step with a copy of the field, deltas in JSON, 20 sockets,
+20 seconds per rate.
 
-| Частота | Шагов / ожидалось | Пробуждений таймера | Разрыв у клиентов p50 / p99 / max, мс | Дельта, Б/шаг | Трафик на игрока | Из комнаты |
+| Rate | Steps / expected | Timer wake-ups | Gap at the clients p50 / p99 / max, ms | Delta, B/step | Traffic per player | Out of the room |
 |---|---|---|---|---|---|---|
-| 15 Гц | 300 / 300 | 295 | 68 / 73 / 76 | 215 | 3,2 КБ/с | 63 КБ/с |
-| 20 Гц | 400 / 400 | 379 | 52 / 80 / **190** | 234 | 4,6 КБ/с | 91 КБ/с |
-| 30 Гц | 600 / 600 | 573 | 35 / 40 / 46 | 252 | 7,4 КБ/с | 147 КБ/с |
+| 15 Hz | 300 / 300 | 295 | 68 / 73 / 76 | 215 | 3.2 KB/s | 63 KB/s |
+| 20 Hz | 400 / 400 | 379 | 52 / 80 / **190** | 234 | 4.6 KB/s | 91 KB/s |
+| 30 Hz | 600 / 600 | 573 | 35 / 40 / 46 | 252 | 7.4 KB/s | 147 KB/s |
 
-Стоимость шага (Node, после прогрева): 4 байка — 3,9 мкс, 20 — 12,4 мкс, 50 — 30,9 мкс; растёт
-линейно. Копия поля 128×128 `Uint16Array` — **2,3 мкс**: иммутабельность здесь почти бесплатна,
-а откат при предсказании превращается в хранение старой ссылки. 20 байков на 30 Гц — 0,37 мс
-процессора в секунду.
+The cost of a step (Node, after warm-up): 4 bikes — 3.9 µs, 20 — 12.4 µs, 50 — 30.9 µs; it grows
+linearly. Copying a 128×128 `Uint16Array` field takes **2.3 µs**: immutability is almost free
+here, and a rollback during prediction turns into keeping an old reference. 20 bikes at 30 Hz cost
+0.37 ms of CPU per second.
 
-Что нашлось:
-1. **`setInterval` в DO систематически опаздывает на 1–2 мс за период.** Если делать по одному шагу
-   на пробуждение, теряется 2–5 % тиков (295 пробуждений вместо 300, 573 вместо 600), и игра
-   медленно замедляется. Накопитель `while (now >= next) step()` дал **ровно ожидаемое число шагов**
-   на всех частотах. Значит, накопитель обязателен, а таймер только будит.
-2. **Бывают паузы до ~190 мс** (одна за 20 с на 20 Гц). Накопитель их нагоняет, но клиенту приходят
-   пачки дельт. Отсюда: клиент рисует чужих с буфером интерполяции, а не «как пришло».
-3. **Время в Workers заморожено во время вычислений**, поэтому замерить процессор изнутри нельзя —
-   только снаружи, как сделано выше.
-4. Пропусков нет: WebSocket упорядочен и надёжен, номер тика в дельте идёт подряд у всех 20 клиентов.
+What was found:
+1. **`setInterval` in a DO is systematically late by 1–2 ms per period.** If you do one step per
+   wake-up, 2–5% of the ticks are lost (295 wake-ups instead of 300, 573 instead of 600), and the
+   game slowly slows down. An accumulator `while (now >= next) step()` gave **exactly the expected
+   number of steps** at every rate. So the accumulator is mandatory, and the timer only wakes it.
+2. **There are pauses of up to ~190 ms** (one in 20 s at 20 Hz). The accumulator catches them up,
+   but the client receives deltas in bursts. Hence: the client draws other players with an
+   interpolation buffer, not "as it arrives".
+3. **Time in Workers is frozen during computation**, so the CPU cannot be measured from the
+   inside — only from the outside, as done above.
+4. There are no gaps: a WebSocket is ordered and reliable, and the tick number in the delta runs
+   consecutively for all 20 clients.
 
-**Проверено на настоящем Cloudflare** (временный превью-аккаунт `wrangler deploy --temporary` —
-без входа и без следов в рабочем аккаунте, истекает сам; 20 сокетов по `wss://`, 30 секунд):
+**Checked on real Cloudflare** (a temporary preview account, `wrangler deploy --temporary` —
+no sign-in and no traces in the working account, it expires on its own; 20 sockets over `wss://`,
+30 seconds):
 
-| Частота | Шагов / ожидалось | Пробуждений | Интервал на сервере p50 / max | Разрыв у клиентов p99 / max | Трафик на игрока |
+| Rate | Steps / expected | Wake-ups | Server interval p50 / max | Gap at the clients p99 / max | Traffic per player |
 |---|---|---|---|---|---|
-| 20 Гц | 600 / 600 | 600 | 50 / 50 мс | 57 / 180 мс | 4,9 КБ/с |
-| 30 Гц | 900 / 900 | 910 | 33 / 33 мс | 54 / 100 мс | 7,7 КБ/с |
+| 20 Hz | 600 / 600 | 600 | 50 / 50 ms | 57 / 180 ms | 4.9 KB/s |
+| 30 Hz | 900 / 900 | 910 | 33 / 33 ms | 54 / 100 ms | 7.7 KB/s |
 
-5. **Опоздание таймера — особенность локального workerd.** В проде таймер точен до миллисекунды.
-   Накопитель всё равно обязателен: на 30 Гц таймер иногда будит **раньше** срока (910 пробуждений
-   на 900 шагов), и такое пробуждение не должно делать шаг. Накопитель покрывает оба направления.
-6. **Паузы до 180 мс у клиента в проде — это сеть, а не сервер**: на сервере интервалы ровные. Буфер
-   интерполяции 100 мс покрывает p99, редкие хвосты клиент нагоняет плавно.
+5. **The timer lateness is a quirk of the local workerd.** In production the timer is accurate to
+   the millisecond. The accumulator is still mandatory: at 30 Hz the timer sometimes wakes up
+   **early** (910 wake-ups for 900 steps), and such a wake-up must not make a step. The
+   accumulator covers both directions.
+6. **Pauses of up to 180 ms at the client in production are the network, not the server**: on the
+   server the intervals are even. A 100 ms interpolation buffer covers p99, and the client catches
+   up the rare tails smoothly.
 
-### Этап 3. Интерфейс режимов и арена (режим №2)
-Интерфейс режима выводится из двух реализаций, кликера и арены, как и предписывает CLAUDE.md.
-Арена «Световые байки» (раздел 6): сетка `Uint8Array` (A3), повороты как события с номером тика
-(A7), резина и ограниченный бэкдейтинг (раздел 5), следы рассылаются дельтами, детерминированная
-симуляция по тикам, выбывание. Оформление в неоновом стиле, процедурный саундтрек. Тест воспроизведения: одинаковые вводы → бит в бит одинаковое состояние.
+### Stage 3. The mode interface and the arena (mode no. 2)
+The mode interface is derived from two implementations, the clicker and the arena, as CLAUDE.md
+prescribes. The "Light cycles" arena (section 6): a `Uint8Array` grid (A3), turns as events with a
+tick number (A7), rubber and bounded backdating (section 5), trails broadcast as deltas, a
+deterministic tick-based simulation, elimination. A neon look, a procedural soundtrack. A replay
+test: the same inputs → the same state, bit for bit.
 
-### Этап 4. Сетевой код клиента — **сначала прототип**
-Предсказание своей сущности теми же функциями из `packages/game`, буфер вводов (A10), сверка с
-сервером и откат, интерполяция чужих по истории снимков. Цель — отсутствие дёрганья при пинге
-100 мс. Проверка — глазами на записи экрана, а не только тестами.
+### Stage 4. The client netcode — **prototype first**
+Prediction of the player's own entity with the same functions from `packages/game`, an input
+buffer (A10), reconciliation with the server and rollback, interpolation of the others from the
+snapshot history. The goal is no jerking at a 100 ms ping. It is checked by eye on a screen
+recording, not only by tests.
 
-### Этап 5. Кольцевая гонка
-Трасса — кольцо секторов (A4), аркадная модель машины на целочисленных углах (A8), отбойники (A6),
-круги через пересечение отрезков (A5), столкновения машин через хеш-сетку (A2), таблица мест
-встроенной сортировкой (A11), сцена на `InstancedMesh` (A13). Редактор трассы — по опыту редактора DooM_42,
-но отдельным этапом и только если ручная правка трасс станет узким местом.
+### Stage 5. The ring race
+The track is a ring of sectors (A4), an arcade car model on integer angles (A8), barriers (A6),
+laps through segment intersection (A5), car collisions through a hash grid (A2), the standings
+table by the built-in sort (A11), the scene on an `InstancedMesh` (A13). A track editor — on the
+experience of the DooM_42 editor, but as a separate stage and only if editing tracks by hand
+becomes the bottleneck.
 
 ---
 
-## 5. Чужие проекты: что берём и чего избегаем
+## 5. Other people's projects: what we take and what we avoid
 
-| Проект | Сильное решение | Ошибка или ограничение | Вывод для нас |
+| Project | The strong decision | The bug or limitation | The conclusion for us |
 |---|---|---|---|
-| [Armagetron Advanced](https://wiki.armagetronad.org/index.php/Rubber) — Tron-байки с открытым кодом, есть [порт в браузер](https://github.com/escapedcat/armagetronad-web) | **«Резина»**: у стены байк замедляет сближение и тратит запас резины, ноль — смерть; запас восстанавливается вдали от стен (`CYCLE_RUBBER`, `CYCLE_RUBBER_TIME`). Задержка сети превращена в игровую механику. **Бэкдейтинг**: сервер применяет запоздавшую команду на момент, когда она была отдана, пока у клиента есть «кредит задержки» | [Ошибка #321694](https://bugs.launchpad.net/armagetronad/+bug/321694): один сбой сервера раздул поправку времени клиента далеко за реальную задержку; исправлено ограничением поправки | Резина и бэкдейтинг поворотов — в Tron с первого дня. Кредит задержки и поправка **ограничены сверху** |
-| [Rune / Dusk](https://github.com/rune/rune) — SDK браузерных мультиплееров на JS | Одна и та же детерминированная логика на клиентах и сервере, predict-rollback, сервер авторитетен. [Слать намерение, а не позицию](https://developers.rune.ai/blog/top-down-synchronization): при конфликте меняется исход, а не прыгает картинка. Логика 30 Гц, действий от клиента не больше 10 в секунду. Недетерминированные функции запрещены линтером | Хостинг и серверная часть закрыты: открыт SDK, а не сетевое ядро | Наш скан чистоты — тот же подход, что их линтер. Тик 30 Гц и ограничение частоты ввода — ориентир для этапа 2 |
-| [Colyseus](https://docs.colyseus.io/) — фреймворк комнат на Node.js | Новый игрок получает полное состояние, дальше — только дельты. Очередь изменений по свойствам, «последнее значение побеждает». Бинарные патчи раз в 50 мс | Состояние — изменяемые классы с декораторами сериализации: правила сцеплены с форматом передачи. Предсказания на клиенте из коробки нет | **След байка растёт каждый тик** — рассылать его целиком 10 раз в секунду нельзя: это O(игроков × длины следов) на каждый снимок. Полный снимок при входе, дальше — только новые клетки |
-| boardgame.io | Ходы — чистые функции над состоянием, фазы, секреты через `playerView` | Только пошаговые игры | Подтверждает нашу схему: чистые правила, фазы, приватные сообщения |
-| Croquet / Multisynq | Реплицированные детерминированные вычисления: сервер только упорядочивает события | Нет авторитетного сервера — нет защиты от читов | Нам не подходит: игрок с открытой консолью не должен решать исход |
-| Glenn Fiedler, *Fix Your Timestep!*; Valve, сетевой код Source | Шаг симуляции фиксирован, таймер лишь догоняет накопитель: `while (now >= next) step()`. Чужие сущности рисуются с задержкой интерполяции (~100 мс) | — | Тик DO не доверяет точности `setInterval`: время берётся из `now`, как уже делает `advance` |
+| [Armagetron Advanced](https://wiki.armagetronad.org/index.php/Rubber) — an open-source Tron bike game, with a [browser port](https://github.com/escapedcat/armagetronad-web) | **"Rubber"**: next to a wall the bike slows its approach and spends a reserve of rubber, zero is death; the reserve refills away from walls (`CYCLE_RUBBER`, `CYCLE_RUBBER_TIME`). Network latency is turned into a game mechanic. **Backdating**: the server applies a late command at the moment it was issued, while the client has a "latency credit" | [Bug #321694](https://bugs.launchpad.net/armagetronad/+bug/321694): one server hiccup inflated the client's time correction far beyond the real latency; fixed by capping the correction | Rubber and backdating of turns go into Tron from day one. The latency credit and the correction are **capped from above** |
+| [Rune / Dusk](https://github.com/rune/rune) — an SDK for browser multiplayer games in JS | The same deterministic logic on the clients and the server, predict-rollback, the server is authoritative. [Send the intent, not the position](https://developers.rune.ai/blog/top-down-synchronization): on a conflict the outcome changes, the picture does not jump. Logic at 30 Hz, no more than 10 actions per second from a client. Non-deterministic functions are forbidden by a linter | The hosting and the server side are closed: the SDK is open, the network core is not | Our purity scan is the same approach as their linter. A 30 Hz tick and a cap on the input rate are a reference point for stage 2 |
+| [Colyseus](https://docs.colyseus.io/) — a room framework on Node.js | A new player gets the full state, then only deltas. A queue of changes per property, "last value wins". Binary patches every 50 ms | The state is mutable classes with serialization decorators: the rules are coupled to the wire format. No client-side prediction out of the box | **A bike's trail grows every tick** — broadcasting it whole 10 times a second is not possible: that is O(players × trail length) for every snapshot. A full snapshot on joining, then only the new cells |
+| boardgame.io | Moves are pure functions over the state, phases, secrets through `playerView` | Turn-based games only | Confirms our scheme: pure rules, phases, private messages |
+| Croquet / Multisynq | Replicated deterministic computation: the server only orders the events | No authoritative server — no protection against cheating | Not for us: a player with the console open must not decide the outcome |
+| Glenn Fiedler, *Fix Your Timestep!*; Valve, the Source netcode | The simulation step is fixed, the timer only catches up the accumulator: `while (now >= next) step()`. Other entities are drawn with an interpolation delay (~100 ms) | — | The DO tick does not trust the accuracy of `setInterval`: time is taken from `now`, as `advance` already does |
 
-## 6. Режим «Световые байки» (Tron)
+## 6. The "Light cycles" mode (Tron)
 
-Решено: следующий режим — байки, оставляющие след; врезался — выбыл. Стиль — неоновая сетка в
-духе «Трон: Наследие»: меню, HUD, лидерборд, музыка.
+Decided: the next mode is bikes that leave a trail; crash and you are out. The style is a neon grid
+in the spirit of *Tron: Legacy*: menu, HUD, leaderboard, music.
 
-- **Музыка и имя.** Саундтрек Daft Punk и название Tron принадлежат Disney: публичная игра не
-  может их использовать даже на бесплатном тарифе. Стиль защищённым не является. Музыка — свой
-  синтвейв: либо треки под CC0/CC-BY, либо **процедурный саундтрек на WebAudio** (арпеджио на пиле
-  через фильтр, 120 BPM), который весит килобайты и может ускоряться к концу раунда. Имя режима —
-  своё.
-- **Поле: сетка или непрерывное?** Armagetron хранит следы как отрезки в непрерывном пространстве
-  с поворотами на 90°. У нас сетка (`Uint8Array`, A3): проще, детерминирована целыми числами,
-  проверка столкновения — O(1) чтение клетки. Плавность — интерполяцией при отрисовке. Решается
-  в спецификации режима.
+- **Music and name.** The Daft Punk soundtrack and the name Tron belong to Disney: a public game
+  cannot use them even on the free tier. A style is not protected. The music is our own synthwave:
+  either CC0/CC-BY tracks or a **procedural soundtrack on WebAudio** (a sawtooth arpeggio through
+  a filter, 120 BPM), which weighs kilobytes and can speed up towards the end of a round. The
+  name of the mode is our own.
+- **A grid or continuous space?** Armagetron stores trails as segments in continuous space with
+  90° turns. We use a grid (`Uint8Array`, A3): simpler, deterministic with integers, and the
+  collision check is an O(1) cell read. Smoothness comes from interpolation when drawing. To be
+  settled in the mode's spec.
 
-## 7. Боты
+## 7. Bots
 
-Нужны с первого дня: без них режим не проверить в одиночку, а маленькой компании не с кем играть.
+Needed from day one: without them the mode cannot be tested alone, and a small company has nobody
+to play with.
 
-- **Боты — часть правил**, а не отдельный клиент: чистая функция `decide(state, botId) → поворот`
-  внутри `packages/game`, случайность — из сидированного ГПСЧ состояния. Тогда бот детерминирован,
-  воспроизводим в тестах и бесплатен по сети.
-- **Классический ИИ Трона — заливка**: для «прямо», «влево», «вправо» посчитать, сколько клеток
-  достижимо (BFS), и выбрать вариант с наибольшим пространством. Полный BFS — O(клеток) на
-  вариант, то есть 20 ботов × 3 × 16 384 клетки на каждом тике. Поэтому заливка **ограничена
-  бюджетом клеток** и запускается, только когда препятствие ближе порога. Гейт: стоимость решения
-  бота не растёт с размером поля.
-- Уровни сложности — бюджет заливки и доля случайных ошибок.
-- Хост добавляет и убирает ботов кнопкой в лобби. Боты занимают места, как игроки.
+- **Bots are part of the rules**, not a separate client: a pure function
+  `decide(state, botId) → turn` inside `packages/game`, with randomness from the state's seeded
+  PRNG. Then a bot is deterministic, reproducible in tests and free over the network.
+- **The classic Tron AI is a flood fill**: for "straight", "left", "right" count how many cells
+  are reachable (BFS) and pick the option with the most space. A full BFS is O(cells) per option,
+  that is 20 bots × 3 × 16,384 cells on every tick. So the fill is **limited by a cell budget** and
+  runs only when an obstacle is closer than a threshold. Gate: the cost of a bot's decision does
+  not grow with the size of the field.
+- Difficulty levels are the fill budget and the share of random mistakes.
+- The host adds and removes bots with a button in the lobby. Bots take seats like players.
 
-## 8. Открытые вопросы
+## 8. Open questions
 
-1. ~~Арена: Tron или змейки~~ — решено: Tron, раздел 6.
-2. ~~Частота тика~~ — замерено на этапе 2: все три частоты укладываются с запасом; выбор — в спецификации режима.
-3. **`fast-check`** как новая зависимость для тестов-свойств — да или свои генераторы.
+1. ~~The arena: Tron or snakes~~ — decided: Tron, section 6.
+2. ~~The tick rate~~ — measured in stage 2: all three rates fit with room to spare; the choice is
+   made in the mode's spec.
+3. **`fast-check`** as a new dependency for property tests — yes, or our own generators.

@@ -1,96 +1,96 @@
-# Clicker Server Implementation Plan (план 2 из 3: комната на partyserver)
+# Clicker Server Implementation Plan (plan 2 of 3: the room on partyserver)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Поднять `apps/server` — Worker с одной комнатой на Durable Object, который принимает игроков по WebSocket, крутит раунды по будильнику и рассылает снимки состояния десять раз в секунду, полностью покрытый интеграционными тестами в настоящем рантайме Workers.
+**Goal:** Bring up `apps/server` — a Worker with a single room as a Durable Object that accepts players over WebSocket, runs rounds on an alarm and broadcasts state snapshots ten times a second, fully covered by integration tests in the real Workers runtime.
 
-**Architecture:** Комната — класс на partyserver поверх Durable Object со сном. Правил игры в ней нет: любое сообщение превращается в команду и уходит в `apply` из `@clicker/game`, а наружу состояние отдаётся через `toSnapshot` из `@clicker/protocol`. Смену фаз двигает будильник Durable Object, а не таймеры в памяти, поэтому раунд закончится даже после пробуждения объекта.
+**Architecture:** The room is a class on partyserver on top of a hibernating Durable Object. It holds no game rules: every message becomes a command and goes to `apply` from `@clicker/game`, and state goes out through `toSnapshot` from `@clicker/protocol`. Phase changes are driven by the Durable Object alarm, not by in-memory timers, so a round still ends after the object wakes up.
 
 **Tech Stack:** partyserver 0.5.10, wrangler 4.131.1, @cloudflare/vitest-plugin 1.1.8, Vitest 4.1.11, TypeScript 7.0.2, Node 22, pnpm 12.4.1.
 
-Спецификация: [2026-09-11-clicker-foundation-design.md](../specs/2026-09-11-clicker-foundation-design.md), разделы 4, 7, 9, 10. План 1 (ядро и протокол) уже выполнен и влит в `main`.
+Spec: [2026-09-11-clicker-foundation-design.md](../specs/2026-09-11-clicker-foundation-design.md), sections 4, 7, 9, 10. Plan 1 (the core and the protocol) is done and merged into `main`.
 
 ---
 
-## Проверено перед написанием плана
+## Verified before writing the plan
 
-Весь код ниже собран и прогнан во временной папке на этой машине: 6 интеграционных тестов в настоящем рантайме Workers (workerd), `tsc --noEmit` без ошибок, Biome без замечаний. Тесты подключаются к Worker по-настоящему, через WebSocket, и играют полный раунд.
+All the code below was built and run in a temporary folder on this machine: 6 integration tests in the real Workers runtime (workerd), `tsc --noEmit` with no errors, Biome with no findings. The tests connect to the Worker for real, over WebSocket, and play a full round.
 
-Пять находок, ради которых стоило собрать прототип:
+Five findings that made the prototype worth building:
 
-1. **В pnpm 12 разрешение сборочных скриптов называется `allowBuilds` и живёт в `pnpm-workspace.yaml`.** Старый `onlyBuiltDependencies` не работает нигде: в `package.json` pnpm ругается, что поле `pnpm` больше не читает, а в yaml он молча игнорируется с 11-й версии. Пока это не поправлено, `pnpm install` падает с `ERR_PNPM_IGNORED_BUILDS`, `workerd` не разворачивается и тесты сервера не запускаются. В репозитории сейчас лежит старый вариант — Task 1 это чинит.
-2. **Смену фазы нужно рассылать сразу.** Если полагаться только на таймер снимков, клиенты узнают о старте раунда с задержкой до 100 мс, а короткий отсчёт можно вообще не увидеть. В прототипе это поймал тест.
-3. **Мягкое выселение объекта (`evictDurableObject`) во время раунда не срабатывает:** объект занят таймером рассылки, и выселение ждёт его освобождения. Перезапуск посреди игры проверяется через `abortAllDurableObjects()`.
-4. **`SELF` и `env` из `cloudflare:test` помечены устаревшими** в пользу `exports` и `env` из `cloudflare:workers`, но у `exports.default` сейчас нет типа `default`, и `tsc` на нём падает. Пока берём `SELF` — он работает и типизирован.
-5. **partyserver адресует комнату через `idFromName`**, имя берётся из адреса `/parties/room/<имя>`. Это пригодится, когда понадобится достать конкретный объект в тестах.
+1. **In pnpm 12 the permission for build scripts is called `allowBuilds` and lives in `pnpm-workspace.yaml`.** The old `onlyBuiltDependencies` works nowhere: in `package.json` pnpm complains that it no longer reads the `pnpm` field, and in yaml it has been silently ignored since version 11. Until this is fixed, `pnpm install` fails with `ERR_PNPM_IGNORED_BUILDS`, `workerd` is not unpacked and the server tests do not run. The repository currently has the old variant — Task 1 fixes it.
+2. **A phase change must be broadcast at once.** If we rely only on the snapshot timer, clients learn about the start of a round with a delay of up to 100 ms, and a short countdown may not be seen at all. In the prototype a test caught this.
+3. **A soft eviction of the object (`evictDurableObject`) during a round does not work:** the object is busy with the broadcast timer, and the eviction waits for it to become free. A restart in the middle of a game is tested with `abortAllDurableObjects()`.
+4. **`SELF` and `env` from `cloudflare:test` are marked deprecated** in favour of `exports` and `env` from `cloudflare:workers`, but `exports.default` currently has no `default` type, and `tsc` fails on it. For now we use `SELF` — it works and is typed.
+5. **partyserver addresses the room through `idFromName`**, and the name comes from the address `/parties/room/<name>`. This will be useful when a test needs to reach a specific object.
 
-## Как выполнять
+## How to execute
 
-- Ветка `feat/server`, работаем в самом репозитории.
-- Один таск — один коммит. Conventional Commits, английский, **без подписей Claude**.
-- Порядок тасков менять нельзя.
-- Аккаунт Cloudflare для этого плана не нужен: тесты идут локально в workerd. Он понадобится только для деплоя в плане 3.
+- Branch `feat/server`, working in the repository itself.
+- One task, one commit. Conventional Commits, English, **no Claude signatures**.
+- The order of the tasks must not change.
+- A Cloudflare account is not needed for this plan: the tests run locally in workerd. It is needed only for the deploy in plan 3.
 
-## Файловая структура
+## File structure
 
 ```
 apps/server/
-  package.json           @clicker/server: зависимости и скрипты
-  wrangler.jsonc         привязка Durable Object, миграция на SQLite, переменные
-  tsconfig.json          типы Workers и плагина тестов
-  vitest.config.ts       запуск тестов внутри workerd, короткие длительности раунда
-  src/worker.ts          маршрутизация /parties/*, проверка идентификатора комнаты
-  src/room.ts            класс Room: соединения, команды, будильник, рассылка
-  test/support.ts        клиент WebSocket для тестов
-  test/room.test.ts      маршрутизация, вход, отказ не-хосту, полный раунд
-  test/lifecycle.test.ts обрыв связи и перезапуск объекта
+  package.json           @clicker/server: dependencies and scripts
+  wrangler.jsonc         Durable Object binding, SQLite migration, variables
+  tsconfig.json          Workers and test plugin types
+  vitest.config.ts       runs the tests inside workerd, short round durations
+  src/worker.ts          routing of /parties/*, room id check
+  src/room.ts            the Room class: connections, commands, alarm, broadcast
+  test/support.ts        WebSocket client for the tests
+  test/room.test.ts      routing, joining, refusing a non-host, a full round
+  test/lifecycle.test.ts connection drop and object restart
 ```
 
-Меняются также: `pnpm-workspace.yaml`, корневой `package.json`, `.gitignore`.
+Also changed: `pnpm-workspace.yaml`, the root `package.json`, `.gitignore`.
 
 ---
 
-### Task 1: Подготовить монорепозиторий к приложениям
+### Task 1: Prepare the monorepo for apps
 
 **Files:**
 - Modify: `pnpm-workspace.yaml`, `package.json`, `.gitignore`
 
-- [ ] **Step 1: Переписать `pnpm-workspace.yaml` целиком**
+- [ ] **Step 1: Rewrite `pnpm-workspace.yaml` in full**
 
-Добавляем приложения и разрешаем сборочные скрипты. Ключ именно `allowBuilds`: прежний `onlyBuiltDependencies` в pnpm 12 не действует ни здесь, ни в `package.json`.
+We add the apps and allow build scripts. The key is exactly `allowBuilds`: the former `onlyBuiltDependencies` has no effect in pnpm 12, either here or in `package.json`.
 
 ```yaml
 packages:
   - "packages/*"
   - "apps/*"
 
-# Разрешаем сборочные скрипты: без workerd не поднимется рантайм Workers в тестах.
+# Allow build scripts: without them workerd does not start the Workers runtime in the tests.
 allowBuilds:
   esbuild: true
   workerd: true
 ```
 
-- [ ] **Step 2: Убедиться, что в корневом `package.json` нет поля `pnpm`**
+- [ ] **Step 2: Make sure the root `package.json` has no `pnpm` field**
 
-Если оно там появится, pnpm при каждой установке будет печатать предупреждение, что это поле больше не читается. Настройки установки живут только в `pnpm-workspace.yaml`.
+If it appears there, pnpm will print a warning on every install that the field is no longer read. Install settings live only in `pnpm-workspace.yaml`.
 
-- [ ] **Step 3: Добавить в `.gitignore` сгенерированные типы Worker**
+- [ ] **Step 3: Add the generated Worker types to `.gitignore`**
 
-Файл `worker-configuration.d.ts` делает `wrangler types` из `wrangler.jsonc`; в git он не нужен, его пересоздаёт скрипт проверки типов.
+`worker-configuration.d.ts` is produced by `wrangler types` from `wrangler.jsonc`; git does not need it, and the typecheck script recreates it.
 
 ```gitignore
 worker-configuration.d.ts
 ```
 
-- [ ] **Step 4: Проверить, что воркспейс цел**
+- [ ] **Step 4: Check that the workspace is intact**
 
 Run: `pnpm install`
-Expected: установка проходит без предупреждений про поле `pnpm` и без ошибки `ERR_PNPM_IGNORED_BUILDS`.
+Expected: the install passes with no warnings about the `pnpm` field and no `ERR_PNPM_IGNORED_BUILDS` error.
 
 Run: `pnpm test`
-Expected: как и раньше, 60 тестов в game и 31 в protocol.
+Expected: as before, 60 tests in game and 31 in protocol.
 
-- [ ] **Step 5: Закоммитить**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add pnpm-workspace.yaml .gitignore pnpm-lock.yaml
@@ -99,14 +99,14 @@ git commit -m "chore: add apps to the workspace and allow workerd build scripts"
 
 ---
 
-### Task 2: Каркас пакета apps/server
+### Task 2: The apps/server package skeleton
 
 **Files:**
 - Create: `apps/server/package.json`, `apps/server/wrangler.jsonc`, `apps/server/tsconfig.json`, `apps/server/vitest.config.ts`
 
-- [ ] **Step 1: Создать `apps/server/package.json`**
+- [ ] **Step 1: Create `apps/server/package.json`**
 
-`typecheck` сначала пересоздаёт типы окружения: файл не хранится в git, а CI и локальная проверка должны работать одинаково.
+`typecheck` first recreates the environment types: the file is not kept in git, and CI and the local check must work the same way.
 
 ```json
 {
@@ -135,9 +135,9 @@ git commit -m "chore: add apps to the workspace and allow workerd build scripts"
 }
 ```
 
-- [ ] **Step 2: Создать `apps/server/wrangler.jsonc`**
+- [ ] **Step 2: Create `apps/server/wrangler.jsonc`**
 
-Раздача собранного клиента появится в плане 3 вместе с самим клиентом; сейчас Worker обслуживает только `/parties/*`.
+Serving the built client will arrive in plan 3 together with the client itself; for now the Worker serves only `/parties/*`.
 
 ```jsonc
 {
@@ -152,7 +152,7 @@ git commit -m "chore: add apps to the workspace and allow workerd build scripts"
 }
 ```
 
-- [ ] **Step 3: Создать `apps/server/tsconfig.json`**
+- [ ] **Step 3: Create `apps/server/tsconfig.json`**
 
 ```json
 {
@@ -172,7 +172,7 @@ git commit -m "chore: add apps to the workspace and allow workerd build scripts"
 }
 ```
 
-- [ ] **Step 4: Создать `apps/server/vitest.config.ts`**
+- [ ] **Step 4: Create `apps/server/vitest.config.ts`**
 
 ```ts
 import { cloudflareTest } from '@cloudflare/vitest-plugin';
@@ -182,7 +182,7 @@ export default defineConfig({
   plugins: [
     cloudflareTest({
       wrangler: { configPath: './wrangler.jsonc' },
-      // Раунд в тестах идёт доли секунды, а не тринадцать.
+      // A round in the tests lasts fractions of a second, not thirteen.
       miniflare: {
         bindings: { COUNTDOWN_MS: '50', ROUND_MS: '200' },
       },
@@ -191,17 +191,17 @@ export default defineConfig({
 });
 ```
 
-- [ ] **Step 5: Установить зависимости**
+- [ ] **Step 5: Install the dependencies**
 
 Run: `pnpm install`
-Expected: `Scope: all 4 workspace projects`, ставятся partyserver, wrangler, плагин тестов, у `workerd` отрабатывает postinstall. Ошибки `ERR_PNPM_IGNORED_BUILDS` быть не должно — если она появилась, значит `allowBuilds` из Task 1 не на месте.
+Expected: `Scope: all 4 workspace projects`; partyserver, wrangler and the test plugin are installed, and the `workerd` postinstall runs. The `ERR_PNPM_IGNORED_BUILDS` error must not appear — if it does, `allowBuilds` from Task 1 is not in place.
 
-- [ ] **Step 6: Проверить генерацию типов окружения**
+- [ ] **Step 6: Check the environment type generation**
 
 Run: `pnpm --filter @clicker/server run types`
-Expected: создаётся `apps/server/worker-configuration.d.ts`, в нём есть `interface Env`. Предупреждение про `@types/node` можно игнорировать: пакет Node-совместимость не использует.
+Expected: `apps/server/worker-configuration.d.ts` is created and contains `interface Env`. The warning about `@types/node` can be ignored: the package does not use Node compatibility.
 
-- [ ] **Step 7: Закоммитить**
+- [ ] **Step 7: Commit**
 
 ```bash
 pnpm format
@@ -211,13 +211,13 @@ git commit -m "chore(server): scaffold the worker package"
 
 ---
 
-### Task 3: Маршрутизация комнат
+### Task 3: Room routing
 
 **Files:**
 - Create: `apps/server/src/worker.ts`, `apps/server/src/room.ts`, `apps/server/test/support.ts`
 - Test: `apps/server/test/room.test.ts`
 
-- [ ] **Step 1: Создать помощник тестов `apps/server/test/support.ts`**
+- [ ] **Step 1: Create the test helper `apps/server/test/support.ts`**
 
 ```ts
 import { SELF } from 'cloudflare:test';
@@ -233,7 +233,7 @@ export const isSnapshot = (message: ServerMessage): message is Snapshot =>
   message.type === 'snapshot';
 export const isError = (message: ServerMessage): message is ServerError => message.type === 'error';
 
-/** Копит входящие сообщения и позволяет дождаться нужного. */
+/** Collects incoming messages and lets a test wait for the one it needs. */
 export class Client {
   readonly received: ServerMessage[] = [];
 
@@ -283,9 +283,9 @@ export async function connect(roomId: string): Promise<Client> {
 }
 ```
 
-- [ ] **Step 2: Написать падающий тест `apps/server/test/room.test.ts`**
+- [ ] **Step 2: Write the failing test `apps/server/test/room.test.ts`**
 
-Пока только проверка адреса; остальные тесты этого файла добавятся в следующих тасках.
+For now only the address check; the other tests in this file are added in the following tasks.
 
 ```ts
 import { SELF } from 'cloudflare:test';
@@ -314,12 +314,12 @@ describe('room over websocket', () => {
 });
 ```
 
-- [ ] **Step 3: Убедиться, что тест падает**
+- [ ] **Step 3: Make sure the test fails**
 
 Run: `pnpm --filter @clicker/server test`
-Expected: FAIL, `Cannot find module './room'` или `Cannot find module '../src/worker'` — исходников ещё нет.
+Expected: FAIL, `Cannot find module './room'` or `Cannot find module '../src/worker'` — the sources do not exist yet.
 
-- [ ] **Step 4: Создать заготовку комнаты `apps/server/src/room.ts`**
+- [ ] **Step 4: Create the room stub `apps/server/src/room.ts`**
 
 ```ts
 import { Server } from 'partyserver';
@@ -329,7 +329,7 @@ export class Room extends Server<Env> {
 }
 ```
 
-- [ ] **Step 5: Создать `apps/server/src/worker.ts`**
+- [ ] **Step 5: Create `apps/server/src/worker.ts`**
 
 ```ts
 import { routePartykitRequest } from 'partyserver';
@@ -337,7 +337,7 @@ import { Room } from './room';
 
 export { Room };
 
-/** Тот же формат, что у идентификаторов протокола: 16 случайных байт в base64url. */
+/** The same format as the protocol's identifiers: 16 random bytes in base64url. */
 const ROOM_ID = /^[A-Za-z0-9_-]{22}$/;
 
 export default {
@@ -352,12 +352,12 @@ export default {
 };
 ```
 
-- [ ] **Step 6: Убедиться, что тесты проходят**
+- [ ] **Step 6: Make sure the tests pass**
 
 Run: `pnpm --filter @clicker/server test`
 Expected: `Test Files 1 passed (1)`, `Tests 2 passed (2)`.
 
-- [ ] **Step 7: Закоммитить**
+- [ ] **Step 7: Commit**
 
 ```bash
 pnpm format
@@ -367,14 +367,14 @@ git commit -m "feat(server): route rooms and reject malformed ids"
 
 ---
 
-### Task 4: Вход игрока и рассылка снимков
+### Task 4: A player joins, snapshots are broadcast
 
 **Files:**
 - Modify: `apps/server/src/room.ts`, `apps/server/test/room.test.ts`
 
-- [ ] **Step 1: Добавить падающий тест в `apps/server/test/room.test.ts`**
+- [ ] **Step 1: Add a failing test to `apps/server/test/room.test.ts`**
 
-Импорты файла становятся такими:
+The file's imports become:
 
 ```ts
 import { SELF } from 'cloudflare:test';
@@ -383,7 +383,7 @@ import { describe, expect, it } from 'vitest';
 import { connect, isSnapshot, isWelcome } from './support';
 ```
 
-Тест «accepts a connection to a well-formed room id» заменить на:
+Replace the test "accepts a connection to a well-formed room id" with:
 
 ```ts
   it('greets a player and shows them in the snapshot', async () => {
@@ -404,12 +404,12 @@ import { connect, isSnapshot, isWelcome } from './support';
   });
 ```
 
-- [ ] **Step 2: Убедиться, что тест падает**
+- [ ] **Step 2: Make sure the test fails**
 
 Run: `pnpm --filter @clicker/server test`
-Expected: FAIL с таймаутом ожидания `welcome`: комната пока ничего не отвечает.
+Expected: FAIL with a timeout waiting for `welcome`: the room does not answer anything yet.
 
-- [ ] **Step 3: Написать `apps/server/src/room.ts` целиком**
+- [ ] **Step 3: Write `apps/server/src/room.ts` in full**
 
 ```ts
 import {
@@ -425,7 +425,7 @@ import {
 import { parseClientMessage, type ServerMessage, toSnapshot } from '@clicker/protocol';
 import { type Connection, Server, type WSMessage } from 'partyserver';
 
-/** Что помним про соединение: переживает сон объекта. */
+/** What we remember about a connection: it survives the object's sleep. */
 interface Session {
   playerId: string;
   publicId: string;
@@ -484,7 +484,7 @@ export class Room extends Server<Env> {
     this.#send(connection, { type: 'error', code: 'not_joined' });
   }
 
-  /** Единственный путь изменения состояния: правила, события, хранилище, будильник, рассылка. */
+  /** The only way state changes: rules, events, storage, alarm, broadcast. */
   async #run(command: Command, source?: Connection<Session>): Promise<void> {
     const applied = apply(this.#state, command, Date.now(), this.#config);
     this.#state = applied.state;
@@ -511,7 +511,7 @@ export class Room extends Server<Env> {
     }
   }
 
-  /** Снимок собирается один раз на всех, а не на каждое соединение. */
+  /** The snapshot is built once for everyone, not once per connection. */
   #broadcastSnapshot(): void {
     this.broadcast(JSON.stringify(toSnapshot(this.#state, Date.now())));
   }
@@ -535,12 +535,12 @@ export class Room extends Server<Env> {
 }
 ```
 
-- [ ] **Step 4: Убедиться, что тесты проходят**
+- [ ] **Step 4: Make sure the tests pass**
 
 Run: `pnpm --filter @clicker/server test`
 Expected: `Test Files 1 passed (1)`, `Tests 2 passed (2)`.
 
-- [ ] **Step 5: Закоммитить**
+- [ ] **Step 5: Commit**
 
 ```bash
 pnpm format
@@ -550,14 +550,14 @@ git commit -m "feat(server): join a room and broadcast snapshots"
 
 ---
 
-### Task 5: Команды хоста и кликов
+### Task 5: Host and click commands
 
 **Files:**
 - Modify: `apps/server/src/room.ts`, `apps/server/test/room.test.ts`
 
-- [ ] **Step 1: Добавить падающий тест в `apps/server/test/room.test.ts`**
+- [ ] **Step 1: Add a failing test to `apps/server/test/room.test.ts`**
 
-В импорты добавить `isError`, в конец `describe` — тест:
+Add `isError` to the imports, and add this test at the end of the `describe`:
 
 ```ts
   it('refuses to start a round for a player who is not the host', async () => {
@@ -574,14 +574,14 @@ git commit -m "feat(server): join a room and broadcast snapshots"
   });
 ```
 
-- [ ] **Step 2: Убедиться, что тест падает**
+- [ ] **Step 2: Make sure the test fails**
 
 Run: `pnpm --filter @clicker/server test`
-Expected: FAIL — приходит `not_joined` вместо `not_host`: команды `start` и `click` пока не доходят до правил.
+Expected: FAIL — `not_joined` arrives instead of `not_host`: the `start` and `click` commands do not reach the rules yet.
 
-- [ ] **Step 3: Заменить последние строки `onMessage` в `apps/server/src/room.ts`**
+- [ ] **Step 3: Replace the last lines of `onMessage` in `apps/server/src/room.ts`**
 
-Вместо безусловного `not_joined`:
+Instead of the unconditional `not_joined`:
 
 ```ts
     const session = connection.state;
@@ -593,12 +593,12 @@ Expected: FAIL — приходит `not_joined` вместо `not_host`: ком
     await this.#run({ type: parsed.type, playerId: session.playerId }, connection);
 ```
 
-- [ ] **Step 4: Убедиться, что тесты проходят**
+- [ ] **Step 4: Make sure the tests pass**
 
 Run: `pnpm --filter @clicker/server test`
 Expected: `Test Files 1 passed (1)`, `Tests 3 passed (3)`.
 
-- [ ] **Step 5: Закоммитить**
+- [ ] **Step 5: Commit**
 
 ```bash
 pnpm format
@@ -608,14 +608,14 @@ git commit -m "feat(server): pass host and click commands to the rules"
 
 ---
 
-### Task 6: Раунд целиком: будильник и поток снимков
+### Task 6: A whole round: the alarm and the snapshot stream
 
 **Files:**
 - Modify: `apps/server/src/room.ts`, `apps/server/test/room.test.ts`
 
-- [ ] **Step 1: Добавить падающий тест в `apps/server/test/room.test.ts`**
+- [ ] **Step 1: Add a failing test to `apps/server/test/room.test.ts`**
 
-В импорты из `./support` добавить тип `Snapshot`, в конец `describe` — тест:
+Add the `Snapshot` type to the imports from `./support`, and add this test at the end of the `describe`:
 
 ```ts
   it('plays a whole round and agrees on the winner in both clients', async () => {
@@ -632,7 +632,7 @@ git commit -m "feat(server): pass host and click commands to the rules"
 
     host.send({ type: 'start' });
 
-    // Отсчёт 50 мс, раунд 200 мс: значения заданы в vitest.config.ts.
+    // Countdown 50 ms, round 200 ms: the values are set in vitest.config.ts.
     await new Promise((resolve) => setTimeout(resolve, 80));
     for (let i = 0; i < 5; i += 1) {
       guest.send({ type: 'click' });
@@ -652,26 +652,26 @@ git commit -m "feat(server): pass host and click commands to the rules"
   });
 ```
 
-- [ ] **Step 2: Убедиться, что тест падает**
+- [ ] **Step 2: Make sure the test fails**
 
 Run: `pnpm --filter @clicker/server test`
-Expected: FAIL с таймаутом: раунд заканчивается только когда кто-то пришлёт сообщение, а снимки во время раунда никто не шлёт.
+Expected: FAIL with a timeout: the round ends only when someone sends a message, and nobody sends snapshots during the round.
 
-- [ ] **Step 3: Добавить таймер снимков и будильник в `apps/server/src/room.ts`**
+- [ ] **Step 3: Add the snapshot timer and the alarm to `apps/server/src/room.ts`**
 
-Рядом с интерфейсом `Session` добавить константу:
+Next to the `Session` interface add a constant:
 
 ```ts
 const SNAPSHOT_INTERVAL_MS = 100;
 ```
 
-В поля класса добавить таймер:
+Add the timer to the class fields:
 
 ```ts
   #timer: ReturnType<typeof setInterval> | null = null;
 ```
 
-Добавить обработчик будильника (после `onMessage`):
+Add the alarm handler (after `onMessage`):
 
 ```ts
   override async onAlarm(): Promise<void> {
@@ -679,7 +679,7 @@ const SNAPSHOT_INTERVAL_MS = 100;
   }
 ```
 
-Заменить хвост `#run` (всё после цикла по событиям):
+Replace the tail of `#run` (everything after the loop over events):
 
 ```ts
     if (command.type !== 'click') {
@@ -688,14 +688,14 @@ const SNAPSHOT_INTERVAL_MS = 100;
     await this.#scheduleAlarm();
     this.#syncSnapshotTimer();
 
-    // Во время раунда снимки шлёт таймер, вне раунда — каждое изменение.
-    // Смену фазы отправляем сразу: ждать до сотни миллисекунд тут нельзя.
+    // During a round the timer sends snapshots, outside a round every change does.
+    // A phase change is sent at once: waiting up to a hundred milliseconds is not acceptable here.
     if (phaseChanged || this.#timer === null) {
       this.#broadcastSnapshot();
     }
 ```
 
-и в самом цикле по событиям завести флаг:
+and introduce a flag in the loop over events itself:
 
 ```ts
     let phaseChanged = false;
@@ -705,7 +705,7 @@ const SNAPSHOT_INTERVAL_MS = 100;
     }
 ```
 
-Добавить сам таймер (перед `#broadcastSnapshot`):
+Add the timer itself (before `#broadcastSnapshot`):
 
 ```ts
   #syncSnapshotTimer(): void {
@@ -721,12 +721,12 @@ const SNAPSHOT_INTERVAL_MS = 100;
   }
 ```
 
-- [ ] **Step 4: Убедиться, что тесты проходят**
+- [ ] **Step 4: Make sure the tests pass**
 
 Run: `pnpm --filter @clicker/server test`
 Expected: `Test Files 1 passed (1)`, `Tests 4 passed (4)`.
 
-- [ ] **Step 5: Закоммитить**
+- [ ] **Step 5: Commit**
 
 ```bash
 pnpm format
@@ -736,13 +736,13 @@ git commit -m "feat(server): drive rounds with an alarm and stream snapshots"
 
 ---
 
-### Task 7: Обрыв связи
+### Task 7: Connection drop
 
 **Files:**
 - Modify: `apps/server/src/room.ts`
 - Test: `apps/server/test/lifecycle.test.ts`
 
-- [ ] **Step 1: Написать падающий тест `apps/server/test/lifecycle.test.ts`**
+- [ ] **Step 1: Write the failing test `apps/server/test/lifecycle.test.ts`**
 
 ```ts
 import { generateId } from '@clicker/protocol';
@@ -771,19 +771,19 @@ describe('room lifecycle', () => {
         message.players.some((player) => player.name === 'Боря' && !player.connected),
     );
 
-    // Игрок остаётся в списке: у него есть время вернуться.
+    // The player stays in the list: they have time to come back.
     expect(snapshot.players).toHaveLength(2);
     staying.close();
   });
 });
 ```
 
-- [ ] **Step 2: Убедиться, что тест падает**
+- [ ] **Step 2: Make sure the test fails**
 
 Run: `pnpm --filter @clicker/server test`
-Expected: FAIL с таймаутом: закрытие сокета никак не отражается в состоянии.
+Expected: FAIL with a timeout: closing the socket is not reflected in the state in any way.
 
-- [ ] **Step 3: Добавить `onClose` в `apps/server/src/room.ts`** (после `onMessage`)
+- [ ] **Step 3: Add `onClose` to `apps/server/src/room.ts`** (after `onMessage`)
 
 ```ts
   override async onClose(connection: Connection<Session>): Promise<void> {
@@ -796,12 +796,12 @@ Expected: FAIL с таймаутом: закрытие сокета никак �
   }
 ```
 
-- [ ] **Step 4: Убедиться, что тесты проходят**
+- [ ] **Step 4: Make sure the tests pass**
 
 Run: `pnpm --filter @clicker/server test`
 Expected: `Test Files 2 passed (2)`, `Tests 5 passed (5)`.
 
-- [ ] **Step 5: Закоммитить**
+- [ ] **Step 5: Commit**
 
 ```bash
 pnpm format
@@ -811,14 +811,14 @@ git commit -m "feat(server): release the connection when a socket closes"
 
 ---
 
-### Task 8: Перезапуск объекта посреди раунда
+### Task 8: Object restart in the middle of a round
 
 **Files:**
 - Modify: `apps/server/src/room.ts`, `apps/server/test/lifecycle.test.ts`
 
-- [ ] **Step 1: Добавить падающий тест в `apps/server/test/lifecycle.test.ts`**
+- [ ] **Step 1: Add a failing test to `apps/server/test/lifecycle.test.ts`**
 
-Первой строкой файла добавить импорт `import { abortAllDurableObjects } from 'cloudflare:test';`, в конец `describe` — тест:
+As the first line of the file add the import `import { abortAllDurableObjects } from 'cloudflare:test';`, and add this test at the end of the `describe`:
 
 ```ts
   it('aborts the round when the object restarts mid-game', async () => {
@@ -832,8 +832,8 @@ git commit -m "feat(server): release the connection when a socket closes"
       (message): message is Snapshot => isSnapshot(message) && message.phase === 'countdown',
     );
 
-    // Перезапуск объекта: память сбрасывается, хранилище остаётся.
-    // Мягкое выселение тут не подходит — во время раунда объект занят таймером рассылки.
+    // Restarting the object: memory is reset, storage stays.
+    // A soft eviction does not fit here — during a round the object is busy with the broadcast timer.
     await abortAllDurableObjects();
 
     const returning = await connect(roomId);
@@ -848,21 +848,21 @@ git commit -m "feat(server): release the connection when a socket closes"
   });
 ```
 
-- [ ] **Step 2: Убедиться, что тест падает**
+- [ ] **Step 2: Make sure the test fails**
 
 Run: `pnpm --filter @clicker/server test`
-Expected: FAIL, `expected 'countdown' to be 'lobby'` — состояние поднимается из хранилища как есть, вместе с оборванным раундом.
+Expected: FAIL, `expected 'countdown' to be 'lobby'` — the state is restored from storage as it is, together with the interrupted round.
 
-- [ ] **Step 3: Дополнить `onStart` в `apps/server/src/room.ts`**
+- [ ] **Step 3: Extend `onStart` in `apps/server/src/room.ts`**
 
-В импорты из `@clicker/game` добавить `abortRound` и `syncConnections`. Тело `onStart` после настройки `#config`:
+Add `abortRound` and `syncConnections` to the imports from `@clicker/game`. The body of `onStart` after the `#config` setup:
 
 ```ts
     const stored = await this.ctx.storage.get<RoomState>('state');
     let state = stored ?? createRoomState();
 
-    // Фаза раунда в хранилище означает, что объект перезапустился посреди игры
-    // и клики из памяти потеряны.
+    // A round phase in storage means the object restarted in the middle of a game
+    // and the clicks held in memory are lost.
     if (state.phase === 'countdown' || state.phase === 'running') {
       state = abortRound(state);
     }
@@ -882,12 +882,12 @@ Expected: FAIL, `expected 'countdown' to be 'lobby'` — состояние по
     await this.#scheduleAlarm();
 ```
 
-- [ ] **Step 4: Убедиться, что все тесты проходят**
+- [ ] **Step 4: Make sure all the tests pass**
 
 Run: `pnpm --filter @clicker/server test`
 Expected: `Test Files 2 passed (2)`, `Tests 6 passed (6)`.
 
-- [ ] **Step 5: Закоммитить**
+- [ ] **Step 5: Commit**
 
 ```bash
 pnpm format
@@ -897,11 +897,11 @@ git commit -m "feat(server): abort a round left over from a restart"
 
 ---
 
-### Task 9: Общая проверка репозитория
+### Task 9: Whole-repository check
 
-**Files:** нет новых, только запуск
+**Files:** none new, only a run
 
-- [ ] **Step 1: Прогнать всё**
+- [ ] **Step 1: Run everything**
 
 ```bash
 pnpm install --frozen-lockfile
@@ -911,17 +911,17 @@ pnpm test
 ```
 Expected:
 - Biome: `No fixes applied.`;
-- проверка типов: три раза `tsc --noEmit`, перед серверной — вывод `wrangler types`, ошибок нет;
-- тесты: 60 в game, 31 в protocol, 6 в server.
+- typecheck: `tsc --noEmit` three times, with the `wrangler types` output before the server one, no errors;
+- tests: 60 in game, 31 in protocol, 6 in server.
 
-- [ ] **Step 2: Поднять сервер локально и убедиться, что он стартует**
+- [ ] **Step 2: Start the server locally and make sure it starts**
 
 Run: `pnpm --filter @clicker/server run dev`
-Expected: wrangler печатает локальный адрес вида `http://localhost:8787`. Клиента ещё нет, поэтому проверяем только запуск и отсутствие ошибок в консоли, затем останавливаем через Ctrl+C.
+Expected: wrangler prints a local address like `http://localhost:8787`. There is no client yet, so we check only that it starts and that the console shows no errors, then stop it with Ctrl+C.
 
-- [ ] **Step 3: Закоммитить, если что-то поменялось**
+- [ ] **Step 3: Commit if anything changed**
 
-Если `pnpm format` изменил файлы:
+If `pnpm format` changed files:
 
 ```bash
 git add -A
@@ -930,7 +930,7 @@ git commit -m "style: apply formatting after the server package"
 
 ---
 
-## Проверка результата
+## Checking the result
 
 ```bash
 pnpm install --frozen-lockfile
@@ -939,23 +939,23 @@ pnpm typecheck
 pnpm test
 ```
 
-Ожидается: линтер чист, проверка типов молчит, 97 тестов суммарно (60 + 31 + 6), ноль падений.
+Expected: the linter is clean, the typecheck is silent, 97 tests in total (60 + 31 + 6), zero failures.
 
-Сверить со спецификацией:
-- §4 «Комнаты и доступ» — проверка формата идентификатора комнаты до подключения; создание комнаты по требованию;
-- §7 «Сервер» — комната на partyserver со сном, состояние соединения, будильник как двигатель фаз, хранилище, рассылка снимков, длительности из переменных окружения;
-- §9 «Ошибки и крайние случаи» — некорректное сообщение, команда без входа, старт не от хоста, обрыв связи, перезапуск объекта;
-- §10 «Тестирование» — интеграционные тесты сервера в рантайме Workers.
+Check against the spec:
+- §4 "Rooms and access" — the room id format is checked before connecting; the room is created on demand;
+- §7 "Server" — a hibernating room on partyserver, connection state, the alarm as the phase engine, storage, snapshot broadcast, durations from environment variables;
+- §9 "Errors and edge cases" — a malformed message, a command without joining, a start from a non-host, a connection drop, an object restart;
+- §10 "Testing" — integration tests of the server in the Workers runtime.
 
-Остаётся на план 3: раздача клиента через Static Assets (`assets` в `wrangler.jsonc`), сквозные тесты Playwright и деплой.
+What is left for plan 3: serving the client through Static Assets (`assets` in `wrangler.jsonc`), end-to-end Playwright tests and the deploy.
 
-## Что нужно от тебя
+## What we need from you
 
-- **Во время этого плана:** ничего. Тесты идут локально в workerd, аккаунт Cloudflare не нужен.
-- **Перед планом 3:** аккаунт Cloudflare на бесплатном тарифе, поддомен `<имя>.workers.dev` и `npx wrangler@latest login` — они понадобятся для первого деплоя.
+- **During this plan:** nothing. The tests run locally in workerd, no Cloudflare account is needed.
+- **Before plan 3:** a Cloudflare account on the free tier, a `<name>.workers.dev` subdomain and `npx wrangler@latest login` — they will be needed for the first deploy.
 
-## Заметки на будущее
+## Notes for the future
 
-- `SELF` из `cloudflare:test` помечен устаревшим в пользу `exports.default` из `cloudflare:workers`, но у того сейчас нет типа `default` и `tsc` на нём падает. Когда типы починят, замена делается в одном месте — в `test/support.ts`.
-- Снимок на 50 игроков занимает около 3 КБ; он собирается один раз за тик и рассылается всем, а не собирается заново на каждое соединение. Это стоит сохранить при любых правках рассылки.
-- Во время раунда объект держит таймер и не засыпает — так и задумано: раунд длится тринадцать секунд. В лобби таймер снимается, и объект может заснуть.
+- `SELF` from `cloudflare:test` is marked deprecated in favour of `exports.default` from `cloudflare:workers`, but the latter currently has no `default` type and `tsc` fails on it. When the types are fixed, the replacement is made in one place — in `test/support.ts`.
+- A snapshot for 50 players takes about 3 KB; it is built once per tick and broadcast to everyone, not rebuilt for each connection. This is worth keeping in any change to the broadcast.
+- During a round the object holds a timer and does not sleep — that is intended: a round lasts thirteen seconds. In the lobby the timer is cleared, and the object can sleep.

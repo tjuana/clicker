@@ -1,74 +1,74 @@
-# Light-Cycle Rules and Bots Implementation Plan (план 6: правила и боты байков)
+# Light-Cycle Rules and Bots Implementation Plan (plan 6: rules and bots for the bikes)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Правила режима «Неоновые байки» и боты — чистые функции в `packages/game/src/modes/cycles`, покрытые тестами правил, детерминизма, асимптотики и чистоты.
+**Goal:** The rules of the "Neon Bikes" mode and the bots — pure functions in `packages/game/src/modes/cycles`, covered by tests for the rules, determinism, asymptotics and purity.
 
-**Architecture:** Поле — `Uint16Array` клеток, в клетке номер слота владельца. Хвост — кольцевой буфер фиксированной ёмкости. Тик одновременный: судьба каждого байка решается по полю до хода, итерацией до неподвижной точки. Иммутабельность снаружи — тик копирует поле и хвосты и пишет только в копии. Боты — часть правил, со сидированным ГПСЧ. Комната, протокол и интерфейс режимов — план 7; здесь режим ещё не подключён к комнате.
+**Architecture:** The field is a `Uint16Array` of cells; a cell holds the slot number of its owner. A trail is a ring buffer of fixed capacity. A tick is simultaneous: the fate of each bike is decided from the field before the move, by iterating to a fixed point. Immutability from outside — a tick copies the field and the trails and writes only into the copies. The bots are part of the rules, with a seeded PRNG. The room, the protocol and the mode interface are plan 7; here the mode is not yet wired into the room.
 
-**Tech Stack:** TypeScript 7.0.2, Vitest 4.1.11, Biome 2.5.13. Новых зависимостей нет.
+**Tech Stack:** TypeScript 7.0.2, Vitest 4.1.11, Biome 2.5.13. No new dependencies.
 
-Спецификация: [2026-10-10-light-cycles-design.md](../specs/2026-10-10-light-cycles-design.md), разделы 4 и 10. Дорожная карта: [план 5](2026-10-10-plan-5-roadmap-realtime-modes.md).
+Spec: [2026-10-10-light-cycles-design.md](../specs/2026-10-10-light-cycles-design.md), sections 4 and 10. Roadmap: [plan 5](2026-10-10-plan-5-roadmap-realtime-modes.md).
 
 ---
 
-## Проверено перед написанием плана
+## What was verified before this plan
 
-Весь код ниже прогнан в черновой копии `packages/game`: 119 тестов зелёные, обе проверки типов, Biome. Каждый новый тест проверен намеренной поломкой — он падает.
+All the code below was run in a scratch copy of `packages/game`: 119 tests green, both type checks, Biome. Each new test was checked by breaking the code on purpose — it fails.
 
-Что нашлось по дороге и уже учтено в коде:
+What turned up on the way and is already accounted for in the code:
 
-1. **Бот въезжал в стену при ничьей.** Когда впереди одна свободная клетка, а за ней стена, заливка из всех трёх вариантов упирается в один бюджет — ничья, побеждает «прямо». Теперь ничью решает длина свободного прогона, затем случайный выбор.
-2. **Случайный поворот заводил бота в тупики** шириной в клетку: он проверял две клетки впереди, а не площадь за ними. Теперь он проходит ту же проверку площадью.
-3. **Ничья всегда уходила «налево» и закручивала бота спиралью внутрь.** Разбивается ГПСЧ (выборка из резервуара по равным вариантам). Одиночный бот: было 2 смерти за раунд, стало около 0,7 на 30 сидах. Это не ноль — бот ещё сворачивается в плотные блоки; тест стоит как гейт от ухудшения.
-4. **Старт раунда был O(игроков × клеток).** Каждый байк ставился полным поиском по полю, а клеток тем больше, чем больше игроков, — квадрат. Гейт на 1000 игроков упёрся в таймаут. Старт — равномерная решётка, O(n); поиск по полю остался только для респауна.
-5. **Прокси подсчёта не работал с `Uint16Array`**: типизированный массив отказывается запускать свой геттер `length` на прокси. Исправлено в `complexity.ts` (задача 4).
-6. **Гейт тика сначала пропустил скан**: в свежем раунде хвосты не полные, и ветка, где хвост уступает клетку, не выполнялась. Гейт гоняется с хвостами длиной 1.
-7. `Object.freeze` не применим к типизированному массиву с элементами, поэтому `deepFreeze` из `support.ts` здесь не годится. Неизменность входа проверяется сравнением копий до и после шага.
+1. **A bot drove into a wall on a tie.** When there is one free cell ahead and a wall behind it, the flood fill from all three options runs into the same budget — a tie, and "straight" wins. Now the tie is decided by the length of the free run, then by a random choice.
+2. **A random turn led bots into dead ends** one cell wide: it checked two cells ahead, not the area behind them. Now it passes the same area check.
+3. **A tie always went "left" and spun the bot into a spiral inwards.** It is broken by the PRNG (reservoir sampling among equal options). A single bot: it was 2 deaths per round, now about 0.7 over 30 seeds. That is not zero — the bot still curls up into dense blocks; the test stands as a gate against getting worse.
+4. **Round start was O(players × cells).** Each bike was placed by a full search of the field, and the more players, the more cells — a square. The gate at 1000 players hit the timeout. The start is a uniform grid, O(n); the search of the field remains only for the respawn.
+5. **The counting proxy did not work with `Uint16Array`**: a typed array refuses to run its `length` getter on a proxy. Fixed in `complexity.ts` (task 4).
+6. **The tick gate missed the scan at first**: in a fresh round the trails are not full, and the branch where a trail gives up a cell did not run. The gate runs with trails of length 1.
+7. `Object.freeze` does not apply to a typed array with elements, so `deepFreeze` from `support.ts` does not fit here. The input's immutability is checked by comparing copies before and after the step.
 
-Отступление от спецификации, раздел 4 «Смерть, очки, респаун»: на старте раунда байки ставятся решёткой, а не в «самую свободную точку» (находка 4). Длина хвоста после смерти сбрасывается к базовой — спецификация об этом молчала.
+A departure from the spec, section 4 "Death, points, respawn": at round start the bikes are placed on a grid, not at the "freest point" (finding 4). The trail length after death is reset to the base length — the spec was silent about it.
 
-## Как выполнять
+## How to execute
 
-- Ветка `feat/cycles-rules` от `main`.
-- Одна задача — один коммит. Conventional Commits, английский, **без подписей Claude**: никаких `Co-Authored-By`, «Generated with», эмодзи.
-- Перед каждым коммитом:
+- Branch `feat/cycles-rules` from `main`.
+- One task, one commit. Conventional Commits, English, **no Claude attribution**: no `Co-Authored-By`, no "Generated with", no emoji.
+- Before every commit:
 
 ```bash
 pnpm format && pnpm check && pnpm typecheck && pnpm test
 ```
 
-- Каждый новый тест сначала проверяется на неисправном коде: в задачах 3 и 4 перечислены поломки, которые тест обязан поймать.
+- Each new test is first checked against broken code: tasks 3 and 4 list the breakages the test must catch.
 
-## Файловая структура
+## File structure
 
 ```
 packages/game/src/modes/cycles/
-  random.ts      mulberry32: ГПСЧ на целых операциях, сид в состоянии
-  config.ts      CyclesConfig — всё в тиках и клетках
-  state.ts       типы: Bike, Trail, CyclesState, вход режима; направления DX/DY
-  trail.ts       кольцевой буфер хвоста
-  field.ts       размер поля, свободный прогон
-  spawn.ts       расстояние до препятствий (многоисточниковый BFS), точка респауна
-  bot.ts         решение бота: заливка с бюджетом
-  step.ts        тик: подшаги, резина, смерть, респаун
-  index.ts       API режима: игроки, старт раунда, ввод, выход, итоги
+  random.ts      mulberry32: an integer-only PRNG, the seed lives in the state
+  config.ts      CyclesConfig — everything in ticks and cells
+  state.ts       types: Bike, Trail, CyclesState, the mode's input; directions DX/DY
+  trail.ts       the trail's ring buffer
+  field.ts       field size, free run
+  spawn.ts       distance to obstacles (multi-source BFS), respawn point
+  bot.ts         the bot's decision: a flood fill with a budget
+  step.ts        the tick: substeps, rubber, death, respawn
+  index.ts       the mode's API: players, round start, input, leave, results
 packages/game/test/
-  cycles-support.ts         ручная сборка поля и проверка инвариантов
-  cycles-random.test.ts     2 теста
-  cycles-trail.test.ts      3 теста
-  cycles-step.test.ts       18 тестов
-  cycles-game.test.ts       11 тестов
-  cycles-complexity.test.ts 4 теста
-  complexity.ts             правка: прокси для типизированных массивов
-  purity.test.ts            правка: запрет трансцендентных функций, раунд ботов под ловушками
+  cycles-support.ts         hand-built field and invariant checks
+  cycles-random.test.ts     2 tests
+  cycles-trail.test.ts      3 tests
+  cycles-step.test.ts       18 tests
+  cycles-game.test.ts       11 tests
+  cycles-complexity.test.ts 4 tests
+  complexity.ts             edit: a proxy for typed arrays
+  purity.test.ts            edit: ban transcendental functions, a round of bots under traps
 ```
 
-Режим в этом плане не экспортируется из `packages/game/src/index.ts` — его подключает план 7.
+In this plan the mode is not exported from `packages/game/src/index.ts` — plan 7 wires it in.
 
 ---
 
-### Task 1: Сидированный ГПСЧ
+### Task 1: Seeded PRNG
 
 **Files:**
 - Create: `packages/game/src/modes/cycles/random.ts`
@@ -116,7 +116,7 @@ describe('the seeded generator', () => {
 - [ ] **Step 2: Run it to see it fail**
 
 Run: `pnpm --filter @clicker/game exec vitest run test/cycles-random.test.ts`
-Expected: FAIL — `Cannot find module` (в этой версии Vitest; раньше — `Failed to resolve import`) "../src/modes/cycles/random"`.
+Expected: FAIL — `Cannot find module` (in this Vitest version; earlier — `Failed to resolve import`) "../src/modes/cycles/random"`.
 
 - [ ] **Step 3: Implement**
 
@@ -163,13 +163,13 @@ git commit -m "feat(game): add a seeded generator for the light-cycle rules"
 
 ---
 
-### Task 2: Состояние, кольцевой хвост, поле
+### Task 2: State, ring trail, field
 
 **Files:**
 - Create: `packages/game/src/modes/cycles/config.ts`, `state.ts`, `trail.ts`, `field.ts`
 - Test: `packages/game/test/cycles-trail.test.ts`
 
-Тест импортирует `cyclesConfig` из `cycles-support.ts`, а тот — модули задачи 3 не трогает, только `config`, `state` и `trail`. Поэтому `cycles-support.ts` создаётся здесь же.
+The test imports `cyclesConfig` from `cycles-support.ts`, and that one does not touch the modules of task 3, only `config`, `state` and `trail`. So `cycles-support.ts` is created here too.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -330,7 +330,7 @@ describe('the field size', () => {
 - [ ] **Step 2: Run them to see them fail**
 
 Run: `pnpm --filter @clicker/game exec vitest run test/cycles-trail.test.ts`
-Expected: FAIL — `Cannot find module` (в этой версии Vitest; раньше — `Failed to resolve import`) "../src/modes/cycles/field"`.
+Expected: FAIL — `Cannot find module` (in this Vitest version; earlier — `Failed to resolve import`) "../src/modes/cycles/field"`.
 
 - [ ] **Step 3: Implement**
 
@@ -573,9 +573,9 @@ git commit -m "feat(game): model the light-cycle field and ring-buffer trails"
 
 ---
 
-### Task 3: Тик, респаун, боты и API режима
+### Task 3: Tick, respawn, bots and the mode's API
 
-Одна логическая единица: тик вызывает бота и поиск респауна, тесты тика пользуются вводом из API. Разрезать их на отдельные коммиты — значит коммитить код, который не собирается.
+One logical unit: the tick calls the bot and the respawn search, and the tick's tests use the input from the API. Cutting them into separate commits would mean committing code that does not build.
 
 **Files:**
 - Create: `packages/game/src/modes/cycles/spawn.ts`, `bot.ts`, `step.ts`, `index.ts`
@@ -992,7 +992,7 @@ describe('bots', () => {
 - [ ] **Step 2: Run them to see them fail**
 
 Run: `pnpm --filter @clicker/game exec vitest run test/cycles-step.test.ts test/cycles-game.test.ts`
-Expected: FAIL — `Cannot find module` (в этой версии Vitest; раньше — `Failed to resolve import`) "../src/modes/cycles"`.
+Expected: FAIL — `Cannot find module` (in this Vitest version; earlier — `Failed to resolve import`) "../src/modes/cycles"`.
 
 - [ ] **Step 3: Implement**
 
@@ -1647,18 +1647,18 @@ Expected: `Tests  29 passed (29)`.
 
 - [ ] **Step 5: Prove the tests can fail**
 
-Внести по одной поломке в `step.ts`, прогнать `test/cycles-step.test.ts`, убедиться, что упал хотя бы один тест, вернуть строку. Все восемь проверены при написании плана:
+Introduce the breakages into `step.ts` one at a time, run `test/cycles-step.test.ts`, make sure at least one test fails, put the line back. All eight were checked when the plan was written:
 
-| Поломка | Заменить | На |
+| Breakage | Replace | With |
 |---|---|---|
-| хвосты не уступают клетку | `if ((tails[i] ?? -1) >= 0) vacated.add(tails[i] ?? -1);` | пустую строку |
-| нет гибели в общей клетке | `} else if ((aimed.get(target) ?? 0) > 1) {` | `} else if (false) {` |
-| убийство без виновника | `kill(work, bike, owner === 0 \|\| owner === bike.slot ? null : owner);` | `kill(work, bike, null);` |
-| нет резины | `if (bike.rubber > 0) {` | `if (false) {` |
-| нет второго подшага | `substep(work, work.bikes.filter((bike) => bike.alive && bike.boost > 0));` | пустую строку |
-| шаг портит вход | `field: prev.field.slice(),` | `field: prev.field,` |
-| след мертвеца остаётся | в `kill` убрать `work.field[cell] = 0;` и `work.changes.freed.push(cell);` | — |
-| нет неподвижной точки | после `if (!changed) break;` добавить `break;` | — |
+| trails do not give up a cell | `if ((tails[i] ?? -1) >= 0) vacated.add(tails[i] ?? -1);` | an empty line |
+| no death in a shared cell | `} else if ((aimed.get(target) ?? 0) > 1) {` | `} else if (false) {` |
+| a kill without a killer | `kill(work, bike, owner === 0 \|\| owner === bike.slot ? null : owner);` | `kill(work, bike, null);` |
+| no rubber | `if (bike.rubber > 0) {` | `if (false) {` |
+| no second substep | `substep(work, work.bikes.filter((bike) => bike.alive && bike.boost > 0));` | an empty line |
+| the step corrupts its input | `field: prev.field.slice(),` | `field: prev.field,` |
+| a dead bike's trail stays | in `kill`, remove `work.field[cell] = 0;` and `work.changes.freed.push(cell);` | — |
+| no fixed point | after `if (!changed) break;` add `break;` | — |
 
 - [ ] **Step 6: Check and commit**
 
@@ -1675,10 +1675,10 @@ git commit -m "feat(game): add the light-cycle tick, respawn and bots"
 
 ---
 
-### Task 4: Гейты асимптотики и чистоты
+### Task 4: Asymptotics and purity gates
 
 **Files:**
-- Modify: `packages/game/test/complexity.ts` (функция `counted`)
+- Modify: `packages/game/test/complexity.ts` (function `counted`)
 - Modify: `packages/game/test/purity.test.ts`
 - Test: `packages/game/test/cycles-complexity.test.ts`
 
@@ -1773,7 +1773,7 @@ Expected: FAIL in «costs the same on a field ten times larger» — `TypeError:
 
 - [ ] **Step 3: Fix the counting proxy**
 
-В `packages/game/test/complexity.ts` заменить ловушку `get` в `counted`:
+In `packages/game/test/complexity.ts`, replace the `get` trap in `counted`:
 
 ```ts
     get(target, key) {
@@ -1789,14 +1789,14 @@ Expected: `Tests  10 passed (10)`.
 
 - [ ] **Step 4: Extend the purity gate**
 
-В `packages/game/test/purity.test.ts` добавить импорты после `import { describe, expect, it } from 'vitest';`:
+In `packages/game/test/purity.test.ts`, add the imports after `import { describe, expect, it } from 'vitest';`:
 
 ```ts
 import { addPlayer, createCyclesState, startRound, step } from '../src/modes/cycles';
 import { CYCLES_CONFIG } from '../src/modes/cycles/config';
 ```
 
-Перед комментарием `/** Replaces every ambient source of time and randomness ... */` вставить:
+Before the comment `/** Replaces every ambient source of time and randomness ... */`, insert:
 
 ```ts
 /**
@@ -1817,7 +1817,7 @@ describe('the light-cycle rules', () => {
 });
 ```
 
-В конец `describe('the rules at runtime', ...)`, после теста «plays a full round…», добавить:
+At the end of `describe('the rules at runtime', ...)`, after the test "plays a full round…", add:
 
 ```ts
   it('plays a round of bots, deaths and respawns included, without the clock or the dice', () => {
@@ -1837,14 +1837,14 @@ Expected: `Tests  15 passed (15)`.
 
 - [ ] **Step 5: Prove the gates can fail**
 
-Каждая поломка вносится по одной и возвращается; при написании плана все пойманы:
+Each breakage is introduced one at a time and put back; when the plan was written, all were caught:
 
-| Поломка | Где | Какой тест падает |
+| Breakage | Where | Which test fails |
 |---|---|---|
-| бот заливает всё поле: убрать `&& seen.size < budget` из цикла `room` | `bot.ts` | «costs the same on a field ten times larger» |
-| скан на каждый занятый: `if (field[cell] !== 0 && field.indexOf(0) >= -1) {` в первом цикле `clearance` | `spawn.ts` | «is one pass over the cells» |
-| скан движущихся на каждого: `if ((tails[i] ?? -1) >= 0 && !movers.some((m) => m.slot < 0)) vacated.add(tails[i] ?? -1);` | `step.ts` | «never scans a list that grows with the players» |
-| `Math.pow(participants, 0.5)` вместо `Math.sqrt(participants)` в `sideFor` | `field.ts` | «use only arithmetic every engine rounds the same way» |
+| the bot floods the whole field: remove `&& seen.size < budget` from the `room` loop | `bot.ts` | "costs the same on a field ten times larger" |
+| a scan for every occupied cell: `if (field[cell] !== 0 && field.indexOf(0) >= -1) {` in the first loop of `clearance` | `spawn.ts` | "is one pass over the cells" |
+| a scan of the movers for every bike: `if ((tails[i] ?? -1) >= 0 && !movers.some((m) => m.slot < 0)) vacated.add(tails[i] ?? -1);` | `step.ts` | "never scans a list that grows with the players" |
+| `Math.pow(participants, 0.5)` instead of `Math.sqrt(participants)` in `sideFor` | `field.ts` | "use only arithmetic every engine rounds the same way" |
 
 - [ ] **Step 6: Check and commit**
 
@@ -1852,7 +1852,7 @@ Expected: `Tests  15 passed (15)`.
 pnpm format && pnpm check && pnpm typecheck && pnpm test
 ```
 
-Expected: все пакеты зелёные, в `packages/game` — `Tests  119 passed (119)`.
+Expected: all packages green, in `packages/game` — `Tests  119 passed (119)`.
 
 ```bash
 git add packages/game/test/complexity.ts packages/game/test/purity.test.ts \
@@ -1862,29 +1862,29 @@ git commit -m "test(game): hold the light-cycle rules to their shapes and purity
 
 ---
 
-### Task 5: Сверить спецификацию с реальностью
+### Task 5: Reconcile the spec with reality
 
 **Files:**
 - Modify: `docs/superpowers/specs/2026-10-10-light-cycles-design.md`
 
 - [ ] **Step 1: Record the two divergences**
 
-В разделе 4, подраздел «Смерть, очки, респаун», после пункта про респаун добавить:
+In section 4, subsection "Death, points, respawn", after the respawn item, add:
 
 ```markdown
-- **Старт раунда — решёткой, а не поиском.** √n колонок на √n рядов, каждый байк в середине своего
-  блока, ряды едут попеременно на восток и на запад. Поиск самой свободной точки для каждого байка
-  стоил бы O(n × клеток), а клеток тем больше, чем больше игроков, — квадрат (план 6, находка 4).
-- После смерти хвост возвращается к базовой длине: удлинения за убийства живут одну жизнь.
+- **Round start — a grid, not a search.** √n columns by √n rows, each bike in the middle of its
+  block, the rows heading alternately east and west. Searching for the freest point for each bike
+  would cost O(n × cells), and the more players, the more cells — a square (plan 6, finding 4).
+- After death the trail returns to the base length: the extensions for kills live for one life.
 ```
 
-В разделе 4, подраздел «Боты», после пункта про заливку добавить:
+In section 4, subsection "Bots", after the item about the flood fill, add:
 
 ```markdown
-- Ничья по площади решается длиной свободного прогона (до 32 клеток), затем случайно из ГПСЧ;
-  случайный поворот на простом участке проходит ту же проверку площадью. Без этого боты въезжали в
-  стены, в тупики и закручивались спиралью внутрь (план 6, находки 1–3). Одиночный бот гибнет в
-  среднем 0,7 раза за раунд — гейт от ухудшения, а не цель.
+- A tie on area is decided by the length of the free run (up to 32 cells), then at random from the
+  PRNG; a random turn on a plain stretch passes the same area check. Without this the bots drove
+  into walls, into dead ends and spiralled inwards (plan 6, findings 1–3). A single bot dies on
+  average 0.7 times per round — a gate against getting worse, not a target.
 ```
 
 - [ ] **Step 2: Commit**
@@ -1896,8 +1896,8 @@ git commit -m "docs: record where the light-cycle rules diverged from the spec"
 
 ---
 
-## Самопроверка плана
+## Plan self-review
 
-- Раздел 4 спецификации: поле, байк, тик (подшаги, неподвижная точка, хвосты, встречные, общая клетка), резина, рывок, смерть и виновник, респаун, таблица, боты — задачи 2–3. Раунд и тик в 20 Гц — план 7.
-- Раздел 10: правила, детерминизм, асимптотика, чистота, боты — задачи 3–4. Сервер, сквозной тест и снимки — планы 7 и 8.
-- Типы `CyclesState`, `Bike`, `Trail`, `TickChanges`, `CyclesEvent`, `CyclesInput` определены в задачах 2–3 и используются в тестах под теми же именами.
+- Spec section 4: field, bike, tick (substeps, fixed point, trails, head-on, shared cell), rubber, boost, death and killer, respawn, table, bots — tasks 2–3. The round and the 20 Hz tick — plan 7.
+- Spec section 10: rules, determinism, asymptotics, purity, bots — tasks 3–4. Server, end-to-end test and snapshots — plans 7 and 8.
+- Types `CyclesState`, `Bike`, `Trail`, `TickChanges`, `CyclesEvent`, `CyclesInput` are defined in tasks 2–3 and used in the tests under the same names.
