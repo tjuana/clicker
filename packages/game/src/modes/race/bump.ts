@@ -1,6 +1,7 @@
+import { binCars } from './bins';
 import type { Car } from './car';
 import type { RaceConfig } from './config';
-import { cos, ONE, sin, TILE } from './fixed';
+import { cos, ONE, sin } from './fixed';
 import type { Track } from './track';
 
 type Bounds = Track['bounds'];
@@ -10,13 +11,12 @@ type Bounds = Track['bounds'];
  * moves and then applied together, and a pair is always worked out from its lower slot, so the
  * answer does not depend on the order of `cars`. Cars are binned by tile; two cars close enough
  * to touch are never more than one tile apart, so only a bin and its eight neighbours are
- * compared. The bins are an array over the track's bounding box, which is small and bounded:
- * indexing it needs no hash.
+ * compared (see `binCars`).
  * Returns how many pairs of cars were compared.
  */
 function pass(cars: Car[], bounds: Bounds, config: RaceConfig): number {
   const count = cars.length;
-  const { width, height } = bounds;
+  const { width, height, bin, head, next } = binCars(cars, bounds);
   const px = new Int32Array(count);
   const py = new Int32Array(count);
   const pushX = new Int32Array(count);
@@ -27,9 +27,6 @@ function pass(cars: Car[], bounds: Bounds, config: RaceConfig): number {
   // The two circles of car i: front at 2i, rear at 2i + 1.
   const circleX = new Int32Array(2 * count);
   const circleY = new Int32Array(2 * count);
-  const bin = new Int32Array(count);
-  const head = new Int32Array(width * height).fill(-1);
-  const next = new Int32Array(count);
 
   for (let i = 0; i < count; i += 1) {
     const car = cars[i] as Car;
@@ -37,12 +34,6 @@ function pass(cars: Car[], bounds: Bounds, config: RaceConfig): number {
     py[i] = car.y;
     slot[i] = car.slot;
     heading[i] = car.heading;
-    // A car can only be nudged past the box by a hair; the edge bin is then the right one.
-    const bx = Math.min(width - 1, Math.max(0, Math.floor(car.x / TILE) - bounds.x));
-    const by = Math.min(height - 1, Math.max(0, Math.floor(car.y / TILE) - bounds.y));
-    bin[i] = by * width + bx;
-    next[i] = head[bin[i] as number] as number;
-    head[bin[i] as number] = i;
     // Nobody is slowed by a car it is not behind.
     limit[i] = Number.MAX_SAFE_INTEGER;
     const ox = Math.trunc((config.reach * cos(car.heading)) / ONE);

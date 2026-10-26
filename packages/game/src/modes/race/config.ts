@@ -36,6 +36,18 @@ export interface RaceConfig {
   reach: number;
   /** Cosine, scaled by `ONE`, above which a nose is said to point at the other car. */
   aim: number;
+  /** Laps to complete: the start line is crossed once to begin the first and once to end each. */
+  laps: number;
+  /** Ticks the race goes on after the first car finishes: 30 s. */
+  afterFirst: number;
+  /** Ticks after which a race ends whatever happens: 5 minutes. */
+  cap: number;
+  /** Lateral offset of the two grid columns, 0.15 tile either side of the centreline. */
+  gridLateral: number;
+  /** Distance from the start line to the first row, a quarter tile. */
+  gridFront: number;
+  /** Distance between rows: 0.4 tile, a car length and a gap. */
+  gridRow: number;
 }
 
 export const RACE: RaceConfig = {
@@ -54,4 +66,10 @@ export const RACE: RaceConfig = {
   radius: 266,
   reach: 348,
   aim: Math.round(0.3 * ONE),
+  laps: 3,
+  afterFirst: 30 * 30,
+  cap: 5 * 60 * 30,
+  gridLateral: 614,
+  gridFront: 1024,
+  gridRow: 1638,
 };

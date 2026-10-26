@@ -1,0 +1,293 @@
+import { describe, expect, it } from 'vitest';
+import { BRAKE, type Car, GAS } from '../src/modes/race/car';
+import { RACE } from '../src/modes/race/config';
+import { cos, ONE, sin } from '../src/modes/race/fixed';
+import { over, raceResults, standings, startRace, stepRace } from '../src/modes/race/race';
+import { emptyRace, newCar, type RaceState } from '../src/modes/race/state';
+import { buildTrack, point, project, type TrackData } from '../src/modes/race/track';
+import { TRACKS } from '../src/modes/race/tracks';
+
+const track = buildTrack(TRACKS.ring as TrackData);
+const last = track.pieces.length - 1;
+const lastLength = track.pieces[last]?.length ?? 0;
+
+function field(count: number, bots = false): RaceState {
+  const cars = Array.from({ length: count }, (_, slot) => newCar(slot, `p${slot}`, bots));
+  return startRace(emptyRace('ring', 7, cars), track, RACE);
+}
+
+/** One car put on the road at a place, facing along it. */
+function placed(
+  piece: number,
+  along: number,
+  over_: Partial<ReturnType<typeof newCar>> = {},
+  tick = 0,
+): RaceState {
+  const where = point(track, piece, along, 0);
+  const car = {
+    ...newCar(0, 'p0', false),
+    x: where.x,
+    y: where.y,
+    heading: where.heading,
+    piece,
+    ...over_,
+  };
+  return { ...emptyRace('ring', 7, [car]), tick };
+}
+
+function run(state: RaceState, ticks: number): RaceState {
+  let now = state;
+  for (let i = 0; i < ticks; i += 1) now = stepRace(now, track, RACE).state;
+  return now;
+}
+
+/** The distance between the nearest circles of two cars. */
+function gap(a: Car, b: Car): number {
+  const circles = (c: Car) =>
+    [RACE.reach, -RACE.reach].map((end) => ({
+      x: c.x + Math.trunc((end * cos(c.heading)) / ONE),
+      y: c.y + Math.trunc((end * sin(c.heading)) / ONE),
+    }));
+  let best = Number.POSITIVE_INFINITY;
+  for (const p of circles(a)) {
+    for (const q of circles(b)) best = Math.min(best, Math.hypot(q.x - p.x, q.y - p.y));
+  }
+  return best;
+}
+
+describe('the grid', () => {
+  it('puts twenty cars on the road, facing the way round, none inside another', () => {
+    const { cars } = field(20);
+    for (const car of cars) {
+      const place = project(track, car.piece, car.x, car.y);
+      expect(Math.abs(place.lateral)).toBeLessThan(RACE.wall - RACE.radius);
+      const tangent = point(track, car.piece, place.along, 0).heading;
+      expect(cos(car.heading - tangent)).toBeGreaterThan(ONE * 0.99);
+      expect(car.lap).toBe(0);
+      expect(car.speed).toBe(0);
+    }
+    for (let i = 0; i < cars.length; i += 1) {
+      for (let j = i + 1; j < cars.length; j += 1) {
+        const a = cars[i];
+        const b = cars[j];
+        if (!a || !b) throw new Error('missing car');
+        expect(gap(a, b)).toBeGreaterThan(2 * RACE.radius);
+      }
+    }
+  });
+
+  it('stands behind the start line, in slot order, pole first', () => {
+    const { cars } = field(6);
+    const order = standings(startRace(emptyRace('ring', 1, cars), track, RACE), track);
+    expect(order).toEqual([0, 1, 2, 3, 4, 5]);
+    for (const c of cars) expect(c.piece).toBe(last);
+  });
+
+  it('gives bots a pace of their own and humans the full top speed', () => {
+    const mixed = startRace(
+      emptyRace('ring', 3, [
+        newCar(0, 'h', false),
+        ...[1, 2, 3, 4].map((s) => newCar(s, `b${s}`, true)),
+      ]),
+      track,
+      RACE,
+    );
+    expect(mixed.cars[0]?.pace).toBe(100);
+    const paces = mixed.cars.slice(1).map((c) => c.pace);
+    for (const pace of paces) {
+      expect(pace).toBeGreaterThanOrEqual(88);
+      expect(pace).toBeLessThanOrEqual(97);
+    }
+    expect(new Set(paces).size).toBeGreaterThan(1);
+  });
+});
+
+describe('laps', () => {
+  it('reports the lap in the tick it is crossed', () => {
+    const start = placed(last, lastLength - 10, { speed: 150, keys: GAS, lap: 0 });
+    const { state, changes } = stepRace(start, track, RACE);
+    expect(changes.laps).toEqual([{ slot: 0, lap: 1 }]);
+    expect(state.cars[0]?.lap).toBe(1);
+  });
+
+  it('gives nothing for driving back over the line and forward again', () => {
+    let state = placed(0, 150, { speed: -50, keys: BRAKE, lap: 1 });
+    state = run(state, 8);
+    expect(state.cars[0]?.lap).toBe(0);
+    state = run({ ...state, cars: state.cars.map((c) => ({ ...c, keys: GAS })) }, 150);
+    expect(state.cars[0]?.lap).toBe(1);
+    expect(state.cars[0]?.finish).toBeNull();
+  });
+
+  it('records no best lap for a re-crossing after reversing over the line', () => {
+    let state = placed(0, 150, { speed: -50, keys: BRAKE, lap: 2, lapStart: 5 }, 30);
+    state = run(state, 8);
+    expect(state.cars[0]?.lap).toBe(1);
+    state = run({ ...state, cars: state.cars.map((c) => ({ ...c, keys: GAS })) }, 150);
+    expect(state.cars[0]?.lap).toBe(2);
+    expect(state.cars[0]?.best).toBeNull();
+  });
+
+  it('records the best lap from the tick the lap began', () => {
+    const start = placed(
+      last,
+      lastLength - 10,
+      {
+        speed: 150,
+        keys: GAS,
+        lap: 1,
+        lapStart: 100,
+      },
+      900,
+    );
+    const { state } = stepRace(start, track, RACE);
+    expect(state.cars[0]?.lap).toBe(2);
+    expect(state.cars[0]?.best).toBe(901 - 100);
+    expect(state.cars[0]?.lapStart).toBe(901);
+  });
+});
+
+describe('the finish', () => {
+  const crossing = (lap: number) =>
+    placed(last, lastLength - 10, { speed: 150, keys: GAS, lap }, 500);
+
+  it('is reached by completing the third lap, and not before', () => {
+    const early = stepRace(crossing(2), track, RACE);
+    expect(early.state.cars[0]?.lap).toBe(3);
+    expect(early.state.cars[0]?.finish).toBeNull();
+    const done = stepRace(crossing(3), track, RACE);
+    expect(done.state.cars[0]?.finish).toBe(501);
+    expect(done.state.firstFinish).toBe(501);
+    expect(done.changes.finished).toEqual([0]);
+  });
+
+  it('stops the car, whatever the keys say', () => {
+    let state = stepRace(crossing(3), track, RACE).state;
+    state = run({ ...state, cars: state.cars.map((c) => ({ ...c, keys: GAS })) }, 120);
+    const car = state.cars[0];
+    expect(car?.speed).toBe(0);
+    expect(car?.finish).toBe(501);
+    const keep = { x: car?.x, y: car?.y };
+    state = run(state, 30);
+    expect({ x: state.cars[0]?.x, y: state.cars[0]?.y }).toEqual(keep);
+  });
+});
+
+describe('standings', () => {
+  function three(): RaceState {
+    const base = field(4);
+    const cars = base.cars.map((c) => ({ ...c }));
+    const set = (i: number, patch: Partial<(typeof cars)[number]>) =>
+      Object.assign(cars[i] ?? {}, patch);
+    const at = (i: number, piece: number, along: number, lap: number) => {
+      const w = point(track, piece, along, 0);
+      set(i, { x: w.x, y: w.y, heading: w.heading, piece, lap });
+    };
+    at(0, 2, 500, 1);
+    at(1, 5, 100, 1);
+    at(2, 2, 500, 2);
+    at(3, 2, 500, 1);
+    return { ...base, cars };
+  }
+
+  it('orders by lap, then by place on the track, then by slot', () => {
+    expect(standings(three(), track)).toEqual([2, 1, 0, 3]);
+  });
+
+  it('puts finishers first, by their finish tick, whatever their progress', () => {
+    const state = three();
+    state.cars[3] = { ...(state.cars[3] as (typeof state.cars)[number]), finish: 900 };
+    state.cars[0] = { ...(state.cars[0] as (typeof state.cars)[number]), finish: 800 };
+    expect(standings(state, track)).toEqual([0, 3, 2, 1]);
+  });
+
+  it('breaks a tie of finish ticks by slot', () => {
+    const state = three();
+    for (const i of [1, 3]) {
+      state.cars[i] = { ...(state.cars[i] as (typeof state.cars)[number]), finish: 800 };
+    }
+    expect(standings(state, track).slice(0, 2)).toEqual([1, 3]);
+  });
+});
+
+describe('over', () => {
+  const done = (finish: number | null) => ({ ...field(2), firstFinish: finish });
+  const finishedCar = (state: RaceState, i: number): RaceState => ({
+    ...state,
+    cars: state.cars.map((c, k) => (k === i ? { ...c, finish: 100 } : c)),
+  });
+
+  it('holds while somebody is still racing', () => {
+    expect(over({ ...done(null), tick: 100 }, RACE)).toBe(false);
+    expect(over({ ...finishedCar(done(100), 0), tick: 500 }, RACE)).toBe(false);
+  });
+
+  it('ends when every car has finished', () => {
+    expect(over(finishedCar(finishedCar(done(100), 0), 1), RACE)).toBe(true);
+  });
+
+  it('ends thirty seconds after the first finisher', () => {
+    const state = finishedCar(done(100), 0);
+    expect(over({ ...state, tick: 100 + 30 * 30 - 1 }, RACE)).toBe(false);
+    expect(over({ ...state, tick: 100 + 30 * 30 }, RACE)).toBe(true);
+  });
+
+  it('ends at the five-minute cap', () => {
+    expect(over({ ...done(null), tick: 5 * 60 * 30 - 1 }, RACE)).toBe(false);
+    expect(over({ ...done(null), tick: 5 * 60 * 30 }, RACE)).toBe(true);
+  });
+});
+
+describe('results', () => {
+  it('ranks finishers by time and the rest by the distance they were short', () => {
+    const state = field(3);
+    const cars = state.cars.map((c, i) => ({
+      ...c,
+      finish: i === 2 ? 700 : i === 0 ? 900 : null,
+      lap: i === 1 ? 2 : 4,
+      best: i === 2 ? 600 : null,
+    }));
+    const rows = raceResults({ ...state, cars }, track, RACE);
+    expect(rows.map((r) => [r.rank, r.slot])).toEqual([
+      [1, 2],
+      [2, 0],
+      [3, 1],
+    ]);
+    expect(rows[0]).toMatchObject({ laps: 3, best: 600, finish: 700, short: null });
+    expect(rows[2]?.laps).toBe(1);
+    expect(rows[2]?.short).toBeGreaterThan(0);
+  });
+
+  it('is filled in the tick the race ends', () => {
+    const start = placed(last, lastLength - 10, { speed: 150, keys: GAS, lap: 3 }, 500);
+    expect(start.results).toBeNull();
+    expect(stepRace(start, track, RACE).state.results?.[0]?.rank).toBe(1);
+  });
+});
+
+describe('the step', () => {
+  it('leaves the state it was given as it found it', () => {
+    const state = field(6);
+    const moving = { ...state, cars: state.cars.map((c) => ({ ...c, keys: GAS })) };
+    const before = structuredClone(moving);
+    stepRace(moving, track, RACE);
+    expect(moving).toEqual(before);
+  });
+
+  it('moves every car and the clock', () => {
+    const state = run({ ...field(2), cars: field(2).cars.map((c) => ({ ...c, keys: GAS })) }, 10);
+    expect(state.tick).toBe(10);
+    for (const c of state.cars) expect(c.speed).toBeGreaterThan(0);
+  });
+
+  it('bumps cars that touch and says who', () => {
+    const base = field(2);
+    const [a, b] = base.cars as [(typeof base.cars)[number], (typeof base.cars)[number]];
+    const state = {
+      ...base,
+      cars: [a, { ...b, x: a.x + 100, y: a.y, heading: a.heading, piece: a.piece }],
+    };
+    const { changes } = stepRace(state, track, RACE);
+    expect(changes.bumped).toEqual([0, 1]);
+  });
+});
