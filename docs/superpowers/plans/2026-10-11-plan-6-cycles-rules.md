@@ -26,7 +26,7 @@ What turned up on the way and is already accounted for in the code:
 6. **The tick gate missed the scan at first**: in a fresh round the trails are not full, and the branch where a trail gives up a cell did not run. The gate runs with trails of length 1.
 7. `Object.freeze` does not apply to a typed array with elements, so `deepFreeze` from `support.ts` does not fit here. The input's immutability is checked by comparing copies before and after the step.
 
-A departure from the spec, section 4 "Death, score, respawn": at round start the bikes are placed on a grid, not at the "freest point" (finding 4). The trail length after death is reset to the base length — the spec was silent about it.
+A departure from the spec, section 4 "Death, points, respawn": at round start the bikes are placed on a grid, not at the "freest point" (finding 4). The trail length after death is reset to the base length — the spec was silent about it.
 
 ## How to execute
 
@@ -1869,7 +1869,7 @@ git commit -m "test(game): hold the light-cycle rules to their shapes and purity
 
 - [ ] **Step 1: Record the two divergences**
 
-In section 4, subsection "Death, score, respawn", after the respawn item, add:
+In section 4, subsection "Death, points, respawn", after the respawn item, add:
 
 ```markdown
 - **Round start — a grid, not a search.** √n columns by √n rows, each bike in the middle of its

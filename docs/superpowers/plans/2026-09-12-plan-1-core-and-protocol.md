@@ -2384,10 +2384,10 @@ Expected:
 - 45 tests in `@clicker/game` and 23 tests in `@clicker/protocol`, zero failures.
 
 Check against the specification sections:
-- §5 "Core" — implemented in `packages/game`, including `apply`, `nextDeadline`, `abortRound`, `syncConnections`;
+- §5 "The core" — implemented in `packages/game`, including `apply`, `nextDeadline`, `abortRound`, `syncConnections`;
 - §6 "Protocol" — implemented in `packages/protocol`, except sending messages: it appears in plan 2 together with the server;
 - §10 "Testing" — the items about `packages/game` and `packages/protocol` are closed; the server tests, e2e and deploy belong to plans 2 and 3;
-- §11 "Tooling" — pnpm workspaces, TypeScript, Biome and CI are done. Playwright and deploy appear in plan 3.
+- §11 "Tools, development, CI" — pnpm workspaces, TypeScript, Biome and CI are done. Playwright and deploy appear in plan 3.
 
 CI is checked only after the first push to GitHub: the workflow cannot be run locally.
 
