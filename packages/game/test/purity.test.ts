@@ -86,12 +86,15 @@ describe('the rules in their source', () => {
 const TRANSCENDENTAL =
   /\bMath\s*\.\s*(?:sin|cos|tan|asin|acos|atan2?|exp|expm1|log\w*|pow|cbrt|hypot)\b/;
 
-describe('the light-cycle rules', () => {
+describe.each(['cycles', 'race'])('the %s rules', (mode) => {
+  const files = sources(join(SOURCE, 'modes', mode));
+
+  it('are read from a directory that has sources', () => {
+    expect(files.length).toBeGreaterThan(0);
+  });
+
   it('use only arithmetic every engine rounds the same way', () => {
-    const offenders = sources(join(SOURCE, 'modes', 'cycles')).filter((path) =>
-      TRANSCENDENTAL.test(code(path)),
-    );
-    expect(offenders).toEqual([]);
+    expect(files.filter((path) => TRANSCENDENTAL.test(code(path)))).toEqual([]);
   });
 });
 
