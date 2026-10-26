@@ -44,6 +44,28 @@ What the prototype found, each of which would have broken a plan written from th
 3. **The grid must stand on straights.** Placed on the last corner, cars faced the corner's entry
    direction, not its tangent. The track data puts the start line where the main straight ends.
 
+Then the owner watched the visual prototype and said the cars drove backwards and that collisions
+were bad. Both were real, and both changed this plan:
+
+4. **One circle is the wrong shape for a car.** A 0.1-tile circle under a car 0.3 tile long and
+   0.13 wide let cars drive into each other's noses and tails. A car is **two circles** of radius
+   0.065 tile, 0.085 ahead of and behind its centre, for walls and for bumps alike.
+5. **Pushing apart is not enough; the car behind must slow.** With pushes alone, a faster car
+   re-entered the one in front every tick (overlaps of 0.11 tile). A car whose nose points at the
+   other (the dot product above 0.3) can go no faster than that one, from the speeds before the
+   tick. Capping it at 95 % of the leader's speed instead slowed whole trains to a crawl, because
+   the factor compounds down the queue: the cap is the leader's speed itself.
+6. **One pass of pushes leaves overlaps** where a car is pushed by several neighbours: two passes,
+   the second from the positions the first left.
+7. **Bots need to overtake, or they queue.** A bot with a car within half a tile ahead in its lane
+   moves 0.2 tile to the freer side, up to ±0.22, but only into a lane nobody is driving in
+   alongside. Their base lanes are ±0.17 apart, not 0.12: at 0.12 two cars in neighbouring lanes
+   overlap by design.
+
+With these, twenty bots finished between 61.5 and 82.7 s, the worst overlap of any two cars'
+circles in a whole race was 0.029 tile (none above 0.03), and nobody was slower than 10 units for
+more than 68 ticks.
+
 ---
 
 ## How to execute
@@ -134,7 +156,8 @@ export function drive(car: Car, track: Track, config: RaceConfig): void; // muta
   grass), heading from steering (rate grows to its maximum at 0.5 tiles/s, falls by 35 % towards top
   speed, reversed when moving backwards), move along the heading, walk to the right piece, then the
   wall.
-- **Wall** at `|lateral| > 0.5 tile − radius`: put back on the line; speed × |cos| of the angle
+- **Wall**: each of the car's two circles (finding 4) is checked; the deeper one past
+  `0.5 tile − radius` pushes the whole car back towards the centreline by its overlap; speed × |cos| of the angle
   between heading and tangent (A6: the dot product taken once; the result never longer than the
   input); and the heading turned a quarter of the way to the tangent, or to its reverse when moving
   backwards (finding 2).
@@ -150,12 +173,16 @@ nose-turn removed).
 
 **Files:** `packages/game/src/modes/race/bump.ts`, `packages/game/test/race-bump.test.ts`, `packages/game/test/race-complexity.test.ts`.
 
-- Cars are circles of the config's radius. Bin each car by its tile (`y × width + x` of the track's
+- A car is two circles (finding 4). Bin each car by its tile (`y × width + x` of the track's
   bounding box — bounded, so no hash, plan 5's A2), compare each car with the same and the eight
-  neighbouring bins, each pair once (lower slot first), and accumulate pushes of half the overlap
-  each along the line of centres, computed from the positions **before** any car moves; apply them
-  together. The car whose heading points at the other loses 10 % of its speed.
-Tests: two overlapping cars end exactly `2 × radius` apart along their line (within a unit); the
+  neighbouring bins, each pair once (lower slot first), each of its circles against each of the
+  other's, and accumulate pushes of half the overlap each along the line of centres, computed from
+  the positions **before** any car moves; apply them together. Then a second pass from the new
+  positions (finding 6).
+- The car behind — whose nose points at the other, dot product above 0.3 — is capped at the other's
+  speed, from the speeds before the tick (finding 5).
+Tests: two overlapping cars end at least `2 × radius` apart between their nearest circles
+(within a unit); a car driving into the back of a slower one ends no faster than it; the
 result is the same whatever order the cars are listed in (permute twenty cars, compare); cars in
 different, non-neighbouring tiles are never compared. **Growth:** with cars spread one per tile,
 pair checks grow ×10 for ×10 cars (linear), not ×100 — counted, not timed (`complexity.ts`). See it
@@ -196,13 +223,15 @@ conditions; the step leaves its input state untouched (deep-equal before and aft
 **Files:** `packages/game/src/modes/race/bot.ts`, `packages/game/test/race-bot.test.ts`, `race-complexity.test.ts`.
 
 - A bot aims at the centreline point `0.45 + 0.8 × v/vmax` tiles ahead on its lane (slot-based,
-  −0.12, 0, +0.12), steers by the sign of the cross product with a small dead zone, and keeps
+  −0.17, 0, +0.17; it overtakes into a free lane as finding 7 says, looking only at the cars in its
+  own and neighbouring tile bins, so the cost does not grow with the field), steers by the sign of the cross product with a small dead zone, and keeps
   under the speed of the slowest corner within its braking distance plus 0.6 tile (radius → speed
   from the config table). Its pace (88–97 % of top speed) comes from the seeded PRNG at the grid.
 - No transcendental functions; the PRNG (mulberry32, as the light cycles) lives in the state.
 Gates: a lone bot finishes three laps of the Ring in at most 70 s of ticks and touches a wall on at
-most 10 ticks; twenty bots all finish within 80 s and none is stuck (speed under 10 units) for more
-than 60 ticks; **cost**: one decision visits a number of pieces that does not grow with the track
+most 10 ticks; twenty bots all finish within 90 s, none is slower than 10 units for more than 75
+ticks, and **the deepest overlap of any two cars' circles in the whole race is under 0.03 tile** —
+what the owner saw as cars inside each other; **cost**: one decision visits a number of pieces that does not grow with the track
 (a Ring versus a track of four Rings' worth of straights — counted).
 - [ ] Commit: `feat(game): race bots that follow the line and brake for corners`.
 

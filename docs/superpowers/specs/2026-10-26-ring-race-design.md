@@ -41,8 +41,8 @@ interface TrackData { id: string; name: string; start: { x: number; y: number; d
 ```
 
 A **validator** (plan 5's A16) checks that the chain closes on its start pose, that no two pieces
-claim a tile, that the first piece is a straight long enough for the start line, and that the
-numbers are integers in range. A track that fails it never loads.
+claim a tile, that the last two pieces are straights (the grid stands on them, behind a start line
+at the end of the main straight), and that the numbers are integers in range. A track that fails it never loads.
 
 A car's place on the track is its piece and its `(along, lateral)` in that piece: along the
 centreline and across it. A straight projects linearly; a corner by its distance from the centre
@@ -70,7 +70,8 @@ Everything is an integer, as in the light cycles; the purity gate extends to `mo
   wall's tangent — plan 5's A6, with the DooM_42 slide bug fixed: the dot product is taken once, and
   the result is never longer than the input. A glancing hit loses little speed, a head-on one stops
   the car.
-- **Bumps.** Cars are circles. Pairs are found through a grid of tiles (plan 5's A2): each car is
+- **Bumps.** A car is two circles, front and rear (one circle let cars drive into each other's noses
+  and tails; see plan 11). Pairs are found through a grid of tiles (plan 5's A2): each car is
   binned by its tile, and only the same and neighbouring bins are compared. Every overlap is
   resolved from the positions before any are moved, with each car pushed half the overlap apart and
   the summed pushes applied together. The result does not depend on the order of the cars, the same
@@ -134,7 +135,32 @@ Everything is an integer, as in the light cycles; the purity gate extends to `mo
 Each is prototyped where it is risky (`prototype-before-planning`), planned, built by agents,
 reviewed independently, and merged, as plans 9 and 10 were.
 
-## 8. Not in this version
+## 8. What the visual prototype found, for plan 13
+
+A scratch scene (React Three Fiber, the Ring built from the Kit's tiles, Poly Haven textures and sky,
+twenty cars driven by the rules' prototype) ran at the display's 120 fps on the M2 with soft
+shadows, from about 3.3 MB of assets. What it found:
+
+- **The Kit's models carry an offset on their root node** (−0.35, −0.01, −0.65); centre them by
+  their measured bounds, never by the mesh data.
+- **The Kit's car faces +z; its tiles −z.** The owner saw the cars drive backwards; a side view with
+  a heading arrow confirmed it.
+- **The Kit's "Wall" corners are kerb arcs that overhang their block**, not walls on the tile edge:
+  the barriers are drawn ourselves, red and white blocks along ±0.52 tile, butt-jointed (blocks that
+  overlap z-fight and flicker) and with room left on curves, where straight blocks meet at an angle.
+- **Bake the track into one geometry per material** (three draw calls), with UVs from world
+  position: the tiles' own UVs are palette coordinates. **Bake the car per material** into
+  instanced meshes, four draw calls for twenty cars; the body material takes the slot colour.
+- **Interpolate between ticks.** The owner saw everything jerk. Measured: drawing cars at their last
+  30 Hz tick on a 120 Hz screen left the leader standing still on 271 frames of 361; between the
+  last two ticks, on none. The chase camera eases towards its place instead of sitting on the car.
+- **Anisotropic filtering** on every texture: the owner saw everything blur; the road ahead is
+  always seen at a grazing angle.
+- Assets: asphalt `asphalt_track` and grass `leafy_grass` (colour and normal, 1K JPEG at quality
+  70: 1.65 MB), sky `kloofendal_48d_partly_cloudy_puresky` (1K HDR: 1.44 MB), tiles and car
+  0.24 MB. All CC0.
+
+## 9. Not in this version
 
 Client-side prediction; drift; items; a second track and an editor; a cup of several tracks; tilt
 steering; binary snapshots.
