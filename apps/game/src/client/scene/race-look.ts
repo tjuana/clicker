@@ -71,11 +71,40 @@ export const SUN = {
   margin: 1,
 };
 
-/** The view until the cars and their chase camera arrive (task 4): above and behind, looking down. */
+/** The view until the race's first message: above and behind, looking down. */
 export const OVERVIEW = {
   fov: 60,
   near: 0.02,
   far: 400,
   /** Where the camera stands relative to the track's centre. */
   offset: [0, 7, 7.5] as [number, number, number],
+};
+
+/**
+ * The cars. Their colours are the light cycles' slot palette (`look.ts`): twenty hues far apart,
+ * and tried against the Kit's body red, white-multiplied, they read on asphalt and on grass.
+ */
+export const CAR = {
+  /** Nose to tail in tiles; a lane is 0.69 wide, so a car takes under half of it. */
+  length: 0.3,
+  /** The Kit names the body material `red`; it is made white so the slot colour is what shows. */
+  bodyMaterial: 'red',
+  /** Instances per mesh: the room seats twenty and a slot beyond this is not drawn. */
+  capacity: 20,
+};
+
+/**
+ * The chase camera, in tiles. It eases towards its place behind the car instead of sitting on
+ * it: a camera nailed to the car shakes the whole picture with every correction the car makes.
+ */
+export const CHASE = {
+  behind: 1.1,
+  above: 0.45,
+  /** How far ahead of the car, and how high, the camera looks. */
+  ahead: 0.8,
+  lookHeight: 0.05,
+  /** Per second; the share of the gap closed each frame is `1 - exp(-ease * dt)`. */
+  ease: 6,
+  /** A stalled tab's first frame back must not throw the camera across the track. */
+  maxDt: 0.05,
 };
