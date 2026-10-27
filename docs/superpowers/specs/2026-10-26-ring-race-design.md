@@ -274,6 +274,17 @@ What plan 12's review changed:
   and the car's best lap after it (`best`, null while it has none), and the car flags are exported as
   `FINISHED`, `ON_GRASS`, `AT_WALL` and `TOUCHING` — an earlier version of the HUD had recomputed
   the best lap and redefined the bits, copies of rules the client must not hold.
+- **The race clock rebases after a stall.** A server stall longer than the ticker's catch-up (ten
+  steps) leaves the tick numbers behind the wall clock, and the estimate's old minimum then kept the
+  clock early for four seconds: the render time sat clamped at the newest tick and the cars stood
+  still between messages. After five arrivals in a row at which the clock was ahead of the data
+  the estimate rebases on those arrivals; the render time still never goes backwards. The light
+  cycles' timeline is unchanged.
+- **The latency readout is left for later.** Sections 1 and 6 make "no client prediction" depend on
+  a readout of how long the server takes to answer, and the race does not have one yet. The light
+  cycles time a turn's echo; the race's equivalent is a key change to the speed or heading response
+  that follows it, which has to be told from the car's own dynamics (acceleration, a bump, grass)
+  and is a task of its own. Until it exists nobody has measured whether prediction is needed.
 - **The camera follows the player's car**, or the leader when the player has none on the field.
 - **Sound**: one detuned engine voice re-pitched by the player's speed, a blip a lap, a chord at the
   finish, a thud on a bump; checked to run without errors, not yet listened to by the owner.
