@@ -125,9 +125,9 @@ test('the race fetches its models once, in the lobby, and keeps them through the
     if (name.endsWith('.glb')) fetched.set(name, (fetched.get(name) ?? 0) + 1);
   });
   await startRace(page);
-  // The refetch began on the render that turned the countdown into the race, before the clock's
-  // first change, and the browser reports a request as it is sent.
-  await raceIsLive(page);
+  // Counted at the results, not at the start: by then every render of the race has happened, so
+  // no refetch can still be on its way, whatever the order of the browser's events.
+  await endOfRound(page);
   expect(fetched.get('raceCarRed.glb')).toBe(1);
   for (const [name, times] of fetched) expect(times, name).toBe(1);
 });
