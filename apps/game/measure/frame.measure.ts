@@ -1,4 +1,5 @@
-import { expect, type Locator, type Page, test } from '@playwright/test';
+import { expect, type Locator, test } from '@playwright/test';
+import { host } from './host';
 
 /** Everything a frame does, GPU and CPU together, has to fit here for 60 frames a second. */
 const FRAME_MS = 1000 / 60;
@@ -27,23 +28,6 @@ async function read(meter: Locator): Promise<Sample> {
     calls: await value('data-calls'),
     tris: await value('data-tris'),
   };
-}
-
-async function host(page: Page, mode: 'race' | 'cycles', bots: number): Promise<void> {
-  await page.goto('/');
-  await page.getByTestId('create-room').click();
-  await page.getByTestId('name-input').fill('Anna');
-  await page.getByTestId('enter').click();
-  await expect(page.getByTestId('start')).toBeVisible();
-  await page.getByTestId(`mode-${mode}`).click();
-  await expect(page.getByTestId(`mode-${mode}`)).toHaveAttribute('aria-pressed', 'true');
-  const badges = page.getByTestId('bot-badge');
-  for (let seated = 1; seated <= bots; seated += 1) {
-    await page.getByTestId('add-bot').click();
-    await expect(badges).toHaveCount(seated);
-  }
-  await page.getByTestId('start').click();
-  await expect(page.getByTestId('hud')).toBeVisible();
 }
 
 const median = (xs: number[]): number =>

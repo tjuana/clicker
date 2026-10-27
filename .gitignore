@@ -7,5 +7,6 @@ dist/
 worker-configuration.d.ts
 test-results/
 playwright-report/
+apps/game/shots/
 .playwright/
 .claude/worktrees/
