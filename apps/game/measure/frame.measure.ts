@@ -2,7 +2,10 @@ import { expect, type Locator, type Page, test } from '@playwright/test';
 
 /** Everything a frame does, GPU and CPU together, has to fit here for 60 frames a second. */
 const FRAME_MS = 1000 / 60;
-/** One sample a second: each readout spans the last 120 frames, so the samples do not overlap. */
+/**
+ * One sample a second. A readout spans the last 120 frames: a second at 120 Hz, where the samples
+ * do not overlap; at 60 Hz each shares half its frames with the one before.
+ */
 const SAMPLES = 10;
 
 interface Sample {

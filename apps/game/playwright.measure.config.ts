@@ -5,7 +5,8 @@ import { defineConfig } from '@playwright/test';
  * headless Chromium draws with a software rasteriser that has no GPU timer and says nothing about
  * a real GPU. Headed and with vsync on — the timer queries measure the GPU's work, not the wait for
  * the display, and plan 13 ruled out uncapped runs on this machine. Rounds run at their real
- * length, so the race and the arena last long enough to sample.
+ * length, so the race and the arena last long enough to sample. It measures `vite dev`: React's
+ * StrictMode and unminified code, so its CPU figures are an upper bound for the built game.
  */
 export default defineConfig({
   testDir: './measure',

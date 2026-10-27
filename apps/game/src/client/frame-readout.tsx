@@ -5,10 +5,14 @@ import { theme } from './theme';
 
 const text = strings.frame;
 
-const ms = (value: number): string => value.toFixed(2);
-
-function spread(label: string, value: Spread | null): string {
+/**
+ * The GPU timer counts nanoseconds, so its figures get two decimals. `performance.now()` comes in
+ * steps of 0.1 ms in a page that is not cross-origin isolated, so the CPU's get one: a second
+ * decimal there would be the clock's grain, not the work.
+ */
+function spread(label: string, value: Spread | null, digits: number): string {
   if (value === null) return `${label} ${text.none}`;
+  const ms = (v: number): string => v.toFixed(digits);
   return `${label} ${ms(value.median)} ${text.ms} (${text.p95} ${ms(value.p95)})`;
 }
 
@@ -63,7 +67,7 @@ export function FrameReadout() {
         fontVariantNumeric: 'tabular-nums',
       }}
     >
-      {spread(text.gpu, gpu)} · {spread(text.cpu, cpu)} · {calls} {text.calls} ·{' '}
+      {spread(text.gpu, gpu, 2)} · {spread(text.cpu, cpu, 1)} · {calls} {text.calls} ·{' '}
       {Math.round(triangles / 1000)}
       {text.kilo} {text.tris}
     </div>
