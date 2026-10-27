@@ -17,11 +17,13 @@ export type ModeInput = ClickerInput | CyclesInput;
  * `settings` is the room's light-cycle settings, speed and walls. Only the light cycles read
  * them; they come last so a mode that does not care leaves them off.
  *
- * `_I` is the mode's own input. Nothing in the interface uses it — `applyInput` takes any
- * `ModeInput` and refuses the foreign kind — but it states which input a mode owns where the
- * mode is declared.
+ * `_I` is the mode's own input. `applyInput` takes any `ModeInput` and refuses the foreign kind;
+ * a mode that is not yet one of `ModeInput`, the race, adds its own to what it accepts.
+ *
+ * `C` is what a tick reports. The light cycles' `TickChanges` is the default; the race reports
+ * `RaceChanges` and is not registered in `MODES` until the room learns to carry both.
  */
-export interface Mode<S extends ModeState, _I extends ModeInput> {
+export interface Mode<S, _I, C = TickChanges> {
   create(seed: number): S;
   addPlayer(
     state: S,
@@ -37,13 +39,13 @@ export interface Mode<S extends ModeState, _I extends ModeInput> {
   applyInput(
     state: S,
     publicId: string,
-    input: ModeInput,
+    input: ModeInput | _I,
     now: number,
     config: GameConfig,
     settings: CyclesSettings,
   ): S;
   /** Only living modes have it; the room calls it once per tick while a round runs. */
-  step: ((state: S, settings: CyclesSettings) => { state: S; changes: TickChanges }) | null;
+  step: ((state: S, settings: CyclesSettings) => { state: S; changes: C }) | null;
   /**
    * A player the room already knows joins again. The clicker must not touch their score; the
    * cycles bring a bike that left back. Called in any phase, so it must be harmless in a lobby.
