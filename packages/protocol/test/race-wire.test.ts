@@ -195,6 +195,25 @@ describe('the race full', () => {
 });
 
 describe('the race delta', () => {
+  it('leaves out a car that joined in the middle of the race', () => {
+    const { state } = raceRoom(1, 5);
+    const joined = apply(
+      state,
+      { type: 'join', playerId: 'secret-late', connectionId: 'conn-late', name: 'Боря' },
+      1000,
+      RACE,
+    ).state;
+    expect((joined.modeState as RaceState).cars).toHaveLength(3);
+
+    const next = apply(joined, { type: 'step' }, 1001, RACE);
+    const stepped = next.events.find((event): event is Stepped => event.type === 'stepped');
+    const delta = toDelta(next.state, stepped as Stepped);
+
+    if (delta.mode !== 'race') throw new Error('expected a race delta');
+    // Two cars on the field, one tuple each; the late car's would make it 21.
+    expect(delta.cars).toHaveLength(2 * 7);
+  });
+
   it('carries the tick and one flat seven-tuple per car on the field', () => {
     const { state, stepped } = raceRoom(3, 4, 1);
 
