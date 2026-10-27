@@ -2,6 +2,7 @@ import { type ClientMessage, PROTOCOL_VERSION, parseServerMessage } from '@click
 import PartySocket from 'partysocket';
 import { turnSent } from './cycles/latency-store';
 import { clearCycles, feedCycles, followPhase } from './cycles/store';
+import { clearRace, feedRace, followRacePhase } from './race/store';
 import { hostKeyFor, playerId } from './room-link';
 import { useClient } from './store';
 
@@ -31,6 +32,7 @@ export function connect(roomId: string, name: string): Connection {
   let closedByUs = false;
   // A round from another room must not linger under this one.
   clearCycles();
+  clearRace();
 
   const send = (message: unknown): boolean => {
     // Clicks can't be queued during a disconnect: they'd all arrive in a burst after the round ends.
@@ -65,13 +67,15 @@ export function connect(roomId: string, name: string): Connection {
     if (message.type === 'snapshot') {
       useClient.getState().receive(message);
       followPhase(message.phase);
+      followRacePhase(message.phase);
     }
     if (message.type === 'error') useClient.getState().fail(message.code);
-    // The race's frames are accepted and ignored until it has a scene (plan 13); only the cycles feed theirs.
-    if ((message.type === 'full' || message.type === 'delta') && message.mode === 'cycles') {
-      if (feedCycles(message, performance.now()) === 'resync') {
-        send({ v: PROTOCOL_VERSION, type: 'resync' });
-      }
+    if (message.type === 'full' || message.type === 'delta') {
+      const resync =
+        message.mode === 'cycles'
+          ? feedCycles(message, performance.now())
+          : feedRace(message, performance.now());
+      if (resync === 'resync') send({ v: PROTOCOL_VERSION, type: 'resync' });
     }
   });
 

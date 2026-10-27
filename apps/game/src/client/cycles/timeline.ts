@@ -1,24 +1,8 @@
 import type { CyclesDeltaMessage } from '@clicker/protocol';
+import { createClockEstimate, renderDelay } from '../clock-estimate';
 import type { Head, WallOp } from './model';
 
-/** What the network adds to a message on top of its fastest trip: the measured p99 is 57 ms. */
-const JITTER_MS = 60;
-
-/**
- * How far in the past the scene draws the world. A bike is drawn riding from its head of tick t to
- * the head of t + 1, so the next tick has to be here before the ride starts: a whole tick of delay
- * for that, and the network's jitter on top so a late message is still in time. A fixed delay is
- * shorter than a tick at the slowest speed, and the bike then froze and jumped on a fifth of the
- * frames.
- */
-export const renderDelay = (tickMs: number): number => tickMs + JITTER_MS;
-/**
- * How far back the estimate of the server's clock looks. It is also how long a stale estimate can
- * outlive a server that stalled: the old minimum is forgotten once it is this old.
- */
-const WINDOW_MS = 4_000;
-/** Twenty ticks a second is the fastest the room runs: eighty arrivals fit in the window, and room to spare. */
-const CAPACITY = 128;
+export { renderDelay };
 
 /** What a frame with nothing to show gets: the scene asks sixty times a second. */
 const NONE: Step[] = [];
@@ -83,11 +67,7 @@ export interface Timeline {
  */
 export function createTimeline(tickMs: number): Timeline {
   const delay = renderDelay(tickMs);
-  const offsets = new Float64Array(CAPACITY);
-  const arrivals = new Float64Array(CAPACITY);
-  /** Deltas seen; the clock does not start without one. */
-  let seen = 0;
-  let base = 0;
+  const clock = createClockEstimate(tickMs);
   /** Steps in tick order with no gaps: the model refuses anything else before it gets here. */
   const steps: Step[] = [];
   /** Where the latest full is in `steps`: a late reader starts there, everything before is replaced by it. */
@@ -98,11 +78,11 @@ export function createTimeline(tickMs: number): Timeline {
 
   const renderTick = (now: number): number => {
     const newest = steps.at(-1);
-    if (seen === 0 || newest === undefined) return Number.NEGATIVE_INFINITY;
+    if (!clock.started() || newest === undefined) return Number.NEGATIVE_INFINITY;
     // Never past the newest tick there is. A clock that ran ahead of the data, as one does after
     // a server stall until the old minimum is forgotten, would otherwise stay ahead for as long
     // as it was: it cannot go back, so the bike would stand still while real time caught up.
-    latest = Math.max(latest, Math.min((now - base - delay) / tickMs, newest.tick));
+    latest = Math.max(latest, Math.min((now - clock.base() - delay) / tickMs, newest.tick));
     return latest;
   };
 
@@ -118,14 +98,7 @@ export function createTimeline(tickMs: number): Timeline {
         released = Math.min(released, step.tick - 1);
         resetAt = steps.length;
       } else {
-        offsets[seen % CAPACITY] = now - step.tick * tickMs;
-        arrivals[seen % CAPACITY] = now;
-        seen += 1;
-        base = Number.POSITIVE_INFINITY;
-        for (let i = 0; i < Math.min(seen, CAPACITY); i += 1) {
-          if (now - (arrivals[i] as number) <= WINDOW_MS)
-            base = Math.min(base, offsets[i] as number);
-        }
+        clock.observe(step.tick, now);
       }
       steps.push(step);
     },
