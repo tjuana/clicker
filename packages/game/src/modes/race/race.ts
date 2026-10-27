@@ -212,7 +212,7 @@ export function stepRace(
         car.best = car.best === null ? time : Math.min(car.best, time);
       }
       car.lapStart = tick;
-      changes.laps.push({ slot: car.slot, lap: car.lap, time });
+      changes.laps.push({ slot: car.slot, lap: car.lap, time, best: car.best });
       if (car.lap > config.laps) {
         car.finish = tick;
         // Not frozen: a car stopped on the line is a wall for the cars still racing, and twenty

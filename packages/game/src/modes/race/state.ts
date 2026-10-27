@@ -7,8 +7,10 @@ export interface RaceChanges {
    * null when there is no such lap: the first crossing only starts lap 1, and a lap that was cut
    * short (the car reversed over the line) has no honest start. Null exactly when the car's
    * best lap is left unchanged.
+   * `best` is the car's best lap after this crossing (null while it has none), so that a client
+   * never works the rule out for itself.
    */
-  laps: { slot: number; lap: number; time: number | null }[];
+  laps: { slot: number; lap: number; time: number | null; best: number | null }[];
   /** Slots that completed the last lap this tick. */
   finished: number[];
   /** Slots of cars that began touching another car this tick: one event per contact, not per tick of it. */

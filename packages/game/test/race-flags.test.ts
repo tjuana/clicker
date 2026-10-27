@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { DEFAULT_CYCLES_SETTINGS } from '../src/modes/cycles/config';
-import { carFlags, raceMode } from '../src/modes/race';
+import { AT_WALL, carFlags, FINISHED, ON_GRASS, raceMode, TOUCHING } from '../src/modes/race';
 import { TILE } from '../src/modes/race/fixed';
 import { TRACKS } from '../src/modes/race/tracks';
 import { config as gameConfig } from './support';
@@ -62,5 +62,22 @@ describe('the flags of a car', () => {
     const car = grid().cars[0] as NonNullable<ReturnType<typeof grid>['cars'][0]>;
     expect(carFlags(grid(), { ...car, touch: 2 }) & 8).toBe(8);
     expect(carFlags(grid(), { ...car, touch: 0 }) & 8).toBe(0);
+  });
+});
+
+describe('the flag constants', () => {
+  it('are four distinct single bits', () => {
+    const flags = [FINISHED, ON_GRASS, AT_WALL, TOUCHING];
+    expect(new Set(flags).size).toBe(4);
+    for (const flag of flags) expect(flag & (flag - 1)).toBe(0);
+    expect(flags.reduce((all, flag) => all | flag, 0)).toBe(15);
+  });
+
+  it('are the bits carFlags sets, each for its own reason', () => {
+    const car = grid().cars[0] as NonNullable<ReturnType<typeof grid>['cars'][0]>;
+    expect(carFlags(grid(), { ...car, finish: 900 })).toBe(FINISHED);
+    expect(carFlags(grid(), { ...car, wall: 3 })).toBe(AT_WALL);
+    expect(carFlags(grid(), { ...car, touch: 2 })).toBe(TOUCHING);
+    expect(carFlags(grid(), { ...car, y: car.y - 4000 }) & ON_GRASS).toBe(ON_GRASS);
   });
 });

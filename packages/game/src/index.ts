@@ -25,11 +25,14 @@ export {
   type WallMode,
 } from './modes/cycles';
 export {
+  AT_WALL,
   BRAKE,
   carFlags,
   carsInOrder,
+  FINISHED,
   GAS,
   LEFT,
+  ON_GRASS,
   onField,
   type Piece,
   RACE,

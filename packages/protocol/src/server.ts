@@ -217,6 +217,8 @@ const raceEventSchema = v.variant('type', [
     lap: v.number(),
     /** The lap just finished, in ticks; null for the crossing that only starts lap 1 or after a lap cut short. */
     time: v.nullable(v.number()),
+    /** The car's best lap after this one, in ticks, or null while it has none. */
+    best: v.nullable(v.number()),
   }),
   v.strictObject({ type: v.literal('finished'), slot: v.number() }),
   v.strictObject({ type: v.literal('bump'), slot: v.number() }),
@@ -502,6 +504,7 @@ function raceDeltaOf(state: RoomState, tick: number, changes: RaceChanges): Race
         slot: lap.slot,
         lap: lap.lap,
         time: lap.time,
+        best: lap.best,
       })),
       ...changes.finished.map((slot) => ({ type: 'finished' as const, slot })),
       ...changes.bumped.map((slot) => ({ type: 'bump' as const, slot })),

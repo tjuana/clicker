@@ -30,18 +30,24 @@ function trackOf(state: RaceState): Track {
   return track;
 }
 
+/** The bits of `carFlags`, named so that a client reads them from the rules instead of copying them. */
+export const FINISHED = 1;
+export const ON_GRASS = 2;
+export const AT_WALL = 4;
+export const TOUCHING = 8;
+
 /**
- * What a client needs to know about a car besides where it is: bit 0 finished, bit 1 on grass,
- * bit 2 touching a wall, bit 3 touching another car. Worked out here, where the track is, so
+ * What a client needs to know about a car besides where it is: finished, on grass, touching a
+ * wall, touching another car (see the constants above). Worked out here, where the track is, so
  * the wire format needs none.
  */
 export function carFlags(state: RaceState, car: Car): number {
   const onGrass = Math.abs(walk(trackOf(state), car.piece, car.x, car.y).lateral) > RACE.road;
   return (
-    (car.finish !== null ? 1 : 0) |
-    (onGrass ? 2 : 0) |
-    (car.wall > 0 ? 4 : 0) |
-    (car.touch !== 0 ? 8 : 0)
+    (car.finish !== null ? FINISHED : 0) |
+    (onGrass ? ON_GRASS : 0) |
+    (car.wall > 0 ? AT_WALL : 0) |
+    (car.touch !== 0 ? TOUCHING : 0)
   );
 }
 
