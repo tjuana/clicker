@@ -164,3 +164,29 @@ shadows, from about 3.3 MB of assets. What it found:
 
 Client-side prediction; drift; items; a second track and an editor; a cup of several tracks; tilt
 steering; binary snapshots.
+
+## Decisions made while building plan 11 (2026-10-27)
+
+- **The start is a tile-edge midpoint**, checked by the validator: the coordinate along travel a
+  whole number of tiles, the other half a tile. Otherwise tile claims would floor in silence.
+- **A corner continues as a straight line past its ends** for `along` *and* `lateral`, so a car
+  crossing a corner's edge walks to the next piece without a jump (the radius-based lateral was four
+  units off a straight line just outside the corner).
+- **A car is two circles**, 0.065 tile in radius, 0.085 ahead of and behind its centre; the car
+  behind in a contact goes no faster than the one in front; pushes are resolved in two passes. A
+  car whose path would cross another's in an X can be left closer than two radii, because the
+  circles' pushes cancel; it does not happen in races (worst overlap measured: 0.0147 tile), and
+  capsules (proposal P3 of the [Real-Time Rendering study](2026-10-26-real-time-rendering-study.md))
+  would remove it.
+- **Gas never pulls a car's speed down.** Driving onto grass at speed, the grass drag slows it; the
+  prototype's `min(top, speed + acceleration)` snapped it to the grass limit in one tick.
+- **Finished and abandoned cars drive on** under the bots' autopilot at a cruising pace instead of
+  stopping: twenty cars stopped across a one-tile road were a wall for the cars still racing.
+- **Slots follow the public id at the start of a race**, not the order of joining, so the grid, the
+  bots' pace and every tie-break are the same whatever order the room seated the players in.
+- **`Mode` gained a third type parameter**, the shape of a tick's changes, because the race's laps,
+  finishes and bumps are not the light cycles' cells and heads. Its constraints on the state and the
+  input were loosened for the race; plan 12 tightens them again when the race joins the mode unions
+  and makes the room carry either kind of changes.
+- Measured: a lone bot runs three laps of the Ring in 62.0 s without touching a wall; twenty bots
+  finish between 62.0 and 70.1 s, nobody is slower than 10 units for more than 3 ticks.
