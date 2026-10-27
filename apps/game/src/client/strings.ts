@@ -76,6 +76,17 @@ export const strings = {
   // The light cycles. Sentences are assembled from parts in the screens, so the word order is English.
   modeLabel: 'Game',
   modes: { clicker: 'Clicker', cycles: 'Light cycles', race: 'Ring race' },
+  // The frame cost line, behind P: «GPU 1.20 ms (p95 1.33) · CPU 0.30 ms (p95 1.20) · 15 calls · 64k tris».
+  frame: {
+    gpu: 'GPU',
+    cpu: 'CPU',
+    ms: 'ms',
+    p95: 'p95',
+    calls: 'calls',
+    tris: 'tris',
+    kilo: 'k',
+    none: 'n/a',
+  },
   speedLabel: 'Speed',
   speeds: { 8: 'Slow', 12: 'Normal', 16: 'Fast', 20: 'Insane' },
   cellsPerSecond: 'cells/s',

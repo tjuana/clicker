@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { FrameReadout } from './frame-readout';
 import { type Connection, connect } from './net';
 import { roomIdFromPath, savedName, saveName, takeHostKeyFromHash } from './room-link';
 import { Arena } from './screens/arena';
@@ -95,6 +96,7 @@ function Room({ roomId, onLeave }: { roomId: string; onLeave: () => void }) {
   return (
     <>
       <Notices />
+      <FrameReadout />
       {/* No snapshot yet: the room is still saying hello. Show a lobby of just the player themselves. */}
       {snapshot === null || snapshot.phase === 'lobby' ? (
         <Lobby
