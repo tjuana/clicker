@@ -14,6 +14,7 @@ import {
 } from '../cycles/hud';
 import { useCycles } from '../cycles/store';
 import { createWallKeys } from '../cycles/wall-keys';
+import { SceneBoundary } from '../scene-boundary';
 import { useClient } from '../store';
 import { strings } from '../strings';
 import { theme } from '../theme';
@@ -249,9 +250,11 @@ export function CyclesArena({
       <CyclesBar />
       <TurnLatency />
       <div data-testid="scene" style={{ position: 'relative', flex: 1, minHeight: 0 }}>
-        <Suspense fallback={null}>
-          <Cycles you={you} />
-        </Suspense>
+        <SceneBoundary>
+          <Suspense fallback={null}>
+            <Cycles you={you} />
+          </Suspense>
+        </SceneBoundary>
         <KillFeed />
         <TopFive />
         <MuteButton />

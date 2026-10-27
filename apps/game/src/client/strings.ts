@@ -45,6 +45,7 @@ export const strings = {
     name: 'Name',
     clicks: 'Clicks',
   },
+  sceneFailed: 'The 3D view could not be loaded. The game goes on without it.',
   ringRace: {
     laps: 'Laps',
     bestLap: 'Best lap',

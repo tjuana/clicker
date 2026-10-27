@@ -4,6 +4,7 @@ import { secondsLeft, useServerClock } from '../clock';
 import { MuteButton } from '../cycles/hud';
 import { FinishedBanner, RaceBar, TopFive } from '../race/hud';
 import { createRaceKeys, SOURCE_BITS } from '../race/keys';
+import { SceneBoundary } from '../scene-boundary';
 import { useClient } from '../store';
 import { strings } from '../strings';
 import { theme } from '../theme';
@@ -165,9 +166,11 @@ export function RaceArena({ onKeys }: { onKeys: (mask: number) => void }) {
     >
       <RaceBar />
       <div data-testid="scene" style={{ position: 'relative', flex: 1, minHeight: 0 }}>
-        <Suspense fallback={null}>
-          <Ring />
-        </Suspense>
+        <SceneBoundary>
+          <Suspense fallback={null}>
+            <Ring />
+          </Suspense>
+        </SceneBoundary>
         <TopFive />
         <MuteButton />
         <div
