@@ -18,8 +18,8 @@ function build(ids: string[], humans: Set<string>): RaceState {
   return raceMode.startRound(state, 0, config, settings);
 }
 
-const ids = Array.from({ length: 20 }, (_, i) => `c${String(i).padStart(2, '0')}`);
-const humans = new Set(['c03', 'c11']);
+const ids = Array.from({ length: 20 }, (_, i) => String(100 + i));
+const humans = new Set(['103', '111']);
 
 /** Every tick's state as text, with the humans fed masks from a seeded generator. */
 function play(order: string[], ticks: number): { frames: string[]; last: RaceState } {
@@ -208,5 +208,11 @@ describe('the race mode', () => {
       const back = raceMode.rejoin(lobby(['1', '2'], ['1']), '1', settings);
       expect(raceMode.startRound(back, 0, config, settings).cars[0]?.pace).toBe(100);
     });
+  });
+
+  it('lines the grid up in the order the room seats its players, not in string order', () => {
+    const state = build(['1', '10', '2', '9'], new Set());
+    const slotOf = (id: string) => state.cars[state.index[id] as number]?.slot;
+    expect(['1', '2', '9', '10'].map(slotOf)).toEqual([0, 1, 2, 3]);
   });
 });

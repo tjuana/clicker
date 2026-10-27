@@ -1,4 +1,5 @@
 import type { Mode } from '..';
+import { comparePublicIds } from '../clicker';
 import { BRAKE, type Car, GAS, LEFT, RIGHT } from './car';
 import { RACE } from './config';
 import { raceResults, startRace, stepRace } from './race';
@@ -40,12 +41,12 @@ export const raceMode: Mode<RaceState, RaceInput, RaceChanges> = {
       .map((car, slot) => ({ ...car, slot }));
     return withCars(state, cars);
   },
-  // Slots are given here, in the order of the public ids, and not when a player joins: the
+  // Slots are given here, in the room's order of the public ids, and not when a player joins: the
   // grid, the bots' pace and every tie-break follow the slot, and none of them may depend on
   // who happened to connect first.
   startRound: (state) => {
     const cars = [...state.cars]
-      .sort((a, b) => (a.publicId < b.publicId ? -1 : a.publicId > b.publicId ? 1 : 0))
+      .sort((a, b) => comparePublicIds(a.publicId, b.publicId))
       .map((car, slot) => ({ ...car, slot }));
     return startRace(withCars(state, cars), TRACK, RACE);
   },
