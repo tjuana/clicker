@@ -42,34 +42,45 @@ export function standings(state: RaceState, track: Track): number[] {
 }
 
 /**
- * Cars two abreast behind the start line, back along the centreline in slot order, facing the
- * way round. A new race: the clock, the finish and the results are cleared. Bots draw their
- * pace from the seed here, so a replay from this state is the same race.
+ * The place-th spot on the grid: two abreast behind the start line, back along the centreline,
+ * facing the way round.
+ */
+export function gridSpot(
+  track: Track,
+  config: RaceConfig,
+  place: number,
+): { x: number; y: number; heading: number; piece: number } {
+  const count = track.pieces.length;
+  let piece = count - 1;
+  let along =
+    (track.pieces[piece]?.length ?? 0) - config.gridFront - Math.floor(place / 2) * config.gridRow;
+  while (along < 0) {
+    piece = (piece + count - 1) % count;
+    along += track.pieces[piece]?.length ?? 0;
+  }
+  const where = point(
+    track,
+    piece,
+    along,
+    place % 2 === 0 ? -config.gridLateral : config.gridLateral,
+  );
+  return { x: where.x, y: where.y, heading: where.heading, piece };
+}
+
+/**
+ * Cars two abreast behind the start line, in slot order (`gridSpot`). A new race: the clock,
+ * the finish and the results are cleared. Bots draw their pace from the seed here, so a replay
+ * from this state is the same race.
  */
 export function startRace(state: RaceState, track: Track, config: RaceConfig): RaceState {
   const rank = state.cars
     .map((_, i) => i)
     .sort((a, b) => (state.cars[a] as Car).slot - (state.cars[b] as Car).slot);
   let seed = state.seed;
-  const count = track.pieces.length;
   const cars = state.cars.map((car) => ({ ...car }));
   rank.forEach((index, place) => {
     const car = cars[index] as Car;
-    let piece = count - 1;
-    let along =
-      (track.pieces[piece]?.length ?? 0) -
-      config.gridFront -
-      Math.floor(place / 2) * config.gridRow;
-    while (along < 0) {
-      piece = (piece + count - 1) % count;
-      along += track.pieces[piece]?.length ?? 0;
-    }
-    const where = point(
-      track,
-      piece,
-      along,
-      place % 2 === 0 ? -config.gridLateral : config.gridLateral,
-    );
+    const spot = gridSpot(track, config, place);
     let pace = 100;
     if (car.abandoned) {
       // Nobody is at the wheel of a person's car, so it does not race, and it takes no draw: the
@@ -81,11 +92,8 @@ export function startRace(state: RaceState, track: Track, config: RaceConfig): R
       pace = 88 + drawn.value;
     }
     Object.assign(car, {
-      x: where.x,
-      y: where.y,
-      heading: where.heading,
+      ...spot,
       speed: 0,
-      piece,
       lap: 0,
       keys: 0,
       finish: null,
@@ -97,7 +105,7 @@ export function startRace(state: RaceState, track: Track, config: RaceConfig): R
       out: false,
     });
   });
-  return { ...state, cars, seed, tick: 0, firstFinish: null, results: null };
+  return { ...state, cars, seed, tick: 0, firstFinish: null, results: null, onGrid: true };
 }
 
 export function over(state: RaceState, config: RaceConfig): boolean {

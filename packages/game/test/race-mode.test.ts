@@ -132,6 +132,40 @@ describe('the race mode', () => {
     expect(names).toEqual({ '1': 'Ann', '2': 'Bob' });
   });
 
+  describe('a player who joins in the countdown', () => {
+    const track = buildTrack(TRACKS.ring as TrackData);
+
+    it('takes the next place on the grid and races', () => {
+      const grid = build(['1', '2'], new Set());
+      const joined = raceMode.addPlayer(grid, '3', false, 0, config, settings);
+
+      const late = joined.cars[joined.index['3'] as number];
+      expect(late?.out).toBe(false);
+      expect(standings(joined, track)).toContain(late?.slot);
+      // Where the grid would have put it had it been there when the round started.
+      const together = build(['1', '2', '3'], new Set(['1', '3']));
+      const expected = together.cars[together.index['3'] as number];
+      expect(late).toMatchObject({ x: expected?.x, y: expected?.y, heading: expected?.heading });
+      let state = raceMode.applyInput(joined, '3', { type: 'keys', mask: 1 }, 0, config, settings);
+      const step = raceMode.step as NonNullable<typeof raceMode.step>;
+      for (let i = 0; i < 30; i += 1) state = step(state, settings).state;
+      expect(state.cars[state.index['3'] as number]?.speed).toBeGreaterThan(0);
+    });
+
+    it('waits off the field when it comes to a lobby, where nobody stands on the grid yet', () => {
+      let lobby = raceMode.create(1);
+      lobby = raceMode.addPlayer(lobby, '1', false, 0, config, settings);
+      expect(lobby.cars[0]?.out).toBe(true);
+    });
+
+    it('waits off the field once the lights are out', () => {
+      const step = raceMode.step as NonNullable<typeof raceMode.step>;
+      const state = step(build(['1', '2'], new Set(['1'])), settings).state;
+      const joined = raceMode.addPlayer(state, '3', false, 0, config, settings);
+      expect(joined.cars[joined.index['3'] as number]?.out).toBe(true);
+    });
+  });
+
   describe('a player who joins in the middle of a race', () => {
     const step = raceMode.step as NonNullable<typeof raceMode.step>;
     function running(): RaceState {

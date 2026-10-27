@@ -32,6 +32,18 @@ async function withLongRound(body: () => Promise<void>): Promise<void> {
   }
 }
 
+/** A countdown too long to end while a test looks at it, read when the room is made. */
+async function withLongCountdown(body: () => Promise<void>): Promise<void> {
+  const mutableEnv = env as unknown as { COUNTDOWN_MS: string };
+  const original = mutableEnv.COUNTDOWN_MS;
+  mutableEnv.COUNTDOWN_MS = '60000';
+  try {
+    await body();
+  } finally {
+    mutableEnv.COUNTDOWN_MS = original;
+  }
+}
+
 /** A host in a race room with `bots` bots seated, round not started. */
 async function raceLobby(roomId: string, bots = 3): Promise<Client> {
   const host = await connect(roomId);
@@ -115,7 +127,9 @@ describe('a race room', () => {
       const roomId = generateId();
       const host = await raceLobby(roomId);
       host.send({ type: 'start' });
-      await host.waitFor(isRunning);
+      // A tick has been played: before the first one the cars are still on the grid and a
+      // newcomer would be given a place on it.
+      await host.waitFor(isRaceDelta);
       const seen = host.received.filter(isRaceFull).length;
 
       const guest = await connect(roomId);
@@ -129,6 +143,30 @@ describe('a race room', () => {
       expect(full.cars.map((car) => car.id)).not.toContain(welcome.you);
       expect(full.cars).toHaveLength(4);
       expect(host.received.filter(isRaceFull)).toHaveLength(seen);
+    });
+  });
+
+  it('seats a player who joins in the countdown on the grid, and tells everybody', async () => {
+    await withLongCountdown(async () => {
+      const roomId = generateId();
+      const host = await raceLobby(roomId);
+      host.send({ type: 'start' });
+      const first = await host.waitFor(isRaceFull);
+      expect(first.cars).toHaveLength(4);
+
+      const guest = await connect(roomId);
+      guest.send({ type: 'join', playerId: generateId(), name: 'Боря' });
+      const welcome = await guest.waitFor(isWelcome);
+      const full = await guest.waitFor(isRaceFull);
+
+      expect(guest.received.findIndex(isRaceFull)).toBe(guest.received.findIndex(isWelcome) + 1);
+      expect(full.cars.map((car) => car.id)).toContain(welcome.you);
+      expect(full.cars).toHaveLength(5);
+      // The grid has a new car in it, so the table of slots the others hold is out of date.
+      await vi.waitFor(() => {
+        expect(host.received.filter(isRaceFull)).toHaveLength(2);
+      });
+      expect(host.received.filter(isRaceFull)[1]?.cars).toHaveLength(5);
     });
   });
 

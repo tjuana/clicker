@@ -30,6 +30,8 @@ export interface RaceState {
   /** Public id to the car's place in `cars`. */
   index: Record<string, number>;
   tick: number;
+  /** The cars stand on the grid and the lights are not out: from `startRace` to the first step. */
+  onGrid: boolean;
   /** The generator's state; it only moves when bots are given their pace. */
   seed: number;
   firstFinish: number | null;
@@ -64,5 +66,5 @@ export function emptyRace(track: string, seed: number, cars: Car[] = []): RaceSt
   cars.forEach((car, i) => {
     index[car.publicId] = i;
   });
-  return { track, cars, index, tick: 0, seed, firstFinish: null, results: null };
+  return { track, cars, index, tick: 0, onGrid: false, seed, firstFinish: null, results: null };
 }

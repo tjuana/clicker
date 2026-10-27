@@ -122,7 +122,9 @@ Everything is an integer, as in the light cycles; the purity gate extends to `mo
   once, on the tick two cars begin to touch; while they stay in contact the flags' bit 3 says so. Still no binary format; A14 says to move only if a number
   forces it. The delta carries every car on the field each tick (a car moves every tick, so
   there is nothing to leave out). The protocol version is 4. A car that joined mid-race is off
-  the field until the next round and is in neither the `full` nor the deltas.
+  the field until the next round and is in neither the `full` nor the deltas; one that joins
+  while the cars still stand on the grid (the countdown, and the instant before the first tick)
+  takes the next grid spot and races, and every client is sent a new `full`.
 - **Client.** The timeline the light cycles use, generalised to car states, draws the world one
   tick plus jitter behind the server. The scene builds the track from the Kenney tiles, puts PBR
   asphalt and grass on their flat colours with world-space UVs, lights it with an HDRI and soft
@@ -224,7 +226,8 @@ What plan 11's review changed:
   twenty-car race: 609 bytes on average, 804 at the most (an earlier figure of 856 was one tick, 20 s
   in). A contact is kept per car as a bitmask over slots, so a `bump` event comes when it begins
   and not on every tick of it.
-- **A car that joined mid-race is in neither `full` nor `delta`** until the next race.
+- **A car that joined mid-race is in neither `full` nor `delta`** until the next race. One that
+  joins before the first tick takes the next spot on the grid (`RaceState.onGrid`) and races.
 - **No race on screen yet.** The host cannot pick it; a room put into race mode shows a placeholder
   while it runs and the results as a table. A whole three-lap race through the room was not tested
   in workerd — it takes a minute of real time — and its "everyone finished" end is tested on the

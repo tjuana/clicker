@@ -9,6 +9,7 @@ import {
   type GameEvent,
   type ModeState,
   nextDeadline,
+  type RaceState,
   type RoomState,
   syncConnections,
   upgradeStored,
@@ -35,12 +36,21 @@ const SNAPSHOT_INTERVAL_MS = 100;
 const RESYNC_MIN_GAP_MS = 1000;
 
 /**
- * How many bikes the room has seated: a new one means every client's slot table is out of date.
- * The race counts none: its slots are given when a round starts, and a car that joins in the
- * middle of one takes a free slot nobody else's table has to change for.
+ * How many bikes or cars the room has seated: a new one means every client's slot table is out
+ * of date. The race counts the cars on the field only: a car that joins in the middle of a race
+ * waits off it, and nobody else's table has to change for that.
  */
 function seats(state: RoomState): number {
-  return state.mode === 'cycles' ? (state.modeState as CyclesState).bikes.length : 0;
+  switch (state.mode) {
+    case 'cycles':
+      return (state.modeState as CyclesState).bikes.length;
+    case 'race':
+      return (state.modeState as RaceState).cars.filter((car) => !car.out).length;
+    case 'clicker':
+      return 0;
+    default:
+      return state.mode satisfies never;
+  }
 }
 
 export class Room extends Server<Env> {
@@ -223,7 +233,8 @@ export class Room extends Server<Env> {
     const configChanged =
       applied.state.mode !== this.#state.mode ||
       applied.state.settings.speed !== this.#state.settings.speed;
-    const newSeat = seats(applied.state) > seats(this.#state);
+    // Only a join can seat anybody, and counting the race's cars is a scan: not for every input.
+    const newSeat = command.type === 'join' && seats(applied.state) > seats(this.#state);
     this.#state = applied.state;
     if (configChanged) this.#config = this.#configOf(applied.state);
 

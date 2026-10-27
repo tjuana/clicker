@@ -2,7 +2,7 @@ import type { Mode } from '..';
 import { comparePublicIds } from '../clicker';
 import { BRAKE, type Car, GAS, LEFT, RIGHT } from './car';
 import { RACE } from './config';
-import { over, raceResults, startRace, stepRace } from './race';
+import { gridSpot, over, raceResults, startRace, stepRace } from './race';
 import { emptyRace, newCar, type RaceChanges, type RaceState } from './state';
 import { buildTrack, type TrackData, walk } from './track';
 import { TRACKS } from './tracks';
@@ -40,10 +40,18 @@ export const raceMode: Mode<RaceState, RaceInput, RaceChanges> = {
   create: (seed) => emptyRace(TRACK_ID, seed),
   addPlayer: (state, publicId, bot) => {
     if (state.index[publicId] !== undefined) return state;
-    // Off the field until the next round: a car put on the grid's origin mid-race would walk
-    // back over the line, be shoved by a wall and keep the race from ever being over. The
-    // round that follows brings everybody in (`startRace`). A new car takes the next free slot.
+    // A new car takes the next free slot.
     const slot = state.cars.reduce((top, car) => Math.max(top, car.slot + 1), 0);
+    // In the countdown the cars stand still on the grid: the newcomer takes the next spot, where
+    // `startRace` would have put it, and races. Slots were numbered from zero at the start, so
+    // the slot is the place.
+    if (state.onGrid && state.tick === 0) {
+      const car = { ...newCar(slot, publicId, bot), ...gridSpot(TRACK, RACE, slot) };
+      return withCars(state, [...state.cars, car]);
+    }
+    // Otherwise off the field until the next round: a car put on the grid's origin mid-race
+    // would walk back over the line, be shoved by a wall and keep the race from ever being over.
+    // The round that follows brings everybody in (`startRace`).
     return withCars(state, [...state.cars, { ...newCar(slot, publicId, bot), out: true }]);
   },
   // Slots are left alone: the results are drawn per slot and are on the screen between races, so
@@ -108,7 +116,7 @@ export const raceMode: Mode<RaceState, RaceInput, RaceChanges> = {
   // Back to a lobby: the same players, none of the round.
   clear: (state) =>
     withCars(
-      { ...state, tick: 0, firstFinish: null, results: null },
+      { ...state, tick: 0, onGrid: false, firstFinish: null, results: null },
       state.cars.map((car) => ({
         ...newCar(car.slot, car.publicId, car.bot),
         abandoned: car.abandoned,

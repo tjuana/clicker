@@ -87,6 +87,29 @@ describe('the ring race in a room', () => {
     expect(places.size).toBe(4);
   });
 
+  it('seats a player who joins in the countdown on the grid, and one who joins later off it', () => {
+    const started = apply(lobby(), { type: 'start', playerId: 'host' }, 0, RACE).state;
+    const early = apply(
+      started,
+      { type: 'join', playerId: 'early', connectionId: 'c-early', name: 'Early' },
+      1,
+      RACE,
+    ).state;
+    const earlyCar = raceOf(early).cars.find((car) => car.publicId === '5');
+    expect(earlyCar?.out).toBe(false);
+
+    const goAt = early.round?.goAt ?? 0;
+    let running = apply(early, { type: 'tick' }, goAt, RACE).state;
+    running = apply(running, { type: 'step' }, goAt + 1, RACE).state;
+    const late = apply(
+      running,
+      { type: 'join', playerId: 'late', connectionId: 'c-late', name: 'Late' },
+      goAt + 2,
+      RACE,
+    ).state;
+    expect(raceOf(late).cars.find((car) => car.publicId === '6')?.out).toBe(true);
+  });
+
   it('advances the race by one tick a step, and says so with the mode that made it', () => {
     const { state, goAt } = running();
 
