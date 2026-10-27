@@ -161,6 +161,24 @@ describe('the race full', () => {
     expect(full.cars.map((car) => car.id).sort()).toEqual(['1', '2']);
   });
 
+  it('does not call the car of a rider who left a bot', () => {
+    const { state } = raceRoom(1, 5);
+    const left = apply(
+      state,
+      { type: 'leave', playerId: 'secret-host', connectionId: 'conn-host' },
+      100,
+      RACE,
+    ).state;
+
+    const full = toFull(left);
+
+    if (full?.mode !== 'race') throw new Error('expected a race full');
+    // The autopilot drives the car on, but the person is still the one it belongs to; only the
+    // room's own bot is a bot.
+    expect(full.cars.find((car) => car.id === '1')?.bot).toBe(false);
+    expect(full.cars.find((car) => car.id === '2')?.bot).toBe(true);
+  });
+
   it('is refused without its mode', () => {
     const { mode: _mode, ...bare } = toFull(raceRoom(1, 1).state) as NonNullable<
       ReturnType<typeof toFull>

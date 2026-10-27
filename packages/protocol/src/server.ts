@@ -421,7 +421,7 @@ function raceFullOf(state: RoomState): RaceFullMessage | null {
       .map((car) => ({
         slot: car.slot,
         id: car.publicId,
-        bot: car.bot,
+        bot: car.bot && !car.abandoned,
         x: car.x,
         y: car.y,
         heading: car.heading,
