@@ -290,3 +290,20 @@ What plan 12's review changed:
   finish, a thud on a bump; checked to run without errors, not yet listened to by the owner.
 - Measured in a real window at 1280 × 760: 120 fps (the display's cap) with twenty cars and 15 draw
   calls; the race arena renders four times in a whole race.
+
+What plan 13's review changed:
+
+- **Held keys survive a reconnect**: the client re-sends its mask on `welcome`, since the server
+  forgets a returning rider's keys and the mask is otherwise sent only when it changes.
+- **Phone buttons work in the countdown**, as the keyboard did; **a failed asset load no longer
+  blanks the app** (an error boundary round the scene); **the race clock recovers from a server
+  stall** longer than the ticker's catch-up (before, the cars stood still on 281 of 478 frames for
+  about four seconds).
+- **The client holds no copy of a rule**: the best lap arrives on the `lap` event, the flag bits
+  are exported by the rules.
+- **The scene's track is tested against the rules' track** — the same poses, the same tiles, road
+  where the rules have road; before, the scene's tests agreed only with themselves.
+- **The drawn car is no wider than it collides** (0.138 tile against 0.130; it was 0.162).
+- **The end-to-end race checks that the car moves** under gas, not only that keys were sent.
+- Recorded: one app test failed once while two agents ran suites at the same time, and was not
+  identified; three runs alone and five by the agent were green.
