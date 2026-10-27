@@ -256,3 +256,24 @@ What plan 12's review changed:
   best lap and lap start. The track's piece list, `TILE` and `TURN` are exported as data.
 - Measured again over a whole twenty-car race: a delta of 609 bytes on average and 804 at most,
   about 18 KB/s per player.
+
+## Decisions made while building plan 13 (2026-10-27)
+
+- **The client builds the track from the piece list**, exported by the rules as data with `TILE`
+  and `TURN`; it never calls the rules' geometry. The barriers' centreline is computed in the scene,
+  a straight or a quarter circle per piece.
+- **Tone mapping is Khronos PBR Neutral**: ACES washed the sky, the barriers and the grass out
+  (screenshots of both were taken); one constant in `scene/race-look.ts` switches it.
+- **At the Ring's S-bend** the left one-tile corner's inner wall shrinks to a point, and the blocks
+  of the neighbouring walls meet there at a right angle; they stand back by a gap of their own. The
+  test that keeps barrier blocks apart found it on its first run.
+- **The clock estimate is shared** between the light cycles' timeline and the race's; the race keeps
+  the last sixteen ticks in a ring and draws every car between two of them.
+- **The client takes the keys' bits and the lap times from the rules**: the bits are exported, and the
+  wire's `lap` event carries the lap's time (null for the first crossing and a lap cut short) —
+  an earlier version of the HUD had recomputed it, a copy of a rule the client must not hold.
+- **The camera follows the player's car**, or the leader when the player has none on the field.
+- **Sound**: one detuned engine voice re-pitched by the player's speed, a blip a lap, a chord at the
+  finish, a thud on a bump; checked to run without errors, not yet listened to by the owner.
+- Measured in a real window at 1280 × 760: 120 fps (the display's cap) with twenty cars and 15 draw
+  calls; the race arena renders four times in a whole race.
