@@ -108,6 +108,19 @@ describe('steering', () => {
   });
 });
 
+describe('the wheel at its best', () => {
+  it('turns the heading by at most 46 steps a tick, whatever the speed', () => {
+    let most = 0;
+    for (let speed = 0; speed <= RACE.topSpeed; speed += 1) {
+      const car = carAt(LAST, TILE, 0, { speed, keys: RIGHT });
+      const before = car.heading;
+      drive(car, track, RACE);
+      most = Math.max(most, (car.heading - before + TURN) & (TURN - 1));
+    }
+    expect(most).toBe(46);
+  });
+});
+
 describe('walls', () => {
   /** Fully throttled at a wall of the straight, `degrees` off its direction towards it. */
   function hit(degrees: number): { car: Car; before: number } {
@@ -116,6 +129,18 @@ describe('walls', () => {
     drive(car, track, RACE);
     return { car, before: RACE.topSpeed };
   }
+
+  it('turns the nose the same way whichever side of the wall it points off to', () => {
+    // A heading two steps off the wall's direction, either side: the nose should come round by
+    // the same amount, mirrored. Rounding diff/4 half away from zero turned one and not the other.
+    const offAfter = (off: number) => {
+      const tangent = carAt(LAST, TILE, 0).heading;
+      const car = carAt(LAST, TILE, -(LIMIT + 30), { heading: tangent + off });
+      drive(car, track, RACE);
+      return ((car.heading - tangent + TURN / 2 + TURN) & (TURN - 1)) - TURN / 2;
+    };
+    expect(offAfter(2)).toBe(-offAfter(-2));
+  });
 
   it('pushes the car back inside the corridor', () => {
     const { car } = hit(30);

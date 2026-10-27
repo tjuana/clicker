@@ -42,7 +42,7 @@ interface TrackData { id: string; name: string; start: { x: number; y: number; d
 
 A **validator** (plan 5's A16) checks that the chain closes on its start pose, that no two pieces
 claim a tile, that the last two pieces are straights (the grid stands on them, behind a start line
-at the end of the main straight), and that the numbers are integers in range. A track that fails it never loads.
+at the end of the main straight) and that the straights before the line are long enough for the grid of `maxCars` cars (rows of two, 0.4 tile apart, plus one car's length), and that the numbers are integers in range. A track that fails it never loads.
 
 A car's place on the track is its piece and its `(along, lateral)` in that piece: along the
 centreline and across it. A straight projects linearly; a corner by its distance from the centre

@@ -1,3 +1,4 @@
+import { RACE, type RaceConfig } from './config';
 import { TILE, TURN } from './fixed';
 
 /** Directions: 0 east, 1 south, 2 west, 3 north (y down), as the light cycles. */
@@ -74,7 +75,7 @@ function fail(index: number, what: string): never {
   throw new TrackError(`piece ${index}: ${what}`);
 }
 
-export function buildTrack(data: TrackData): Track {
+export function buildTrack(data: TrackData, config: RaceConfig = RACE): Track {
   const { start, pieces: chain } = data;
   if (!Number.isInteger(start.x) || !Number.isInteger(start.y)) fail0('the start must be integers');
   if (![0, 1, 2, 3].includes(start.dir)) fail0('the start direction must be 0, 1, 2 or 3');
@@ -165,6 +166,24 @@ export function buildTrack(data: TrackData): Track {
   const last = chain.length - 1;
   if (x !== start.x || y !== start.y || dir !== start.dir) {
     fail(last, `leaves at (${x}, ${y}) facing ${dir} and does not close on the start`);
+  }
+
+  // The grid stands in rows of two on the straights before the line; a row on a corner would
+  // start a car off the road. The last row's cars also reach back by one car's length.
+  let run = 0;
+  for (let i = pieces.length - 1; i >= 0 && pieces[i]?.kind === 'straight'; i -= 1) {
+    run += pieces[i]?.length ?? 0;
+  }
+  const need =
+    config.gridFront +
+    (Math.ceil(config.maxCars / 2) - 1) * config.gridRow +
+    config.reach +
+    config.radius;
+  if (need > run) {
+    fail(
+      last,
+      `the grid for ${config.maxCars} cars needs ${need} units of straight before the line, there are ${run}`,
+    );
   }
 
   let minX = Number.POSITIVE_INFINITY;

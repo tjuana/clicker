@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { RACE } from '../src/modes/race/config';
 import { TILE, TURN } from '../src/modes/race/fixed';
 import {
   buildTrack,
@@ -70,6 +71,19 @@ describe('the validator', () => {
   it('refuses a corner among the last two pieces: the grid stands on straights', () => {
     const pieces = [...ring.pieces.slice(0, -1), R(1)];
     expect(faultOf(withPieces(pieces))).toMatch(/piece 12\b.*straight/);
+  });
+
+  it('refuses a track whose trailing straights cannot hold the grid for every car', () => {
+    // The Ring's last two straights are four tiles: ten rows of two fit, eleven do not.
+    expect(() => buildTrack(ring, { ...RACE, maxCars: 20 })).not.toThrow();
+    let fault = '';
+    try {
+      buildTrack(ring, { ...RACE, maxCars: 21 });
+    } catch (error) {
+      expect(error).toBeInstanceOf(TrackError);
+      fault = (error as Error).message;
+    }
+    expect(fault).toMatch(/grid.*21 cars/);
   });
 
   it('refuses a track of fewer than eight pieces', () => {

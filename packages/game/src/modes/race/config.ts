@@ -49,7 +49,11 @@ export interface RaceConfig {
   drag: number;
   /** Extra speed lost a tick over the grass limit while on grass. */
   grassDrag: number;
-  /** Most heading steps a tick the wheel turns, 52 of 4096: a full turn in about 2.6 s. */
+  /**
+   * Heading steps a tick at full effect, of 4096 to the turn. Understeer already takes 35% off
+   * a car at 0.5 tiles/s, where the wheel is at full effect, so the most a car ever turns is
+   * 52 × (1 − 0.35 × 68 / 218) = 46 steps a tick, a full turn in about 2.9 s.
+   */
   turnRate: number;
   /** The speed at which the wheel is at full effect, 0.5 tiles/s; below it the car barely steers. */
   turnSpeed: number;
@@ -65,6 +69,8 @@ export interface RaceConfig {
   reach: number;
   /** Cosine, scaled by `ONE`, above which a nose is said to point at the other car. */
   aim: number;
+  /** Cars the grid is laid out for: rows of two, `gridRow` apart, behind the start line. */
+  maxCars: number;
   /** Laps to complete: the start line is crossed once to begin the first and once to end each. */
   laps: number;
   /** Percent of top speed a finished car cruises at, on autopilot, so that it is not a roadblock. */
@@ -112,6 +118,7 @@ export const RACE: RaceConfig = {
   radius: 266,
   reach: 348,
   aim: Math.round(0.3 * ONE),
+  maxCars: 20,
   laps: 3,
   coolPace: 50,
   afterFirst: 30 * 30,

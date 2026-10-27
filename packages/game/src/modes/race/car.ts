@@ -134,7 +134,9 @@ function wall(car: Car, track: Track, config: RaceConfig): boolean {
   car.speed = Math.trunc((car.speed * Math.abs(dot)) / ONE);
   const target = dot >= 0 ? tangent : tangent + TURN / 2;
   const diff = ((target - car.heading + TURN / 2) & (TURN - 1)) - TURN / 2;
-  car.heading = (car.heading + Math.round(diff / 4)) & (TURN - 1);
+  // Truncated, not rounded: rounding sends +2 to 1 and -2 to 0, so the nose would turn for one
+  // side of the wall and not for the other.
+  car.heading = (car.heading + Math.trunc(diff / 4)) & (TURN - 1);
   car.wall += 1;
   return true;
 }
