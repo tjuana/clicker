@@ -97,7 +97,8 @@ export function RaceArena({ onKeys }: { onKeys: (mask: number) => void }) {
   runningRef.current = running;
   const onKeysRef = useRef(onKeys);
   onKeysRef.current = onKeys;
-  // Nothing is sent before the race is live: a key held through the countdown is sent at go.
+  // Nothing is sent before the race is live: a key or button held through the countdown is sent
+  // at go, which is why the buttons are live from the countdown on.
   const say = useCallback((changed: boolean): void => {
     if (changed && runningRef.current) onKeysRef.current(keys.current.mask());
   }, []);
@@ -146,7 +147,7 @@ export function RaceArena({ onKeys }: { onKeys: (mask: number) => void }) {
       source={source}
       label={label}
       testId={testId}
-      disabled={!running}
+      disabled={!running && !counting}
       onHold={hold}
       flex={flex}
     />
