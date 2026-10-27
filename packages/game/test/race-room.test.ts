@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { RACE as RACEPACE } from '../src/modes/race/config';
 import { apply } from '../src/room/apply';
 import { configFor } from '../src/room/config';
 import type { RoomState } from '../src/room/state';
@@ -31,9 +32,11 @@ function running(): { state: RoomState; goAt: number } {
 
 describe('the ring race in a room', () => {
   it('has the race its own pace, size and length', () => {
-    expect(RACE.roundMs).toBe(300_000);
     expect(RACE.maxPlayers).toBe(20);
-    expect(RACE.tickMs).toBe(1000 / 30);
+    expect(RACE.tickMs).toBe(1000 / RACEPACE.ticksPerSecond);
+    // The clock outlasts the cap, so that a tick running late is not cut short by it.
+    expect((RACE.roundMs * RACEPACE.ticksPerSecond) / 1000).toBeGreaterThan(RACEPACE.cap);
+    expect(RACE.roundMs).toBeLessThan(2 * 300_000);
   });
 
   it('seats everyone as a car when the host picks it, and brings the bots along', () => {

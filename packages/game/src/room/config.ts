@@ -1,5 +1,6 @@
 import type { ModeId } from '../modes';
 import { DEFAULT_SPEED, type Speed } from '../modes/cycles/config';
+import { RACE } from '../modes/race/config';
 
 export interface GameConfig {
   /** Countdown before the round. */
@@ -47,13 +48,22 @@ export const DEFAULT_CONFIG: GameConfig = {
   tickMs: null,
 };
 
+/** How much longer than the race's cap the room's clock waits before it ends a race itself. */
+const RACE_CLOCK_MARGIN_MS = 10_000;
+
 /** What a mode changes about the room. Anything not named here comes from DEFAULT_CONFIG. */
 export const MODE_CONFIG: Record<ModeId, Partial<GameConfig>> = {
   clicker: {},
   // No `tickMs`: the light cycles take one cell per tick, so the speed decides it (`configFor`).
   cycles: { roundMs: 180_000, maxPlayers: 20 },
-  // The round's length is only the race's cap: it ends itself well before (`Mode.over`).
-  race: { roundMs: 300_000, maxPlayers: 20, tickMs: 1000 / 30 },
+  // The round's length is only the race's cap: it ends itself well before (`Mode.over`). The
+  // cap is counted in ticks and the room's clock in milliseconds, and a tick that runs late
+  // must not be cut short by a clock that did not: hence the margin.
+  race: {
+    roundMs: Math.ceil((RACE.cap * 1000) / RACE.ticksPerSecond) + RACE_CLOCK_MARGIN_MS,
+    maxPlayers: 20,
+    tickMs: 1000 / RACE.ticksPerSecond,
+  },
 };
 
 /** The time between ticks of a light-cycle room: one cell per tick, so it is the time a cell takes. */

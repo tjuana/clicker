@@ -311,7 +311,10 @@ describe('the race delta', () => {
 
     if (delta.mode !== 'race') throw new Error('expected a race delta');
     const own = (state.modeState as RaceState).cars.find((car) => car.publicId === '1');
-    const at = delta.cars.indexOf(own?.slot as number);
+    // Step by the tuple: a slot's number may turn up as a coordinate or a speed.
+    let at = -1;
+    for (let i = 0; i < delta.cars.length; i += 7) if (delta.cars[i] === own?.slot) at = i;
+    expect(at).toBeGreaterThanOrEqual(0);
     expect(delta.cars[at + 4]).toBeGreaterThan(0);
   });
 
