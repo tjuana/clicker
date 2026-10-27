@@ -19,15 +19,26 @@ export function FrameMeter() {
 
   useEffect(() => {
     if (!shown) return;
-    const context = gl.getContext() as WebGL2RenderingContext;
-    const extension = context.getExtension(
-      'EXT_disjoint_timer_query_webgl2',
-    ) as TimerExtension | null;
-    const meter = createFrameMeter(
-      () => performance.now(),
-      gl.info,
-      extension === null ? null : createGpuTimer(context, extension),
-    );
+    const build = () => {
+      const context = gl.getContext() as WebGL2RenderingContext;
+      const extension = context.getExtension(
+        'EXT_disjoint_timer_query_webgl2',
+      ) as TimerExtension | null;
+      return createFrameMeter(
+        () => performance.now(),
+        gl.info,
+        extension === null ? null : createGpuTimer(context, extension),
+      );
+    };
+    let meter = build();
+    // A restored context gets a new `renderer.info` from three, and the old queries died with the
+    // old context: the meter is built again. three's own listener was added first, so the new
+    // `info` already exists here.
+    const restored = (): void => {
+      meter.dispose();
+      meter = build();
+    };
+    gl.domElement.addEventListener('webglcontextrestored', restored);
     // The first line waits a whole interval: published at once, it stood for a single frame and
     // read "GPU n/a" while the GPU's first answers were still on their way.
     let published = performance.now();
@@ -41,6 +52,7 @@ export function FrameMeter() {
     return () => {
       stopBegin();
       stopEnd();
+      gl.domElement.removeEventListener('webglcontextrestored', restored);
       meter.dispose();
       publishFrame(null);
     };

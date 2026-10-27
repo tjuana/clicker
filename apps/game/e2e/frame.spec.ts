@@ -50,6 +50,25 @@ for (const racers of [4, 20]) {
   });
 }
 
+// A phone sent to the background or a driver reset takes the canvas's context away; on its return
+// three builds a new `renderer.info`, and a meter still reading the old one counted 0 for good.
+test('the line counts again once the GPU gives the canvas back', async ({ page }) => {
+  await host(page, 'race', 1);
+  expect(await drawCalls(page)).toBe(RACE_CALLS);
+  await page.evaluate(() => {
+    const gl = document.querySelector('canvas')?.getContext('webgl2');
+    (window as { lost?: WEBGL_lose_context | null }).lost = gl?.getExtension('WEBGL_lose_context');
+    (window as { lost?: WEBGL_lose_context | null }).lost?.loseContext();
+  });
+  const meter = page.getByTestId('frame-meter');
+  // Nothing is drawn while the context is gone: the line says so before it comes back.
+  await expect(meter).toHaveAttribute('data-calls', '0');
+  await page.evaluate(() =>
+    (window as { lost?: WEBGL_lose_context | null }).lost?.restoreContext(),
+  );
+  await expect(meter).toHaveAttribute('data-calls', String(RACE_CALLS));
+});
+
 for (const riders of [4, 20]) {
   test(`an arena frame costs the same draw calls with ${riders} riders`, async ({ page }) => {
     await host(page, 'cycles', riders - 1);
