@@ -77,6 +77,10 @@ Each follows the same shape: problem, solution, return, risks, an example.
 
 ### P1. One render pipeline for every mode
 
+*Revised on 2026-10-27:* the arena's half — `OutputPass` last — is the owner's exercise A. The
+shared module waits until the race has a composer of its own (exercise 8): today it would have one
+user.
+
 - **Problem.** The light cycles render through a hand-built composer that adds its glow after
   display encoding, untone-mapped (finding 1); the race renders through three's default path, with
   PBR Neutral and sRGB. Two scenes, two colour pipelines, no shared quality settings. A third mode
@@ -217,8 +221,8 @@ the book read against this code, not in the abstract.
 ### Track B — the picture (what the browser draws)
 
 1. **RTR 2–3** (the pipeline and the GPU). Reading only: the vocabulary for everything after.
-2. **RTR 5.4–5.6, 8.2** (antialiasing, display encoding, tone mapping). Exercise: P1 and P4 —
-   the arena with `OutputPass`, side by side with today's, for the owner.
+2. **RTR 5.4–5.6, 8.2** (antialiasing, display encoding, tone mapping). Exercise: P4 (done in
+   plan 13) and the arena's `OutputPass` — exercise A in section 6 — side by side with today's.
 3. **RTR 6.1–6.2** (texturing, filtering). Exercise: a check that every texture the scene creates
    gets anisotropic filtering and the right colour space.
 4. **RTR 9–10** (physically based shading, environment light). Reading: what
@@ -227,8 +231,9 @@ the book read against this code, not in the abstract.
    bounds; measure with P2.
 6. **RTR 11.3, 12.1–12.5, 13.6–13.8** (AO, image effects, billboards, particles). Exercise: P5 and
    P6, each measured.
-7. **RTR 18** (pipeline optimisation). Exercise: P2, then a bottleneck hunt on the race at twenty
-   cars by RTR 18.2's method.
+7. **RTR 18** (pipeline optimisation). Exercise: P2 (done in plan 14), then a bottleneck hunt by
+   RTR 18.2's method: the race at twenty cars, and the arena, whose 2.7 ms are not its floor
+   (section 6).
 8. **RTR 19.4–19.5, 23** (culling, portals, hardware). Reading against DooM_42; a phone tier for P1
    from RTR 23.10's tiling architecture.
 
@@ -245,27 +250,100 @@ same measurement on a mid-range Android phone over USB. Prototype that first: wh
 Android exposes `EXT_disjoint_timer_query_webgl2` is unverified, and `measure` is desktop-only
 (headed Chromium, `--use-angle=metal`, `localhost`).
 
-The exercises, highest return first. The owner writes each one; `qa` writes its red test first;
-the frame meter measures it before and after, and the row above gets a sibling.
+The exercises, in the order the owner chose on 2026-10-27. He writes each one; `qa` writes its red
+test first wherever an honest one exists; the frame meter measures it before and after, and the
+row above gets a sibling. A, B and C change the arena's picture and come from the
+[arena-by-the-book design](2026-10-27-arena-by-the-book-design.md); their pictures are taken with
+`LABEL=before pnpm --filter @clicker/app run shots`, and again with `LABEL=after`.
 
 1. **Instance the clicker's cars** (RTR 18.4, 19). Today a frame costs 53 + 6 draw calls per
    player — 59 alone, about 173 with twenty. Nothing to see on the M2 (0.22 ms of GPU); it is the
    CPU and driver cost of a phone that grows. The red test exists: `e2e/frame.spec.ts`, the
    clicker's `test.fixme`.
-2. **Cars as capsules** (RTR 22.2, 22.13; P3). Pure and integer in `packages/game`, property tests,
+2. **A — the arena's colour chain** (RTR 5.6, 8.2; finding 1).
+   - *Read:* 5.6, display encoding and why it comes last; 8.2, tone mapping, and 8.2.2 on what
+     it does to bright values.
+   - *Where:* the composer in `scene/cycles.tsx` (`EffectComposer`, `RenderPass`,
+     `UnrealBloomPass`); three's `OutputPass` in `three/examples/jsm/postprocessing/OutputPass.js`;
+     the brightness figures in `scene/look.ts`.
+   - *Proof:* no red test — what changes is how a halo looks. `shots` before and after.
+   - *Numbers:* GPU and CPU from `measure` before and after. The draw count does not move: while
+     the bloom is last it spends a draw copying its input to the screen, and `OutputPass` takes
+     over exactly that draw — checked with the arena's gate in `e2e/frame.spec.ts`. The cost is
+     elsewhere: the bloom's last blend now writes into the composer's multisampled half-float
+     target instead of the screen, which by three's code means one more resolve of that target a
+     frame. The meter says what it costs.
+   - P1's shared module is not part of it: it waits for the race's own composer (exercise 8).
+3. **B — the floor** (RTR 11.6.4, 12.1, 9.8; Figure 11.40).
+   - *Read:* 11.6.4, planar reflections — what `Reflector` does; 12.1 from Equation 12.1 (p. 515:
+     the Gaussian, its normalisation, the rule of thumb for its width) through the bilinear taps
+     and the separable filters to downsampling and the ping-pong buffers, stopping before 12.1.1;
+     9.8 and Figure 11.40 — why a rough floor stretches a reflection towards the viewer. If there
+     is time, 12.3's directional streak filter (p. 525) is the book's closest relative of the
+     floor's vertical streak.
+   - *Where:* `scene/floor.tsx` (`Floor`, where drei's `MeshReflectorMaterial` goes), `FLOOR` in
+     `scene/look.ts`, and the kernel's contract in `scene/blur-kernel.ts`.
+   - *Red test:* `test/scene-blur-kernel.test.ts`. Take `.skip` off, watch six tests fail against
+     the stub, then write `gaussianTaps`. What they ask for is written on the stub; Figure 12.2's
+     five taps, cut at 2σ for wider blurs, come out narrower than asked for, on purpose.
+   - *Traps plan 15's prototype found:*
+     - `Reflector` renders its mirror inside the frame it is drawn in: a probe read update,
+       reflection, update, reflection… on every frame. No priorities to arrange, unlike drei's
+       mirror at `useFrame` priority 0.
+     - Its camera copies the main camera's layers once, when it is first cloned. It caught layer 0
+       only because the clone came before `Field` enabled the grid's layer 1. Set the reflection
+       camera to layer 0 yourself, or a floor rebuilt for a new field mirrors the grid.
+     - Its target is half-float and 4× multisampled. Half float keeps reflected bikes above 1 for
+       the bloom. 512² with multisampling cost 0.3 ms more than 256² without — in one run that
+       changed both at once, which RTR 18.2 would not do. Multisampled edges are blurred away
+       either way.
+     - Its target is square and its camera takes the canvas's projection, so at 1280 × 760 a texel
+       covers about 5 pixels across and 3 down: the same σ both ways is 1.7 times wider sideways
+       on screen. Size the target to the canvas's aspect, or scale σ across.
+     - Its material is built from the `shader` option, and the constructor sets `color`,
+       `tDiffuse` and `textureMatrix` on it: a shader without a `color` uniform throws, even if it
+       never reads it.
+     - Fog needs `UniformsLib.fog` merged into the uniforms, the fog chunks in both shaders and
+       `material.fog = true` — and `fog_vertex` reads `mvPosition`, which `Reflector`'s own vertex
+       shader never declares. The grid's shader in `scene/floor.tsx` declares it; copy that.
+     - The blur goes into the floor's `onBeforeRender`, after `Reflector`'s own — which calls
+       `this.getReflectionCamera`, so it is called as `original.call(reflector, …)`; an arrow that
+       calls it bare throws. Keep `renderer.getRenderTarget()`, draw the passes with
+       `FullScreenQuad` (`postprocessing/Pass.js`), restore the target, point `tDiffuse` at the
+       result.
+     - Taps three texels apart showed as horizontal bands across the streak.
+   - *Numbers:* on the M2 the floor costs nothing the meter can separate from noise — drei's
+     2.64–2.70 ms GPU median, no floor at all 2.71–2.73, `Reflector` at 256² with two blur passes
+     2.68. Record GPU and draw calls before and after; this one is judged by the picture.
+4. **C — the bike's surface** (RTR 6.3, 6.5, 9.5).
+   - *Read:* 6.3, procedural texturing and how to antialias it; 6.5, material mapping; 9.5, the
+     Fresnel effect, for a rim.
+   - *Where:* `scene/cycle-model.ts`, which today gives each part a brightness per vertex (`GLOW`,
+     `BODY`, `DARK`), and the bikes' `MeshBasicMaterial` in `scene/cycles.tsx`. The grid's
+     `fwidth` lines in `scene/floor.tsx` and the walls' rim in `scene/walls.ts` are both techniques
+     already working in this codebase.
+   - *Proof:* `shots` side by side; plan 14's gate keeps every bike in one draw call.
+     `test/cycle-model.test.ts` asserts the per-vertex brightnesses (16, 32, 100) that the texture
+     replaces: that assertion is rewritten with the exercise, to say what the new surface
+     guarantees.
+   - The outline stays a stick and a dumbbell: new models are technical debt (design §6).
+5. **Cars as capsules** (RTR 22.2, 22.13; P3). Pure and integer in `packages/game`, property tests,
    a growth test with `complexity.ts`; removes the X-crossing case. Costs the server nothing
    measurable.
-3. **The arena's colour chain** (RTR 5.6, 8.2; P1). `OutputPass` last, so the glow is tone-mapped
-   and encoded with the rest; screenshots side by side for the owner's eye. Costs one full-screen
-   pass — the meter says how much.
-4. **Depth precision** (RTR 4.7.2). The race's camera has near 0.02 and far 400, a range of
+6. **Depth precision** (RTR 4.7.2). The race's camera has near 0.02 and far 400, a range of
    1 : 20 000, propped up by `GROUND_Y` and `TILE_LIFT` offsets against z-fighting. Reversed depth
    would make them unnecessary; prototype first whether three 0.186 and `EXT_clip_control` allow it.
-5. **One particle pool** (RTR 13.6, 13.8; P6). Instanced billboards, typed arrays, no allocation in
+7. **One particle pool** (RTR 13.6, 13.8; P6). Instanced billboards, typed arrays, no allocation in
    the frame; tyre smoke and sparks first.
-6. **Ambient occlusion in the race** (RTR 11.3; P5), desktop only, its cost read off the meter.
+8. **Ambient occlusion in the race** (RTR 11.3; P5), desktop only, its cost read off the meter. It
+   gives the race its first composer, and P1's shared module arrives with it.
 
 P7 and P8 only if the owner wants them.
+
+**Where the arena's time goes is still open.** Plan 15's prototype took the floor away entirely and
+the arena's GPU median stayed at 2.7 ms. The bloom's passes and the full-screen multisampled
+target are the suspects; a hunt by RTR 18.2's method — take one stage away, see whether the time
+moves — is track B's step 7.
 
 Traps plan 14's review found on the way to these exercises:
 
@@ -278,6 +356,7 @@ Traps plan 14's review found on the way to these exercises:
   has one canvas.
 - **The draw count is the median of nine frames,** so a change in structure shows on the line
   within five frames, not on the first one.
-- **`OutputPass` and ambient occlusion move the gates' constants** (`RACE_CALLS`,
-  `CYCLES_CALLS` in `e2e/frame.spec.ts`) — by design: the exercise changes the number, and the
-  commit says why.
+- **The floor and ambient occlusion move the gates' constants** (`CYCLES_CALLS`, `RACE_CALLS` in
+  `e2e/frame.spec.ts`) — by design: drei's floor is 9 to 12 draws, `Reflector` 4 to 7 plus one per
+  blur pass. The commit says why. `OutputPass` moves nothing: it takes over the bloom's own copy
+  to the screen (plan 15's review, checked with the gate).
