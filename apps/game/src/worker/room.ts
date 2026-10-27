@@ -282,7 +282,7 @@ export class Room extends Server<Env> {
     }
     // One string for the whole room, however many are connected.
     if (event.type === 'stepped' && event.mode === 'cycles')
-      this.broadcast(JSON.stringify(toDelta(event.tick, event.changes)));
+      this.broadcast(JSON.stringify(toDelta(this.#state, event)));
   }
 
   /** The base config belongs to the mode in play; what the environment sets wins over it. */

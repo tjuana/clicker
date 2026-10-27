@@ -8,8 +8,8 @@ import {
   type RoomState,
 } from '@clicker/game';
 import {
-  type DeltaMessage,
-  type FullMessage,
+  type CyclesDeltaMessage as DeltaMessage,
+  type CyclesFullMessage as FullMessage,
   PROTOCOL_VERSION,
   toDelta,
   toFull,
@@ -45,11 +45,28 @@ function bike(
 }
 
 function fullOf(bikes: FullMessage['bikes'], tick = 5): FullMessage {
-  return { v: PROTOCOL_VERSION, type: 'full', tick, tickMs: 125, side: SIDE, bikes };
+  return {
+    v: PROTOCOL_VERSION,
+    type: 'full',
+    mode: 'cycles',
+    tick,
+    tickMs: 125,
+    side: SIDE,
+    bikes,
+  };
 }
 
 function deltaOf(t: number, parts: Partial<Omit<DeltaMessage, 'v' | 'type' | 't'>>): DeltaMessage {
-  return { v: PROTOCOL_VERSION, type: 'delta', t, cells: [], heads: [], events: [], ...parts };
+  return {
+    v: PROTOCOL_VERSION,
+    type: 'delta',
+    mode: 'cycles',
+    t,
+    cells: [],
+    heads: [],
+    events: [],
+    ...parts,
+  };
 }
 
 /** Applies a delta that must not be refused. */
@@ -304,7 +321,7 @@ function record(
   run({ type: 'tick' }, config.countdownMs);
 
   const full = toFull(state);
-  if (full === null) throw new Error('a started light-cycle room has a field');
+  if (full?.mode !== 'cycles') throw new Error('a started light-cycle room has a field');
   const deltas: DeltaMessage[] = [];
   const fields: Uint16Array[] = [];
   for (let tick = 0; tick < ticks; tick += 1) {
@@ -329,7 +346,8 @@ function record(
     }
     for (const event of run({ type: 'step' }, config.countdownMs)) {
       if (event.type !== 'stepped' || event.mode !== 'cycles') continue;
-      deltas.push(toDelta(event.tick, event.changes));
+      const delta = toDelta(state, event);
+      if (delta.mode === 'cycles') deltas.push(delta);
       fields.push((state.modeState as CyclesState).field);
     }
   }

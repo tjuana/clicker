@@ -9,9 +9,11 @@ export const MAX_NAME_LENGTH = 20;
  * Bumped when the wire format changes in a way an old client cannot read. 2: players[] in the
  * snapshot gained a required `bot`, which a strict version-1 client rejects; it now gets
  * `bad_version` and reloads instead of silently dropping every snapshot. 3: the light-cycle
- * snapshot's `data` gained a required `walls`, which a strict version-2 client rejects.
+ * snapshot's `data` gained a required `walls`, which a strict version-2 client rejects. 4: the
+ * ring race. `full` and `delta` became variants on a required `mode`, which a version-3 client
+ * does not know to read and a version-4 client would not find in its frames.
  */
-export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_VERSION = 4;
 
 const encoder = new TextEncoder();
 
@@ -42,6 +44,12 @@ export const cyclesInputSchema = v.variant('type', [
   v.strictObject({ type: v.literal('wall'), on: v.boolean() }),
 ]);
 
+/** The race's input: which of gas, brake, left and right are held now (bits 0 to 3). */
+export const raceInputSchema = v.strictObject({
+  type: v.literal('keys'),
+  mask: v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(15)),
+});
+
 export const joinSchema = v.strictObject({
   v: versionSchema,
   type: v.literal('join'),
@@ -55,13 +63,13 @@ export const startSchema = v.strictObject({ v: versionSchema, type: v.literal('s
 export const inputSchema = v.strictObject({
   v: versionSchema,
   type: v.literal('input'),
-  input: v.union([clickerInputSchema, cyclesInputSchema]),
+  input: v.union([clickerInputSchema, cyclesInputSchema, raceInputSchema]),
 });
 
 export const setModeSchema = v.strictObject({
   v: versionSchema,
   type: v.literal('setMode'),
-  mode: v.picklist(['clicker', 'cycles']),
+  mode: v.picklist(['clicker', 'cycles', 'race']),
 });
 /** One of the speeds the rules offer; a number outside the list never reaches them. */
 export const setSpeedSchema = v.strictObject({

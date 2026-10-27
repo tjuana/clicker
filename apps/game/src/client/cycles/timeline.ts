@@ -1,4 +1,4 @@
-import type { DeltaMessage } from '@clicker/protocol';
+import type { CyclesDeltaMessage } from '@clicker/protocol';
 import type { Head, WallOp } from './model';
 
 /** What the network adds to a message on top of its fastest trip: the measured p99 is 57 ms. */
@@ -28,7 +28,7 @@ export interface Step {
   tick: number;
   walls: WallOp[];
   heads: Map<number, Head>;
-  events: DeltaMessage['events'];
+  events: CyclesDeltaMessage['events'];
   /** A full: the scene clears its walls before laying these. */
   reset: boolean;
 }

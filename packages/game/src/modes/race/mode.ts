@@ -4,7 +4,7 @@ import { BRAKE, type Car, GAS, LEFT, RIGHT } from './car';
 import { RACE } from './config';
 import { over, raceResults, startRace, stepRace } from './race';
 import { emptyRace, newCar, type RaceChanges, type RaceState } from './state';
-import { buildTrack, type TrackData } from './track';
+import { buildTrack, type TrackData, walk } from './track';
 import { TRACKS } from './tracks';
 
 export interface RaceInput {
@@ -17,6 +17,15 @@ const KEYS = GAS | BRAKE | LEFT | RIGHT;
 const TRACK_ID = 'ring';
 // Built once at load: a track is derived from constant data, and the step needs it every tick.
 const TRACK = buildTrack(TRACKS[TRACK_ID] as TrackData);
+
+/**
+ * What a client needs to know about a car besides where it is: bit 0 finished, bit 1 on grass,
+ * bit 2 touching a wall. Worked out here, where the track is, so the wire format needs none.
+ */
+export function carFlags(car: Car): number {
+  const onGrass = Math.abs(walk(TRACK, car.piece, car.x, car.y).lateral) > RACE.road;
+  return (car.finish !== null ? 1 : 0) | (onGrass ? 2 : 0) | (car.wall > 0 ? 4 : 0);
+}
 
 function withCars(state: RaceState, cars: Car[]): RaceState {
   return { ...state, cars, index: emptyRace(state.track, state.seed, cars).index };

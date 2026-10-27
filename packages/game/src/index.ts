@@ -24,6 +24,14 @@ export {
   WALL_MODES,
   type WallMode,
 } from './modes/cycles';
+export {
+  carFlags,
+  RACE,
+  type RaceChanges,
+  type RaceInput,
+  type RaceResultRow,
+  type RaceState,
+} from './modes/race';
 export { type ApplyResult, apply } from './room/apply';
 export type {
   Command,

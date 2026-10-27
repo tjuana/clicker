@@ -116,9 +116,12 @@ Everything is an integer, as in the light cycles; the purity gate extends to `mo
   race settings in this version.
 - **Wire.** `full` carries the track id, `tickMs`, and every car. Each tick's `delta` is one string
   for the room: per car `slot, x, y, heading, speed, lap, flags` (integers), plus events (`lap`,
-  `finished`, `bump`). That is about 20 × 7 small numbers a tick, roughly 0.6 KB, 18 KB/s per
-  player at 30 Hz, measured before any binary format is considered (A14). The protocol version
-  goes to 4.
+  `finished`, `bump`). That is 20 × 7 numbers a tick. **Measured** (twenty cars, 20 s in, nineteen
+  bots at speed): 856 bytes as JSON, about 25 KB/s per player at 30 Hz, not the 0.6 KB guessed:
+  the coordinates are five digits. Still no binary format; A14 says to move only if a number
+  forces it. The delta carries every car on the field each tick (a car moves every tick, so
+  there is nothing to leave out). The protocol version is 4. A car that joined mid-race is off
+  the field until the next round and is in neither the `full` nor the deltas.
 - **Client.** The timeline the light cycles use, generalised to car states, draws the world one
   tick plus jitter behind the server. The scene builds the track from the Kenney tiles, puts PBR
   asphalt and grass on their flat colours with world-space UVs, lights it with an HDRI and soft

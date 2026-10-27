@@ -14,6 +14,8 @@ import {
 import { describe, expect, it } from 'vitest';
 import { PROTOCOL_VERSION } from '../src/client';
 import {
+  type CyclesDeltaMessage as CyclesDelta,
+  type CyclesFullMessage,
   MAX_SERVER_MESSAGE_BYTES,
   parseServerMessage,
   toDelta,
@@ -170,13 +172,15 @@ describe('parseServerMessage', () => {
   });
 });
 
+type Stepped = Extract<GameEvent, { type: 'stepped' }>;
+
 const CYCLES = configFor('cycles');
 
 /** A light-cycle room: the host plus `bots` bots, started and stepped `steps` times. */
 function cyclesRoom(
   bots: number,
   steps: number,
-): { state: RoomState; lastChanges: TickChanges | null; lastTick: number } {
+): { state: RoomState; lastChanges: TickChanges | null; lastTick: number; stepped: Stepped } {
   const commands: Command[] = [
     {
       type: 'join',
@@ -196,6 +200,7 @@ function cyclesRoom(
 
   let lastChanges: TickChanges | null = null;
   let lastTick = 0;
+  let last: Stepped | null = null;
   for (let i = 0; i < steps; i += 1) {
     const result = apply(state, { type: 'step' }, goAt + i, CYCLES);
     state = result.state;
@@ -205,9 +210,10 @@ function cyclesRoom(
     if (stepped?.mode === 'cycles') {
       lastChanges = stepped.changes;
       lastTick = stepped.tick;
+      last = stepped;
     }
   }
-  return { state, lastChanges, lastTick };
+  return { state, lastChanges, lastTick, stepped: last as Stepped };
 }
 
 describe('toSnapshot of a light-cycle room', () => {
@@ -301,12 +307,19 @@ describe('a snapshot is tied to its mode', () => {
   });
 });
 
+/** The light cycles' `full`, or null; the race's would be a mistake in the test. */
+function cyclesFull(state: RoomState): CyclesFullMessage | null {
+  const full = toFull(state);
+  if (full !== null && full.mode !== 'cycles') throw new Error('not a light-cycle full');
+  return full;
+}
+
 describe('toFull', () => {
   it('fits the message limit for twenty bikes after four hundred steps, and passes the parser', () => {
     const { state } = cyclesRoom(19, 400);
     expect(Object.keys(state.players)).toHaveLength(20);
 
-    const full = toFull(state);
+    const full = cyclesFull(state);
 
     expect(full).not.toBeNull();
     const raw = JSON.stringify(full);
@@ -317,7 +330,7 @@ describe('toFull', () => {
 
   it('carries each bike energy, its capacity and whether its wall is lit', () => {
     const { state } = cyclesRoom(2, 3);
-    const bike = toFull(state)?.bikes[0];
+    const bike = cyclesFull(state)?.bikes[0];
     const own = (state.modeState as CyclesState).bikes[0];
     expect(bike).toMatchObject({ energy: own?.energy, cap: own?.energyCap, lit: own?.lit });
   });
@@ -325,22 +338,28 @@ describe('toFull', () => {
   it('says how long a tick lasts, from the speed the host chose', () => {
     const { state } = cyclesRoom(2, 3);
 
-    expect(toFull(state)?.tickMs).toBe(125);
-    expect(toFull({ ...state, settings: { speed: 16, walls: 'always' } })?.tickMs).toBe(62.5);
+    expect(cyclesFull(state)?.tickMs).toBe(125);
+    expect(cyclesFull({ ...state, settings: { speed: 16, walls: 'always' } })?.tickMs).toBe(62.5);
   });
 
   it('is refused by the parser without the tick length', () => {
-    const { tickMs: _tickMs, ...bare } = toFull(cyclesRoom(2, 3).state) as NonNullable<
-      ReturnType<typeof toFull>
-    >;
+    const { tickMs: _tickMs, ...bare } = cyclesFull(cyclesRoom(2, 3).state) as CyclesFullMessage;
 
     expect(parseServerMessage(JSON.stringify(bare))).toBeNull();
   });
 
+  it('names its mode, and is refused without it', () => {
+    const full = cyclesFull(cyclesRoom(2, 3).state) as CyclesFullMessage;
+    const { mode: _mode, ...bare } = full;
+
+    expect(full.mode).toBe('cycles');
+    expect(parseServerMessage(JSON.stringify(bare))).toBeNull();
+  });
+
   it('lists a trail from its oldest cell to the head', () => {
-    const { state, lastChanges } = cyclesRoom(3, 30);
-    const full = toFull(state);
-    const delta = toDelta(0, lastChanges as TickChanges);
+    const { state, stepped } = cyclesRoom(3, 30);
+    const full = cyclesFull(state);
+    const delta = toDelta(state, stepped) as CyclesDelta;
 
     const alive = (full?.bikes ?? []).filter((bike) => bike.alive);
     expect(alive.length).toBeGreaterThan(0);
@@ -366,7 +385,7 @@ describe('toFull', () => {
       CYCLES,
     ).state;
 
-    const full = toFull(joined);
+    const full = cyclesFull(joined);
 
     const late = full?.bikes.find((bike) => bike.id === '4');
     expect(late).toBeDefined();
@@ -400,10 +419,10 @@ describe('toFull', () => {
 
 describe('toDelta', () => {
   it('passes the parser and carries the tick, the cells, the heads and the events', () => {
-    const { lastChanges, lastTick } = cyclesRoom(3, 10);
+    const { state, lastChanges, stepped } = cyclesRoom(3, 10);
     const changes = lastChanges as TickChanges;
 
-    const delta = toDelta(lastTick, changes);
+    const delta = toDelta(state, stepped) as CyclesDelta;
 
     expect(delta.t).toBe(10);
     expect(delta.cells).toEqual(changes.cells);
@@ -414,15 +433,21 @@ describe('toDelta', () => {
   });
 
   it('describes every kind of event', () => {
-    const delta = toDelta(1, {
-      cells: [],
-      heads: [],
-      events: [
-        { type: 'died', slot: 1, by: null },
-        { type: 'died', slot: 2, by: 1 },
-        { type: 'respawned', slot: 2 },
-        { type: 'boost', slot: 1 },
-      ],
+    const { state } = cyclesRoom(1, 1);
+    const delta = toDelta(state, {
+      type: 'stepped',
+      tick: 1,
+      mode: 'cycles',
+      changes: {
+        cells: [],
+        heads: [],
+        events: [
+          { type: 'died', slot: 1, by: null },
+          { type: 'died', slot: 2, by: 1 },
+          { type: 'respawned', slot: 2 },
+          { type: 'boost', slot: 1 },
+        ],
+      },
     });
 
     expect(parseServerMessage(JSON.stringify(delta))).toEqual(delta);

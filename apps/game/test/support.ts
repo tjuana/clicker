@@ -5,15 +5,24 @@ import { afterEach, expect } from 'vitest';
 export type Snapshot = Extract<ServerMessage, { type: 'snapshot' }>;
 export type Welcome = Extract<ServerMessage, { type: 'welcome' }>;
 export type ServerError = Extract<ServerMessage, { type: 'error' }>;
-export type Full = Extract<ServerMessage, { type: 'full' }>;
-export type Delta = Extract<ServerMessage, { type: 'delta' }>;
+/** The light cycles' frames; the race's have their own names. */
+export type Full = Extract<ServerMessage, { type: 'full'; mode: 'cycles' }>;
+export type Delta = Extract<ServerMessage, { type: 'delta'; mode: 'cycles' }>;
+export type RaceFull = Extract<ServerMessage, { type: 'full'; mode: 'race' }>;
+export type RaceDelta = Extract<ServerMessage, { type: 'delta'; mode: 'race' }>;
 
 export const isWelcome = (message: ServerMessage): message is Welcome => message.type === 'welcome';
 export const isSnapshot = (message: ServerMessage): message is Snapshot =>
   message.type === 'snapshot';
 export const isError = (message: ServerMessage): message is ServerError => message.type === 'error';
-export const isFull = (message: ServerMessage): message is Full => message.type === 'full';
-export const isDelta = (message: ServerMessage): message is Delta => message.type === 'delta';
+export const isFull = (message: ServerMessage): message is Full =>
+  message.type === 'full' && message.mode === 'cycles';
+export const isDelta = (message: ServerMessage): message is Delta =>
+  message.type === 'delta' && message.mode === 'cycles';
+export const isRaceFull = (message: ServerMessage): message is RaceFull =>
+  message.type === 'full' && message.mode === 'race';
+export const isRaceDelta = (message: ServerMessage): message is RaceDelta =>
+  message.type === 'delta' && message.mode === 'race';
 
 /** Accumulates incoming messages and lets you wait for the one you need. */
 export class Client {

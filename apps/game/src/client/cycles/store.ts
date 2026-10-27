@@ -1,4 +1,4 @@
-import type { DeltaMessage, FullMessage, SnapshotMessage } from '@clicker/protocol';
+import type { CyclesDeltaMessage, CyclesFullMessage, SnapshotMessage } from '@clicker/protocol';
 import { create } from 'zustand';
 import { useClient } from '../store';
 import { centreOf } from './latency';
@@ -52,7 +52,7 @@ function ownSlot(model: CyclesModel): number {
   return -1;
 }
 
-type RoundEvents = DeltaMessage['events'];
+type RoundEvents = CyclesDeltaMessage['events'];
 const eventListeners = new Set<(events: RoundEvents) => void>();
 
 /**
@@ -83,7 +83,10 @@ export function followPhase(phase: SnapshotMessage['phase']): void {
  * refused, so while stuck it is repeated — on the next delta after `RESYNC_RETRY_MS`, never
  * sooner. Deltas keep coming whatever the answer, so they are the clock; no timer is needed.
  */
-export function feedCycles(message: FullMessage | DeltaMessage, now: number): 'resync' | null {
+export function feedCycles(
+  message: CyclesFullMessage | CyclesDeltaMessage,
+  now: number,
+): 'resync' | null {
   if (message.type === 'full') {
     const { model, walls } = fromFull(message);
     const { model: before, timeline: running, feed } = useCycles.getState();

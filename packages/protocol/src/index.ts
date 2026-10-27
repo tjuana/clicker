@@ -12,6 +12,7 @@ export {
   type ParsedClientMessage,
   PROTOCOL_VERSION,
   parseClientMessage,
+  raceInputSchema,
   removeBotSchema,
   resyncSchema,
   setModeSchema,
@@ -21,6 +22,8 @@ export {
 } from './client';
 export { generateId, ID_PATTERN, isId } from './ids';
 export {
+  type CyclesDeltaMessage,
+  type CyclesFullMessage,
   clickerDataSchema,
   cyclesDataSchema,
   type DeltaMessage,
@@ -32,6 +35,9 @@ export {
   type PrivateMessage,
   parseServerMessage,
   privateSchema,
+  type RaceDeltaMessage,
+  type RaceFullMessage,
+  raceDataSchema,
   type ServerErrorCode,
   type ServerMessage,
   type SnapshotMessage,
