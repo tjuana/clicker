@@ -270,8 +270,10 @@ What plan 12's review changed:
 - **The clock estimate is shared** between the light cycles' timeline and the race's; the race keeps
   the last sixteen ticks in a ring and draws every car between two of them.
 - **The client takes the keys' bits and the lap times from the rules**: the bits are exported, and the
-  wire's `lap` event carries the lap's time (null for the first crossing and a lap cut short) —
-  an earlier version of the HUD had recomputed it, a copy of a rule the client must not hold.
+  wire's `lap` event carries the lap's time (null for the first crossing and a lap cut short)
+  and the car's best lap after it (`best`, null while it has none), and the car flags are exported as
+  `FINISHED`, `ON_GRASS`, `AT_WALL` and `TOUCHING` — an earlier version of the HUD had recomputed
+  the best lap and redefined the bits, copies of rules the client must not hold.
 - **The camera follows the player's car**, or the leader when the player has none on the field.
 - **Sound**: one detuned engine voice re-pitched by the player's speed, a blip a lap, a chord at the
   finish, a thud on a bump; checked to run without errors, not yet listened to by the owner.
