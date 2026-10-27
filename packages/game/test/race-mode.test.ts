@@ -151,4 +151,32 @@ describe('the race mode', () => {
       expect(state.cars[state.index['0'] as number]?.speed).toBeGreaterThan(0);
     });
   });
+
+  describe('a player who comes back to a car', () => {
+    const step = raceMode.step as NonNullable<typeof raceMode.step>;
+
+    it('finds no key held: the autopilot never asked the client for any', () => {
+      let state = build(['1', '2'], new Set(['1', '2']));
+      state = raceMode.abandon(state, '1');
+      for (let i = 0; i < 30; i += 1) state = step(state, settings).state;
+      state = raceMode.rejoin(state, '1', settings);
+      expect(state.cars[state.index['1'] as number]).toMatchObject({ bot: false, keys: 0 });
+    });
+
+    it('is handed the full pace, but a finished car keeps cruising', () => {
+      let state = build(['1', '2'], new Set(['1', '2']));
+      state = {
+        ...state,
+        cars: state.cars.map((c) => (c.publicId === '1' ? { ...c, finish: 50, bot: true } : c)),
+      };
+      state = raceMode.rejoin(state, '1', settings);
+      expect(state.cars[state.index['1'] as number]?.pace).toBe(RACE.coolPace);
+      const racing = raceMode.rejoin(
+        raceMode.abandon(build(['1'], new Set(['1'])), '1'),
+        '1',
+        settings,
+      );
+      expect(racing.cars[0]?.pace).toBe(100);
+    });
+  });
 });

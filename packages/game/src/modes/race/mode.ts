@@ -68,7 +68,10 @@ export const raceMode: Mode<RaceState, RaceInput, RaceChanges> = {
     const car = i === undefined ? undefined : state.cars[i];
     if (i === undefined || car === undefined || !car.bot) return state;
     const cars = [...state.cars];
-    cars[i] = { ...car, bot: false, pace: 100 };
+    // No keys: the autopilot has been setting them each tick and the client sends a mask only
+    // when it changes, so a key left over would be held until the player pressed and released it.
+    // A finished car keeps cruising; the full pace would make it a faster roadblock.
+    cars[i] = { ...car, bot: false, keys: 0, pace: car.finish === null ? 100 : RACE.coolPace };
     return { ...state, cars };
   },
   // The car stays and is driven on by the autopilot, like a finished car: a parked car would be
