@@ -29,6 +29,9 @@ const LEVEL = {
   blip: 0.1,
   sweep: 0.1,
   crash: 0.35,
+  engine: 0.1,
+  chord: 0.07,
+  thud: 0.3,
 };
 
 /** An exponential ramp cannot reach 0, so a sound dies to this instead. */
@@ -82,6 +85,25 @@ export interface Synth {
   /** Effects that answer the server are put back by `delay` seconds, to land with the picture. */
   sweep: (delay: number) => void;
   crash: (delay: number) => void;
+  /**
+   * The race car's engine: one voice that is re-pitched, never a new oscillator per frame. `speed`
+   * is 0…1 of the top speed and is meant to be called every frame; it does nothing until the
+   * context runs, and starts the voice on the first call after that.
+   */
+  engine: (speed: number) => void;
+  /** Lets the engine go quiet (a finished car, a hidden tab, the end of the race). */
+  engineOff: () => void;
+  /** A lap, a finish and a bump, put back by `delay` seconds like the other answers. */
+  lap: (delay: number) => void;
+  finish: (delay: number) => void;
+  thud: (delay: number) => void;
+}
+
+/** The engine's voice: two saws a few cents apart through a low-pass that opens with speed. */
+interface Hum {
+  oscs: OscillatorNode[];
+  amp: GainNode;
+  cut: BiquadFilterNode;
 }
 
 /** One sound with a pitch that glides and a level that rises fast and dies away. */
@@ -154,6 +176,7 @@ export function createSynth(): Synth {
   let engine: Engine | null = null;
   let session: Session | null = null;
   let muted = false;
+  let hum: Hum | null = null;
 
   const level = (): number => (muted ? 0 : LEVEL.master);
 
@@ -231,6 +254,15 @@ export function createSynth(): Synth {
     for (const osc of band.bassOscs) osc.stop(currentTime + 0.5);
   }
 
+  function engineOff(): void {
+    if (hum === null || engine === null) return;
+    const { currentTime } = engine.ctx;
+    const gone = hum;
+    hum = null;
+    gone.amp.gain.setTargetAtTime(0, currentTime, 0.05);
+    for (const osc of gone.oscs) osc.stop(currentTime + 0.5);
+  }
+
   return {
     unlock: () => {
       if (engine === null) {
@@ -258,6 +290,57 @@ export function createSynth(): Synth {
     },
 
     stop,
+
+    engine: (speed) => {
+      if (engine === null || engine.ctx.state !== 'running') return;
+      const { ctx, master } = engine;
+      if (hum === null) {
+        const cut = ctx.createBiquadFilter();
+        cut.type = 'lowpass';
+        cut.Q.value = 2;
+        const amp = ctx.createGain();
+        amp.gain.value = 0;
+        amp.connect(cut).connect(master);
+        const oscs = [-9, 9].map((detune) => {
+          const osc = ctx.createOscillator();
+          osc.type = 'sawtooth';
+          osc.detune.value = detune;
+          osc.connect(amp);
+          osc.start();
+          return osc;
+        });
+        hum = { oscs, amp, cut };
+      }
+      // A short time constant: each frame moves the target and the glide hides the steps.
+      const now = ctx.currentTime;
+      for (const osc of hum.oscs) osc.frequency.setTargetAtTime(48 + speed * 110, now, 0.06);
+      hum.cut.frequency.setTargetAtTime(260 + speed * 1100, now, 0.06);
+      hum.amp.gain.setTargetAtTime(LEVEL.engine * (0.4 + 0.6 * speed), now, 0.06);
+    },
+
+    engineOff,
+
+    lap: (delay) => {
+      if (engine === null || muted || engine.ctx.state !== 'running') return;
+      const { ctx, master } = engine;
+      tone(ctx, master, 'triangle', 700, 1050, 0.05, ctx.currentTime + delay, 0.12, LEVEL.blip);
+    },
+
+    finish: (delay) => {
+      if (engine === null || muted || engine.ctx.state !== 'running') return;
+      const { ctx, master } = engine;
+      const at = ctx.currentTime + delay;
+      // C, E and G climbing, a little apart so it reads as a flourish and not as one chord.
+      [523.25, 659.25, 783.99].forEach((pitch, i) => {
+        tone(ctx, master, 'triangle', pitch, pitch, 0.01, at + i * 0.09, 0.9, LEVEL.chord, 0.01);
+      });
+    },
+
+    thud: (delay) => {
+      if (engine === null || muted || engine.ctx.state !== 'running') return;
+      const { ctx, master } = engine;
+      tone(ctx, master, 'sine', 120, 40, 0.1, ctx.currentTime + delay, 0.18, LEVEL.thud);
+    },
 
     setMuted: (value) => {
       muted = value;

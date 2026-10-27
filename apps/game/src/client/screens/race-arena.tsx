@@ -1,5 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { useRaceSound } from '../audio/use-race-sound';
 import { secondsLeft, useServerClock } from '../clock';
+import { MuteButton } from '../cycles/hud';
 import { FinishedBanner, RaceBar, TopFive } from '../race/hud';
 import { createRaceKeys, SOURCE_BITS } from '../race/keys';
 import { useClient } from '../store';
@@ -82,6 +84,7 @@ function Countdown({ goAt }: { goAt: number }) {
 }
 
 export function RaceArena({ onKeys }: { onKeys: (mask: number) => void }) {
+  useRaceSound();
   // Booleans and numbers only: the arena must not follow the snapshot or the race, both of which
   // are new objects on every message.
   const running = useClient((state) => state.snapshot?.phase === 'running');
@@ -165,6 +168,7 @@ export function RaceArena({ onKeys }: { onKeys: (mask: number) => void }) {
           <Ring />
         </Suspense>
         <TopFive />
+        <MuteButton />
         <div
           style={{
             position: 'absolute',
