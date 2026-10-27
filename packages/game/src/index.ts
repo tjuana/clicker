@@ -1,4 +1,4 @@
-export type { ModeId, ModeInput, ModeState } from './modes';
+export { MODE_IDS, type ModeId, type ModeInput, type ModeState, type ModeTypes } from './modes';
 export {
   type ClickerInput,
   type ClickerScore,

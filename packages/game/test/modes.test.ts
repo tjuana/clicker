@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { modeFor } from '../src/modes';
+import { MODE_IDS, modeFor } from '../src/modes';
 import { clickerMode } from '../src/modes/clicker/mode';
 import { DEFAULT_CYCLES_SETTINGS } from '../src/modes/cycles/config';
 import { cyclesMode } from '../src/modes/cycles/mode';
@@ -11,6 +11,11 @@ describe('the mode interface', () => {
     expect(modeFor('clicker')).not.toBe(modeFor('cycles'));
     expect(modeFor('clicker').step).toBeNull();
     expect(modeFor('cycles').step).toBeTypeOf('function');
+  });
+
+  it('lists every mode once, each with a mode of its own', () => {
+    expect([...MODE_IDS].sort()).toEqual(['clicker', 'cycles', 'race']);
+    expect(new Set(MODE_IDS.map((id) => modeFor(id))).size).toBe(MODE_IDS.length);
   });
 
   it('ignores a click sent to the cycles: the state comes back as it was', () => {

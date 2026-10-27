@@ -1,4 +1,4 @@
-import { SPEEDS, WALL_MODES } from '@clicker/game';
+import { MODE_IDS, SPEEDS, WALL_MODES } from '@clicker/game';
 import * as v from 'valibot';
 import { ID_PATTERN } from './ids';
 
@@ -69,7 +69,7 @@ export const inputSchema = v.strictObject({
 export const setModeSchema = v.strictObject({
   v: versionSchema,
   type: v.literal('setMode'),
-  mode: v.picklist(['clicker', 'cycles', 'race']),
+  mode: v.picklist(MODE_IDS),
 });
 /** One of the speeds the rules offer; a number outside the list never reaches them. */
 export const setSpeedSchema = v.strictObject({

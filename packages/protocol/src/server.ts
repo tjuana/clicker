@@ -8,6 +8,7 @@ import {
   forEachCell,
   type GameEvent,
   RACE,
+  type RaceChanges,
   type RaceState,
   type RoomState,
   SPEEDS,
@@ -338,24 +339,36 @@ export function toSnapshot(state: RoomState, now: number): SnapshotMessage {
     round: state.round === null ? null : { goAt: state.round.goAt, endsAt: state.round.endsAt },
     notice: state.notice,
   } as const;
-  if (state.mode === 'clicker') {
-    return { ...common, mode: 'clicker', data: toModeData(state.modeState as ClickerState) };
+  // A switch with a `never` default: a mode added to `ModeTypes` is a compile error here until
+  // it has its case, instead of quietly falling into the last branch.
+  switch (state.mode) {
+    case 'clicker':
+      return { ...common, mode: 'clicker', data: toModeData(state.modeState as ClickerState) };
+    case 'cycles':
+      return {
+        ...common,
+        mode: 'cycles',
+        data: cyclesDataOf(state.modeState as CyclesState, state.settings),
+      };
+    case 'race':
+      return { ...common, mode: 'race', data: raceDataOf(state) };
+    default:
+      return state.mode satisfies never;
   }
-  if (state.mode === 'race') {
-    return { ...common, mode: 'race', data: raceDataOf(state) };
-  }
-  return {
-    ...common,
-    mode: 'cycles',
-    data: cyclesDataOf(state.modeState as CyclesState, state.settings),
-  };
 }
 
 /** `null` for a mode with no field, or a room before its first round. */
 export function toFull(state: RoomState): FullMessage | null {
-  if (state.mode === 'cycles') return cyclesFullOf(state);
-  if (state.mode === 'race') return raceFullOf(state);
-  return null;
+  switch (state.mode) {
+    case 'clicker':
+      return null;
+    case 'cycles':
+      return cyclesFullOf(state);
+    case 'race':
+      return raceFullOf(state);
+    default:
+      return state.mode satisfies never;
+  }
 }
 
 function cyclesFullOf(state: RoomState): CyclesFullMessage | null {
@@ -430,19 +443,27 @@ export function toDelta(
   state: RoomState,
   stepped: Extract<GameEvent, { type: 'stepped' }>,
 ): DeltaMessage {
-  if (stepped.mode === 'cycles') {
-    const { changes } = stepped;
-    return {
-      v: PROTOCOL_VERSION,
-      type: 'delta',
-      mode: 'cycles',
-      t: stepped.tick,
-      cells: changes.cells,
-      heads: changes.heads,
-      events: changes.events,
-    };
+  switch (stepped.mode) {
+    case 'cycles': {
+      const { changes } = stepped;
+      return {
+        v: PROTOCOL_VERSION,
+        type: 'delta',
+        mode: 'cycles',
+        t: stepped.tick,
+        cells: changes.cells,
+        heads: changes.heads,
+        events: changes.events,
+      };
+    }
+    case 'race':
+      return raceDeltaOf(state, stepped.tick, stepped.changes);
+    default:
+      return stepped satisfies never;
   }
-  const { changes } = stepped;
+}
+
+function raceDeltaOf(state: RoomState, tick: number, changes: RaceChanges): RaceDeltaMessage {
   const cars: number[] = [];
   for (const car of (state.modeState as RaceState).cars) {
     if (car.out) continue;
@@ -452,7 +473,7 @@ export function toDelta(
     v: PROTOCOL_VERSION,
     type: 'delta',
     mode: 'race',
-    t: stepped.tick,
+    t: tick,
     cars,
     events: [
       ...changes.laps.map((lap) => ({ type: 'lap' as const, slot: lap.slot, lap: lap.lap })),

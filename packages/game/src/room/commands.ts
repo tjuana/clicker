@@ -1,7 +1,5 @@
-import type { ModeId, ModeInput } from '../modes';
+import type { ModeId, ModeInput, ModeTypes } from '../modes';
 import type { Speed, WallMode } from '../modes/cycles/config';
-import type { TickChanges } from '../modes/cycles/step';
-import type { RaceChanges } from '../modes/race';
 import type { Phase } from './state';
 
 export interface JoinCommand {
@@ -40,7 +38,12 @@ export type GameEvent =
   | { type: 'phaseChanged'; phase: Phase }
   | ({ type: 'stepped'; tick: number } & Stepped);
 
-/** The changes come with the mode that made them, so a reader has to narrow before it looks inside. */
-export type Stepped =
-  | { mode: 'cycles'; changes: TickChanges }
-  | { mode: 'race'; changes: RaceChanges };
+/**
+ * The changes come with the mode that made them, so a reader has to narrow before it looks
+ * inside. One member for every mode that steps; the clicker, whose changes are `never`, has none.
+ */
+export type Stepped = {
+  [K in ModeId]: [ModeTypes[K]['changes']] extends [never]
+    ? never
+    : { mode: K; changes: ModeTypes[K]['changes'] };
+}[ModeId];

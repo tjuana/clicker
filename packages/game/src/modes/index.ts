@@ -8,11 +8,24 @@ import type { TickChanges } from './cycles/step';
 import { type RaceInput, raceMode } from './race';
 import type { RaceChanges, RaceState } from './race/state';
 
-export type ModeId = 'clicker' | 'cycles' | 'race';
-export type ModeState = ClickerState | CyclesState | RaceState;
-export type ModeInput = ClickerInput | CyclesInput | RaceInput;
+/**
+ * The one table of modes. Every list of them — the ids, the unions of states and inputs, the
+ * registry, what a step reports, the protocol's cases — is derived from it, so adding a mode
+ * is one line here and a compile error everywhere a case is missing.
+ *
+ * `changes` is what a tick of a living mode reports, and `never` for a mode that does not step.
+ */
+export interface ModeTypes {
+  clicker: { state: ClickerState; input: ClickerInput; changes: never };
+  cycles: { state: CyclesState; input: CyclesInput; changes: TickChanges };
+  race: { state: RaceState; input: RaceInput; changes: RaceChanges };
+}
+
+export type ModeId = keyof ModeTypes;
+export type ModeState = ModeTypes[ModeId]['state'];
+export type ModeInput = ModeTypes[ModeId]['input'];
 /** What a tick of a living mode reports. The room carries it without looking inside. */
-export type ModeChanges = TickChanges | RaceChanges;
+export type ModeChanges = ModeTypes[ModeId]['changes'];
 
 /**
  * Everything the room asks of a game. Derived from two implementations, not designed ahead of
@@ -69,7 +82,13 @@ export interface Mode<S extends ModeState, I extends ModeInput, C extends ModeCh
   bots: boolean;
 }
 
-export const MODES = { clicker: clickerMode, cycles: cyclesMode, race: raceMode } as const;
+/** Typed by the table, so a mode registered under another's id, or left out, does not compile. */
+export const MODES: {
+  [K in ModeId]: Mode<ModeTypes[K]['state'], ModeTypes[K]['input'], ModeTypes[K]['changes']>;
+} = { clicker: clickerMode, cycles: cyclesMode, race: raceMode };
+
+/** Every mode's id, for a place that needs the list at run time: a schema's picklist. */
+export const MODE_IDS = Object.keys(MODES) as ModeId[];
 
 /**
  * The one place the mode's type is widened. `state.mode` and `state.modeState` always travel
