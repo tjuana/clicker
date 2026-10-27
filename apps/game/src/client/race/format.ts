@@ -1,3 +1,4 @@
+import { TILE } from '@clicker/game';
 import type { CarInfo } from './model';
 
 /** The slot whose car carries a public id, or -1. `info` changes only with a full. */
@@ -19,6 +20,11 @@ export function formatTicks(ticks: number | null, tickMs: number): string {
   const seconds = Math.floor(tenths / 10);
   const m = Math.floor(seconds / 60);
   return `${m}:${String(seconds % 60).padStart(2, '0')}.${tenths % 10}`;
+}
+
+/** A distance in units of the rules as tiles of the track, to a tenth. */
+export function formatTiles(units: number): string {
+  return (units / TILE).toFixed(1);
 }
 
 /**

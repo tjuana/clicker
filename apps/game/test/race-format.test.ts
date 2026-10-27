@@ -1,7 +1,9 @@
+import { TILE } from '@clicker/game';
 import { describe, expect, it } from 'vitest';
 import {
   bestAfterEvents,
   formatTicks,
+  formatTiles,
   lapShown,
   placeOf,
   slotOfId,
@@ -20,6 +22,12 @@ describe('race HUD arithmetic', () => {
     expect(formatTicks(1200, 50)).toBe('1:00.0');
     expect(formatTicks(1599, 50)).toBe('1:19.9');
     expect(formatTicks(null, 50)).toBe('');
+  });
+
+  it('turns units of the rules into tiles, to a tenth', () => {
+    expect(formatTiles(TILE * 3.2)).toBe('3.2');
+    expect(formatTiles(TILE)).toBe('1.0');
+    expect(formatTiles(0)).toBe('0.0');
   });
 
   it('shows the lap being driven, never past the last or before the first', () => {

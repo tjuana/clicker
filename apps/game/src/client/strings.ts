@@ -51,6 +51,7 @@ export const strings = {
     bestLap: 'Best lap',
     time: 'Time',
     noLap: '\u2014',
+    tilesShort: 'tiles short',
     lap: 'Lap',
     place: 'Place',
     of: 'of',

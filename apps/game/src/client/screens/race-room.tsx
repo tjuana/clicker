@@ -1,4 +1,4 @@
-import { formatTicks } from '../race/format';
+import { formatTicks, formatTiles } from '../race/format';
 import { raceColour } from '../race/hud';
 import { useClient } from '../store';
 import { strings } from '../strings';
@@ -47,7 +47,11 @@ export function RaceResults({
               </td>
               <td style={{ padding: 8, textAlign: 'right' }}>{row.laps}</td>
               <td style={{ padding: 8, textAlign: 'right' }}>
-                {row.finish === null ? strings.ringRace.noLap : formatTicks(row.finish, tickMs)}
+                {row.finish !== null
+                  ? formatTicks(row.finish, tickMs)
+                  : row.short !== null
+                    ? `${formatTiles(row.short)} ${strings.ringRace.tilesShort}`
+                    : strings.ringRace.noLap}
               </td>
               <td style={{ padding: 8, textAlign: 'right' }}>
                 {row.best === null ? strings.ringRace.noLap : formatTicks(row.best, tickMs)}

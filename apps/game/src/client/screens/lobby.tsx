@@ -45,7 +45,9 @@ export function Lobby({
     void (mode === 'cycles'
       ? import('../scene/cycles')
       : mode === 'race'
-        ? import('../scene/ring')
+        ? Promise.all([import('../scene/ring'), import('../race-preload')]).then(([, assets]) =>
+            assets.preloadRace(),
+          )
         : import('../scene/clicker'));
   }, [mode]);
 

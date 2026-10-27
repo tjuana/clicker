@@ -119,13 +119,17 @@ export function RaceArena({ onKeys }: { onKeys: (mask: number) => void }) {
   }, [running]);
 
   useEffect(() => {
+    // macOS sends no key-up for a key released while Cmd is down, so what was held is let go
+    // when Cmd goes down and again when it comes up.
     const onDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Meta') say(keys.current.clear());
       if (event.metaKey || event.ctrlKey || event.altKey || !(event.code in SOURCE_BITS)) return;
       // Arrows scroll the page unless told otherwise.
       event.preventDefault();
       say(keys.current.press(event.code));
     };
-    const onUp = (event: KeyboardEvent): void => say(keys.current.release(event.code));
+    const onUp = (event: KeyboardEvent): void =>
+      say(event.key === 'Meta' ? keys.current.clear() : keys.current.release(event.code));
     const onHidden = (): void => {
       if (document.visibilityState === 'hidden') say(keys.current.clear());
     };
