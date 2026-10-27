@@ -215,4 +215,13 @@ describe('the race mode', () => {
     const slotOf = (id: string) => state.cars[state.index[id] as number]?.slot;
     expect(['1', '2', '9', '10'].map(slotOf)).toEqual([0, 1, 2, 3]);
   });
+
+  it('keeps every slot where it was when a player is removed, and numbers a newcomer after them', () => {
+    let state = build(['1', '2', '3'], new Set());
+    state = raceMode.removePlayers(state, ['2']);
+    const slots = () => Object.fromEntries(state.cars.map((c) => [c.publicId, c.slot]));
+    expect(slots()).toEqual({ '1': 0, '3': 2 });
+    state = raceMode.addPlayer(state, '4', true, 0, config, settings);
+    expect(slots()).toEqual({ '1': 0, '3': 2, '4': 3 });
+  });
 });

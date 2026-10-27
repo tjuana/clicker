@@ -32,13 +32,12 @@ export const raceMode: Mode<RaceState, RaceInput, RaceChanges> = {
     const slot = state.cars.reduce((top, car) => Math.max(top, car.slot + 1), 0);
     return withCars(state, [...state.cars, { ...newCar(slot, publicId, bot), out: true }]);
   },
-  // Slots are renumbered so they stay 0…n-1, as the grid expects.
+  // Slots are left alone: the results are drawn per slot and are on the screen between races, so
+  // a player leaving must not repaint the others. `startRound` numbers them afresh.
   removePlayers: (state, publicIds) => {
     if (publicIds.length === 0) return state;
     const leaving = new Set(publicIds);
-    const cars = state.cars
-      .filter((car) => !leaving.has(car.publicId))
-      .map((car, slot) => ({ ...car, slot }));
+    const cars = state.cars.filter((car) => !leaving.has(car.publicId));
     return withCars(state, cars);
   },
   // Slots are given here, in the room's order of the public ids, and not when a player joins: the
