@@ -9,9 +9,12 @@ import { type Browser, expect, type Page, test } from '@playwright/test';
 const RACE_CALLS = 15;
 /**
  * The arena: 29 draws in every frame (the scene, the floor's reflection, the bloom's passes),
- * plus each of the four border boxes once in view and once in the reflection while in sight.
+ * plus each of the four border boxes while in view. With their culling turned off the count sits
+ * at 33, so 33 is the structure's ceiling, not a lucky reading. The minimum also guards the meter:
+ * with three's per-render reset left on, a frame reads 1 — the race's gates cannot see that, as
+ * its last render does not reset.
  */
-const CYCLES_CALLS = { min: 29, max: 37 };
+const CYCLES_CALLS = { min: 29, max: 33 };
 
 /** Host a room in `mode`, seat `bots` bots one at a time, start, and wait for the HUD. */
 async function host(page: Page, mode: 'race' | 'cycles', bots: number): Promise<void> {
