@@ -2,6 +2,7 @@ import { type ClientMessage, PROTOCOL_VERSION, parseServerMessage } from '@click
 import PartySocket from 'partysocket';
 import { turnSent } from './cycles/latency-store';
 import { clearCycles, feedCycles, followPhase } from './cycles/store';
+import { createHeldKeys } from './race/held-keys';
 import { clearRace, feedRace, followRacePhase } from './race/store';
 import { hostKeyFor, playerId } from './room-link';
 import { useClient } from './store';
@@ -64,7 +65,11 @@ export function connect(roomId: string, name: string): Connection {
     if (typeof event.data !== 'string') return;
     const message = parseServerMessage(event.data);
     if (message === null) return;
-    if (message.type === 'welcome') useClient.getState().welcome(message.you, message.isHost);
+    if (message.type === 'welcome') {
+      useClient.getState().welcome(message.you, message.isHost);
+      // A rejoin resets the car's keys on the room; a key still held must be said again.
+      held.resend();
+    }
     if (message.type === 'snapshot') {
       useClient.getState().receive(message);
       followPhase(message.phase);
@@ -86,6 +91,8 @@ export function connect(roomId: string, name: string): Connection {
     return send({ v: PROTOCOL_VERSION, ...message });
   };
 
+  const held = createHeldKeys((mask) => command({ type: 'input', input: { type: 'keys', mask } }));
+
   return {
     start: () => {
       useClient.getState().clearError();
@@ -105,7 +112,7 @@ export function connect(roomId: string, name: string): Connection {
     },
     boost: () => command({ type: 'input', input: { type: 'boost' } }),
     wall: (on) => command({ type: 'input', input: { type: 'wall', on } }),
-    keys: (mask) => command({ type: 'input', input: { type: 'keys', mask } }),
+    keys: (mask) => held.set(mask),
     setMode: (mode) => command({ type: 'setMode', mode }),
     setSpeed: (speed) => command({ type: 'setSpeed', speed }),
     setWalls: (walls) => command({ type: 'setWalls', walls }),
