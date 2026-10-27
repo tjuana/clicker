@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { bestAfterLap, formatTicks, lapShown, placeOf, slotOfId } from '../src/client/race/format';
+import {
+  bestAfterEvents,
+  formatTicks,
+  lapShown,
+  placeOf,
+  slotOfId,
+} from '../src/client/race/format';
 
 describe('race HUD arithmetic', () => {
   it('reads the place off the order, from one, and 0 when the car is not on the field', () => {
@@ -22,12 +28,13 @@ describe('race HUD arithmetic', () => {
     expect(lapShown(4, 3)).toBe(3);
   });
 
-  it('improves the best lap on a crossing, but not on the first or a cut-short lap', () => {
-    expect(bestAfterLap(null, 0, 900, 1)).toBeNull();
-    expect(bestAfterLap(null, 100, 900, 2)).toBe(800);
-    expect(bestAfterLap(800, 900, 1800, 3)).toBe(800);
-    expect(bestAfterLap(800, 900, 1600, 3)).toBe(700);
-    expect(bestAfterLap(800, -1, 1600, 3)).toBe(800);
+  it('takes the best lap from the times on the lap events of the own slot', () => {
+    const lap = (slot: number, time: number | null) => ({ type: 'lap', slot, lap: 2, time });
+    expect(bestAfterEvents(null, [lap(1, null)], 1)).toBeNull();
+    expect(bestAfterEvents(null, [lap(1, 800)], 1)).toBe(800);
+    expect(bestAfterEvents(800, [lap(1, 900)], 1)).toBe(800);
+    expect(bestAfterEvents(800, [lap(1, 700), lap(1, 750)], 1)).toBe(700);
+    expect(bestAfterEvents(800, [lap(2, 100), { type: 'bump', slot: 1 }], 1)).toBe(800);
   });
 
   it('finds the slot of a public id', () => {

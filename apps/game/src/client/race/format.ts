@@ -30,17 +30,19 @@ export function lapShown(lap: number, laps: number): number {
 }
 
 /**
- * The best lap after a car crossed the line at `tick` to start lap `lap`, given the tick its
- * previous lap began on. A lap cut short has no start (-1) and so no time, and the first crossing
- * ends no lap at all.
+ * The best lap after a tick's events: the shortest time the rules reported for this slot's laps. A
+ * crossing that ended no lap carries no time, so it changes nothing.
  */
-export function bestAfterLap(
+export function bestAfterEvents(
   best: number | null,
-  lapStart: number,
-  tick: number,
-  lap: number,
+  events: readonly { type: string; slot: number; time?: number | null }[],
+  slot: number,
 ): number | null {
-  if (lap < 2 || lapStart < 0) return best;
-  const time = tick - lapStart;
-  return best === null || time < best ? time : best;
+  let result = best;
+  for (const event of events) {
+    if (event.type !== 'lap' || event.slot !== slot) continue;
+    const time = event.time ?? null;
+    if (time !== null && (result === null || time < result)) result = time;
+  }
+  return result;
 }

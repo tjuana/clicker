@@ -1,8 +1,4 @@
-/** The bits of the race's `keys` input, as the wire defines them (the rules do not export them). */
-export const GAS = 1;
-export const BRAKE = 2;
-export const LEFT = 4;
-export const RIGHT = 8;
+import { BRAKE, GAS, LEFT, RIGHT } from '@clicker/game';
 
 /**
  * Every source that can hold a bit: keys and the on-screen buttons. Several sources may hold the

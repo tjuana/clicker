@@ -1,5 +1,6 @@
+import { BRAKE, GAS, LEFT, RIGHT } from '@clicker/game';
 import { describe, expect, it } from 'vitest';
-import { BRAKE, createRaceKeys, GAS, LEFT, RIGHT } from '../src/client/race/keys';
+import { createRaceKeys } from '../src/client/race/keys';
 
 describe('race keys', () => {
   it('combines held keys into a mask', () => {

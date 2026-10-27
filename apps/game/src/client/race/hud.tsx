@@ -3,7 +3,7 @@ import { SLOT_CSS } from '../cycles/hud';
 import { useClient } from '../store';
 import { strings } from '../strings';
 import { theme } from '../theme';
-import { bestAfterLap, formatTicks, lapShown, placeOf, slotOfId } from './format';
+import { bestAfterEvents, formatTicks, lapShown, placeOf, slotOfId } from './format';
 import { FINISHED } from './model';
 import { onRaceEvents, useRace } from './store';
 
@@ -82,34 +82,25 @@ function RaceTime() {
 
 /**
  * The best lap. A `full` carries it, but a full comes only on a join or a resync, so each lap
- * event of the player's own car refreshes it from the tick the lap began on.
+ * event of the player's own car refreshes it with the time the rules put on it.
  */
 function BestLap() {
   const slot = useOwnSlot();
   const fromFull = useRace((state) => state.model?.info.get(slot)?.best ?? null);
   const tickMs = useRace((state) => state.model?.tickMs ?? 0);
   const [shown, setShown] = useState<number | null>(null);
-  // The lap began at the full's `lapStart` or at the last crossing seen here.
-  const lapStart = useRef(-1);
   const best = useRef<number | null>(null);
 
   useEffect(() => {
-    const model = useRace.getState().model;
-    lapStart.current = model?.info.get(slot)?.lapStart ?? -1;
     best.current = fromFull;
     setShown(fromFull);
-  }, [slot, fromFull]);
+  }, [fromFull]);
 
   useEffect(
     () =>
       onRaceEvents((events) => {
-        const tick = useRace.getState().model?.tick ?? 0;
-        for (const event of events) {
-          if (event.type !== 'lap' || event.slot !== slot) continue;
-          best.current = bestAfterLap(best.current, lapStart.current, tick, event.lap);
-          lapStart.current = tick;
-          setShown(best.current);
-        }
+        best.current = bestAfterEvents(best.current, events, slot);
+        setShown(best.current);
       }),
     [slot],
   );
