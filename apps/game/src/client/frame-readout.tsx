@@ -55,7 +55,9 @@ export function FrameReadout() {
         pointerEvents: 'none',
         padding: '3px 8px',
         borderRadius: 4,
-        background: `${theme.bg}cc`,
+        // Opaque: on a phone the line wraps onto the controls' hint, and see-through text over text is unreadable.
+        background: theme.bg,
+        border: `1px solid ${theme.border}`,
         color: theme.text,
         fontSize: 11,
         fontVariantNumeric: 'tabular-nums',
