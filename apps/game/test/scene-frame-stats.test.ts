@@ -30,11 +30,18 @@ const DISJOINT = 0x8fbb;
 const AVAILABLE = 0x8867;
 const RESULT = 0x8866;
 
-/** A GPU that finishes each query `lag` collections after it ended, every one taking `ns`. */
+/**
+ * A GPU that finishes each query `lag` collections after it ended, every one taking `ns`. It breaks
+ * the rules the way WebGL does, which is not by throwing: a second query begun while one is open
+ * is refused and nothing happens, and asking a query that is running or was never begun for its
+ * result answers null. Each of those counts as an error.
+ */
 function fakeGpu(ns: number, lag = 1) {
   let made = 0;
+  let errors = 0;
   let disjoint = false;
   let open: object | null = null;
+  // Queries that have ended, and how many frames ago: only these have a result to ask for.
   const ages = new Map<object, number>();
   const gl: TimerContext = {
     QUERY_RESULT: RESULT,
@@ -45,15 +52,29 @@ function fakeGpu(ns: number, lag = 1) {
     },
     deleteQuery: () => {},
     beginQuery: (_target, query) => {
-      if (open !== null) throw new Error('a query is already open');
+      if (open !== null) {
+        errors += 1;
+        return;
+      }
       open = query;
+      ages.delete(query);
     },
     endQuery: () => {
-      if (open === null) throw new Error('no query is open');
+      if (open === null) {
+        errors += 1;
+        return;
+      }
       ages.set(open, 0);
       open = null;
     },
-    getQueryParameter: (query, name) => (name === AVAILABLE ? (ages.get(query) ?? 0) >= lag : ns),
+    getQueryParameter: (query, name) => {
+      const age = ages.get(query);
+      if (age === undefined) {
+        errors += 1;
+        return null;
+      }
+      return name === AVAILABLE ? age >= lag : ns;
+    },
     getParameter: (name) => (name === DISJOINT ? disjoint : null),
   };
   const ext = { TIME_ELAPSED_EXT: TIME_ELAPSED, GPU_DISJOINT_EXT: DISJOINT };
@@ -66,6 +87,7 @@ function fakeGpu(ns: number, lag = 1) {
     ext,
     tick,
     made: () => made,
+    errors: () => errors,
     interrupt: () => {
       disjoint = true;
     },
@@ -126,6 +148,23 @@ describe('the GPU timer', () => {
       timer.end();
     }
     expect(gpu.made()).toBeLessThanOrEqual(8);
+  });
+
+  it('keeps timing after a frame that never reached its end', () => {
+    const gpu = fakeGpu(1_000_000);
+    const timer = createGpuTimer(gpu.gl, gpu.ext);
+    const got: number[] = [];
+    // R3F runs a frame outside any try: one that throws skips the after-effect and never ends
+    // the query it opened.
+    timer.begin();
+    for (let frame = 0; frame < 20; frame++) {
+      timer.collect((ms) => got.push(ms));
+      timer.begin();
+      timer.end();
+      gpu.tick();
+    }
+    expect(got.length).toBeGreaterThanOrEqual(18);
+    expect(gpu.errors()).toBe(0);
   });
 
   it('throws away every frame in flight when the GPU was interrupted', () => {

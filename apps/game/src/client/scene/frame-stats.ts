@@ -72,6 +72,13 @@ export function createGpuTimer(gl: TimerContext, ext: TimerExtension) {
 
   return {
     begin(): void {
+      // The last frame threw before its end: R3F runs frames outside any try. WebGL would refuse a
+      // second open query, so that one is closed and its half-frame result thrown away.
+      if (open !== null) {
+        gl.endQuery(ext.TIME_ELAPSED_EXT);
+        free.push(open);
+        open = null;
+      }
       const query = free.pop();
       if (query === undefined) return;
       gl.beginQuery(ext.TIME_ELAPSED_EXT, query);
