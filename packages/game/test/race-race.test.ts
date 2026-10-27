@@ -191,7 +191,10 @@ describe('the finish', () => {
   });
 
   it('goes on under its own steam, whatever the keys say, and counts no more laps', () => {
-    let state = stepRace(crossing(3), track, RACE).state;
+    // Somebody is still racing, or the race would be over and the step would do nothing.
+    const start = crossing(3);
+    const other = { ...newCar(1, 'p1', false), piece: 3, lap: 1 };
+    let state = stepRace({ ...start, cars: [...start.cars, other] }, track, RACE).state;
     state = run({ ...state, cars: state.cars.map((c) => ({ ...c, keys: BRAKE | LEFT })) }, 400);
     const car = state.cars[0];
     expect(car?.finish).toBe(501);
@@ -302,6 +305,19 @@ describe('the step', () => {
     const before = structuredClone(moving);
     stepRace(moving, track, RACE);
     expect(moving).toEqual(before);
+  });
+
+  it('does nothing once the race is over', () => {
+    const racing = {
+      ...field(2),
+      cars: field(2).cars.map((c) => ({ ...c, keys: GAS, speed: 100 })),
+    };
+    for (const over_ of [{ tick: RACE.cap }, { tick: 500, firstFinish: 500 - RACE.afterFirst }]) {
+      const ended = { ...racing, ...over_ };
+      const { state, changes } = stepRace(ended, track, RACE);
+      expect(state).toEqual(ended);
+      expect(changes).toEqual({ laps: [], finished: [], bumped: [] });
+    }
   });
 
   it('moves every car and the clock', () => {

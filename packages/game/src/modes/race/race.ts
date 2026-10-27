@@ -132,6 +132,9 @@ export function stepRace(
   track: Track,
   config: RaceConfig,
 ): { state: RaceState; changes: RaceChanges } {
+  // A race that is over stays as it ended: a late tick must not add a finish, or move the
+  // results the players have already been shown.
+  if (over(state, config)) return { state, changes: { laps: [], finished: [], bumped: [] } };
   const tick = state.tick + 1;
   const cars = state.cars.map((car) => ({ ...car }));
   // A car that joined mid-race is not on the field: it is neither driven, nor bumped, nor
