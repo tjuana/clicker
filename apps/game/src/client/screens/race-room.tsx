@@ -1,21 +1,38 @@
+import { lazy, Suspense } from 'react';
 import { useClient } from '../store';
 import { strings } from '../strings';
 import { theme } from '../theme';
 import { Button, ErrorNote, LinkButton, Screen } from '../ui';
 import { HostSettings, type RoomSettings } from './host-settings';
 
+/** three.js is about a megabyte: the entry screens must not carry it. */
+const Ring = lazy(() => import('../scene/ring'));
+
 const head = { textAlign: 'left', color: theme.muted, padding: 8 } as const;
 
-/** Stands where the arena will be until the ring race has a scene (plan 13). */
+/**
+ * Stands where the arena will be until the race screen exists (plan 13, task 5): the track,
+ * seen from above, with the text over it.
+ */
 export function RacePlaceholder({ onLeave }: { onLeave: () => void }) {
   return (
     <Screen>
-      <p data-testid="race-placeholder" style={{ fontSize: 22, margin: 0 }}>
+      <div style={{ position: 'fixed', inset: 0, zIndex: 0 }}>
+        <Suspense fallback={null}>
+          <Ring />
+        </Suspense>
+      </div>
+      <p
+        data-testid="race-placeholder"
+        style={{ fontSize: 22, margin: 0, position: 'relative', zIndex: 1 }}
+      >
         {strings.ringRace.comingSoon}
       </p>
-      <LinkButton testId="leave" onClick={onLeave}>
-        {strings.leave}
-      </LinkButton>
+      <div style={{ position: 'relative', zIndex: 1 }}>
+        <LinkButton testId="leave" onClick={onLeave}>
+          {strings.leave}
+        </LinkButton>
+      </div>
     </Screen>
   );
 }

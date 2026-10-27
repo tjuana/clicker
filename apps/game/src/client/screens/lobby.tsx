@@ -42,7 +42,7 @@ export function Lobby({
   // loading a megabyte of three.js in the middle of it costs the player real clicks:
   // the countdown keeps running on the server while the browser is busy compiling.
   useEffect(() => {
-    void (mode === 'cycles' ? import('../scene/cycles') : import('../scene/race'));
+    void (mode === 'cycles' ? import('../scene/cycles') : import('../scene/clicker'));
   }, [mode]);
 
   return (

@@ -12,5 +12,7 @@ export default defineConfig({
     }),
   ],
   // End-to-end tests live in e2e/ and run under Playwright: they can't run inside workerd.
+  // The Kit's models are read by the scene's tests as inlined data (they are not importable otherwise).
+  assetsInclude: ['**/*.glb'],
   test: { include: ['test/**/*.test.ts'] },
 });
