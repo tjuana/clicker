@@ -2,6 +2,7 @@ import { TILE, TRACKS } from '@clicker/game';
 import type { Box3, BufferGeometry, Object3D } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { describe, expect, it } from 'vitest';
+import { buildTrack, point } from '../../../packages/game/src/modes/race/track';
 import corner2 from '../public/race/roadCornerLarge.glb?inline';
 import corner3 from '../public/race/roadCornerLarger.glb?inline';
 import corner1 from '../public/race/roadCornerSmall.glb?inline';
@@ -193,5 +194,105 @@ describe('the barriers', () => {
       }
     }
     expect(clashes).toEqual([]);
+  });
+});
+
+/**
+ * The scene is a drawing of the rules' track, so it is held to the rules' own geometry: a scene
+ * that agrees only with itself (shifted a tile, or a corner turned a quarter) would draw the
+ * barriers where the cars do not collide with them.
+ */
+describe('the scene track against the rules track', () => {
+  const rules = buildTrack(ring);
+
+  it('walks every piece to the same entry pose, ring and turn', () => {
+    expect(pieces.length).toBe(rules.pieces.length);
+    pieces.forEach((own, i) => {
+      const theirs = rules.pieces[i];
+      if (theirs === undefined) throw new Error('no such piece');
+      expect(own.kind, `piece ${i} kind`).toBe(theirs.kind);
+      expect([own.x, own.y, own.dir], `piece ${i} entry`).toEqual([
+        theirs.x / TILE,
+        theirs.y / TILE,
+        theirs.dir,
+      ]);
+      if (own.kind === 'corner' && theirs.kind === 'corner') {
+        expect([own.cx, own.cy, own.rc, own.side, own.right], `piece ${i} ring`).toEqual([
+          theirs.cx / TILE,
+          theirs.cy / TILE,
+          theirs.rc / TILE,
+          theirs.side,
+          theirs.right,
+        ]);
+      }
+    });
+  });
+
+  it('draws exactly the tiles the rules claim, each for its own piece', () => {
+    const wanted = new Map<string, number>();
+    for (const [key, owner] of rules.tiles) {
+      const stride = 2 * 4096 + 1;
+      wanted.set(`${Math.floor(key / stride) - 4096},${(key % stride) - 4096}`, owner);
+    }
+    const drawn = new Map<string, number>();
+    for (const place of placements(pieces)) {
+      const size = place.model === 'straight' ? 1 : Number(place.model.slice(6));
+      for (let a = 0; a < size; a++) {
+        for (let b = 0; b < size; b++) {
+          drawn.set(
+            `${Math.round(place.x - size / 2) + a},${Math.round(place.z - size / 2) + b}`,
+            place.piece,
+          );
+        }
+      }
+    }
+    expect(drawn).toEqual(wanted);
+  });
+
+  /** Whether the ground-plane point lies in any triangle of the geometry. */
+  function covers(geometry: BufferGeometry, x: number, z: number): boolean {
+    const position = geometry.getAttribute('position');
+    const index = geometry.getIndex();
+    const count = index === null ? position.count : index.count;
+    const vertex = (n: number) => (index === null ? n : index.getX(n));
+    for (let t = 0; t < count; t += 3) {
+      const a = vertex(t);
+      const b = vertex(t + 1);
+      const c = vertex(t + 2);
+      const side = (p: number, q: number) =>
+        (position.getX(q) - position.getX(p)) * (z - position.getZ(p)) -
+        (position.getZ(q) - position.getZ(p)) * (x - position.getX(p));
+      const s1 = side(a, b);
+      const s2 = side(b, c);
+      const s3 = side(c, a);
+      if ((s1 >= 0 && s2 >= 0 && s3 >= 0) || (s1 <= 0 && s2 <= 0 && s3 <= 0)) return true;
+    }
+    return false;
+  }
+
+  it('lays asphalt, kerb and grass at the lateral offsets the rules would put a car', () => {
+    const expected = [
+      [0, 'road'],
+      [0.3, 'road'],
+      [-0.3, 'road'],
+      [0.38, 'kerb'],
+      [-0.38, 'kerb'],
+      [0.46, 'grass'],
+      [-0.46, 'grass'],
+    ] as const;
+    pieces.forEach((_, i) => {
+      const own = placements(pieces).filter((place) => place.piece === i);
+      const geometry = bake(models, own);
+      const length = rules.pieces[i]?.length ?? 0;
+      for (const share of [0.1, 0.3, 0.5, 0.7, 0.9]) {
+        for (const [lateral, layer] of expected) {
+          const at = point(rules, i, length * share, lateral * TILE);
+          expect(
+            covers(geometry[layer], at.x / TILE, at.y / TILE),
+            `piece ${i} at ${share} lateral ${lateral} wants ${layer}`,
+          ).toBe(true);
+        }
+      }
+    });
   });
 });
