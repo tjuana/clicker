@@ -119,6 +119,35 @@ describe('laps', () => {
     expect(state.cars[0]?.finish).toBeNull();
   });
 
+  it('counts a lap once when a bump pushes the car back over the line', () => {
+    // A crosses the line at speed into B, which stands just past it: the bump shoves A back
+    // behind the line in the same tick it crossed it.
+    const a = placed(last, lastLength - 20, { speed: 150, keys: GAS, lap: 0 }).cars[0] as Car;
+    const spot = point(track, 0, 300, 0);
+    const b: Car = {
+      ...newCar(1, 'p1', false),
+      x: spot.x,
+      y: spot.y,
+      heading: spot.heading,
+      piece: 0,
+      lap: 1,
+    };
+    let state: RaceState = emptyRace('ring', 7, [a, b]);
+    let events = 0;
+    let lowest = 0;
+    for (let i = 0; i < 400; i += 1) {
+      const step = stepRace(state, track, RACE);
+      events += step.changes.laps.filter((l) => l.slot === 0).length;
+      const lap = step.state.cars[0]?.lap ?? 0;
+      expect(lap).toBeGreaterThanOrEqual(lowest);
+      lowest = lap;
+      state = step.state;
+    }
+    // Every lap on the card was announced once, and the car did get over the line in the end.
+    expect(events).toBe(state.cars[0]?.lap);
+    expect(events).toBe(1);
+  });
+
   it('records no best lap for a re-crossing after reversing over the line', () => {
     let state = placed(0, 150, { speed: -50, keys: BRAKE, lap: 2, lapStart: 5 }, 30);
     state = run(state, 8);

@@ -5,7 +5,7 @@ import { bump } from './bump';
 import { type Car, drive } from './car';
 import type { RaceConfig } from './config';
 import type { RaceChanges, RaceResultRow, RaceState } from './state';
-import { point, project, type Track } from './track';
+import { point, project, type Track, walk } from './track';
 
 /**
  * How far round the track a car is, in units: the laps it has completed, the pieces before its
@@ -124,8 +124,8 @@ export function raceResults(state: RaceState, track: Track, config: RaceConfig):
 
 /**
  * One tick of the race. The cars are copied and the copies driven, so the state it was given
- * is left as it was. Order: drive, bump, then the start line, because a lap belongs to what the
- * car did and not to where a push left it.
+ * is left as it was. Order: drive, bump, then the start line, counted from where the car
+ * ends up: a push over the line one way and a drive over it the other cancel.
  */
 export function stepRace(
   state: RaceState,
@@ -156,6 +156,15 @@ export function stepRace(
   const beforeX = Int32Array.from(live, (car) => car.x);
   const beforeY = Int32Array.from(live, (car) => car.y);
   bump(live, track.bounds, config);
+  // A push can carry a car back over the line it has just crossed. Its piece is then stale and
+  // the next tick would count the same crossing again, as a lap lost and a lap won; walking it
+  // here puts the push in this tick's count, where the two cancel.
+  for (let i = 0; i < live.length; i += 1) {
+    const car = live[i] as Car;
+    const moved = walk(track, car.piece, car.x, car.y);
+    car.piece = moved.piece;
+    crossings[i] = (crossings[i] as number) + moved.crossed;
+  }
 
   const changes: RaceChanges = { laps: [], finished: [], bumped: [] };
   let firstFinish = state.firstFinish;
