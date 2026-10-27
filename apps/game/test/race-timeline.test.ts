@@ -154,6 +154,22 @@ describe('the race timeline', () => {
     expect(sample?.cars[0]?.x).toBeCloseTo(5990.5 * 3);
   });
 
+  it('replaces the newest tick when a full comes for the same tick, and never divides by zero', () => {
+    const timeline = createRaceTimeline(TICK_MS);
+    for (let t = 1; t <= 5; t += 1) {
+      timeline.arrive(modelAt(t, [[0, t * 100, 0]]), origin + t * TICK_MS, true);
+    }
+    // A car joined, or this client asked: the same tick again, now with other figures.
+    timeline.arrive(modelAt(5, [[0, 999, 0]]), origin + 5 * TICK_MS + 5, false);
+    expect(timeline.held()).toBe(5);
+    for (const at of [4.2, 4.9, 5, 7]) {
+      const car = timeline.sample(origin + at * TICK_MS + DELAY_MS)?.cars[0];
+      expect(Number.isFinite(car?.x)).toBe(true);
+      expect(Number.isFinite(car?.alpha)).toBe(true);
+    }
+    expect(timeline.sample(origin + 7 * TICK_MS + DELAY_MS)?.cars[0]?.x).toBe(999);
+  });
+
   it('reuses its sample, so a frame allocates nothing', () => {
     const timeline = createRaceTimeline(TICK_MS);
     for (let t = 1; t <= 5; t += 1) {
