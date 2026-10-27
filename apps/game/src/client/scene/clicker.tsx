@@ -11,6 +11,7 @@ import {
   Vector3,
 } from 'three';
 import { theme } from '../theme';
+import { FrameMeter } from './frame-meter';
 import { distanceToFit, gridFor, slotFor } from './layout';
 
 /**
@@ -239,6 +240,7 @@ export default function Race({ racers, you }: { racers: Racer[]; you: string | n
       camera={{ position: [-4.2, 2.1, 6.4], fov: 42 }}
       style={{ width: '100%', height: '100%' }}
     >
+      <FrameMeter />
       {/* Dusk rather than noon. A daylight sky inside this near-black page read as a bright
           patch cut into it; an evening one keeps the arcade colours but belongs to the same
           room as the dark panels around it. The key light stays warm so the cars still look

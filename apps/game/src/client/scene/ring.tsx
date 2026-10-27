@@ -17,6 +17,7 @@ import {
   Vector3,
 } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { FrameMeter } from './frame-meter';
 import { Racers } from './race';
 import {
   ASSETS,
@@ -259,6 +260,7 @@ export default function Ring({ track = 'ring' }: { track?: string }) {
       camera={{ fov: OVERVIEW.fov, near: OVERVIEW.near, far: OVERVIEW.far }}
       style={{ width: '100%', height: '100%' }}
     >
+      <FrameMeter />
       <Suspense fallback={null}>
         <Environment
           files={SKY}
