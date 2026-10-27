@@ -292,3 +292,12 @@ describe('the race mode', () => {
     expect(slots()).toEqual({ '1': 0, '3': 2, '4': 3 });
   });
 });
+
+describe('the keys of the input', () => {
+  it('are four distinct bits, exported for the wire', async () => {
+    const game = await import('../src');
+    const bits = [game.GAS, game.BRAKE, game.LEFT, game.RIGHT];
+    expect(new Set(bits).size).toBe(4);
+    expect(bits.reduce((a, b) => a | b, 0)).toBe(15);
+  });
+});

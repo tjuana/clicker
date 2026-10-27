@@ -247,6 +247,23 @@ describe('the race full', () => {
     expect(full.cars.find((car) => car.id === '2')?.bot).toBe(true);
   });
 
+  it('carries a lap with no time as null, and refuses a lap event without the field', () => {
+    const { state } = raceRoom(1, 1);
+    const delta = toDelta(state, {
+      type: 'stepped',
+      tick: 9,
+      mode: 'race',
+      changes: { laps: [{ slot: 0, lap: 1, time: null }], finished: [], bumped: [] },
+    });
+
+    if (delta.mode !== 'race') throw new Error('expected a race delta');
+    expect(delta.events).toEqual([{ type: 'lap', slot: 0, lap: 1, time: null }]);
+    expect(parseServerMessage(JSON.stringify(delta))).toEqual(delta);
+
+    const bare = { ...delta, events: [{ type: 'lap', slot: 0, lap: 1 }] };
+    expect(parseServerMessage(JSON.stringify(bare))).toBeNull();
+  });
+
   it('is refused without its mode', () => {
     const { mode: _mode, ...bare } = toFull(raceRoom(1, 1).state) as NonNullable<
       ReturnType<typeof toFull>
@@ -324,12 +341,12 @@ describe('the race delta', () => {
       type: 'stepped',
       tick: 9,
       mode: 'race',
-      changes: { laps: [{ slot: 1, lap: 2 }], finished: [0], bumped: [1, 0] },
+      changes: { laps: [{ slot: 1, lap: 2, time: 410 }], finished: [0], bumped: [1, 0] },
     });
 
     if (delta.mode !== 'race') throw new Error('expected a race delta');
     expect(delta.events).toEqual([
-      { type: 'lap', slot: 1, lap: 2 },
+      { type: 'lap', slot: 1, lap: 2, time: 410 },
       { type: 'finished', slot: 0 },
       { type: 'bump', slot: 1 },
       { type: 'bump', slot: 0 },

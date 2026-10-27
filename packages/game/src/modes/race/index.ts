@@ -1,4 +1,4 @@
-export { onField } from './car';
+export { BRAKE, GAS, LEFT, onField, RIGHT } from './car';
 export { RACE, type RaceConfig } from './config';
 export { TILE, TURN } from './fixed';
 export { carFlags, carsInOrder, type RaceInput, raceMode } from './mode';

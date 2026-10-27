@@ -2,7 +2,13 @@ import type { Car } from './car';
 
 export interface RaceChanges {
   /** Cars that crossed the start line forward this tick, with the lap they are now on. */
-  laps: { slot: number; lap: number }[];
+  /**
+   * `time` is the lap just finished, in ticks between this crossing and the previous one. It is
+   * null when there is no such lap: the first crossing only starts lap 1, and a lap that was cut
+   * short (the car reversed over the line) has no honest start. Null exactly when the car's
+   * best lap is left unchanged.
+   */
+  laps: { slot: number; lap: number; time: number | null }[];
   /** Slots that completed the last lap this tick. */
   finished: number[];
   /** Slots of cars that began touching another car this tick: one event per contact, not per tick of it. */

@@ -25,8 +25,11 @@ export {
   type WallMode,
 } from './modes/cycles';
 export {
+  BRAKE,
   carFlags,
   carsInOrder,
+  GAS,
+  LEFT,
   onField,
   type Piece,
   RACE,
@@ -34,6 +37,7 @@ export {
   type RaceInput,
   type RaceResultRow,
   type RaceState,
+  RIGHT,
   TILE,
   TRACKS,
   type TrackData,
