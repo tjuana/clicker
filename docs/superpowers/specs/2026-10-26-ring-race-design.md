@@ -240,3 +240,19 @@ What plan 11's review changed:
   while it runs and the results as a table. A whole three-lap race through the room was not tested
   in workerd — it takes a minute of real time — and its "everyone finished" end is tested on the
   rules; plan 13's end-to-end test races in a browser.
+
+What plan 12's review changed:
+
+- **One table of mode types** (`ModeTypes`) is the source of `ModeId`, the unions, `MODES`, the
+  `stepped` event and the protocol's `setMode` list; the protocol's per-mode functions are
+  exhaustive `switch`es. Registering a mode twice, swapping two, or adding one without its wire
+  format is a compile error — checked by doing each once.
+- **A bump is the moment contact begins**; contact itself is bit 3 of a car's flags. Before, a
+  "bump" fired on nearly every tick for the cars in a pack and made up a third of each delta.
+- **Names are fixed into the results at the finish**; an absent rider's car is never sent as a bot;
+  a car that joins in the countdown takes the next grid spot and races.
+- **For the race client**: cars on the wire are in race order (key them by slot: the order changes
+  from tick to tick), the snapshot's race data carries `tickMs`, and the `full` carries each car's
+  best lap and lap start. The track's piece list, `TILE` and `TURN` are exported as data.
+- Measured again over a whole twenty-car race: a delta of 609 bytes on average and 804 at most,
+  about 18 KB/s per player.
