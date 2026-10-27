@@ -241,7 +241,9 @@ Every step ends with a row here: what it measured before and after, and what tha
 | Frame meter (plan 14) | 18.1–18.3 | "120 fps" — the vsync cap, in every plan from 8 to 13 | M2 Pro, 1280 × 760, twenty players, vsync on: race GPU 1.20 ms (worst p95 2.01), CPU 0.30 ms (1.40), 15 draw calls, 64 k triangles; arena GPU 2.66 ms (4.46), CPU 0.30 ms (1.40), 29–33 calls, ~80 k triangles; clicker alone GPU 0.22 ms, 59 calls | The frame budget is 16.7 ms: the race uses about a fifth of it in the worst second and the arena about a third. Draw calls are gated in CI. On its first runs the gate caught plan 13 fetching the race's models again at the start and showing a blank race for two seconds in development (fixed). |
 
 Measured on the M2 only. A phone's budget is still unknown: the next number worth having is the
-same `measure` run on a mid-range Android phone over USB.
+same measurement on a mid-range Android phone over USB. Prototype that first: whether Chrome on
+Android exposes `EXT_disjoint_timer_query_webgl2` is unverified, and `measure` is desktop-only
+(headed Chromium, `--use-angle=metal`, `localhost`).
 
 The exercises, highest return first. The owner writes each one; `qa` writes its red test first;
 the frame meter measures it before and after, and the row above gets a sibling.
@@ -264,3 +266,18 @@ the frame meter measures it before and after, and the row above gets a sibling.
 6. **Ambient occlusion in the race** (RTR 11.3; P5), desktop only, its cost read off the meter.
 
 P7 and P8 only if the owner wants them.
+
+Traps plan 14's review found on the way to these exercises:
+
+- **An instanced mesh with no instances draws nothing** (`WebGLBufferRenderer.js`: a `count` of 0
+  issues no call). The arena's floor of 29 calls holds because a bike's spawn cell is already a
+  wall when the gate reads. A particle pool will make the count depend on whether any particle is
+  alive, so its gate needs a moment when that cannot change.
+- **`addEffect` is global and the readout's store is one.** Two canvases mounted at once would mix
+  their figures, and each frame's CPU bracket would hold both roots. Not reachable today: a screen
+  has one canvas.
+- **The draw count is the median of nine frames,** so a change in structure shows on the line
+  within five frames, not on the first one.
+- **`OutputPass` and ambient occlusion move the gates' constants** (`RACE_CALLS`,
+  `CYCLES_CALLS` in `e2e/frame.spec.ts`) — by design: the exercise changes the number, and the
+  commit says why.
