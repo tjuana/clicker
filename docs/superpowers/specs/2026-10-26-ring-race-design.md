@@ -41,8 +41,11 @@ interface TrackData { id: string; name: string; start: { x: number; y: number; d
 ```
 
 A **validator** (plan 5's A16) checks that the chain closes on its start pose, that no two pieces
-claim a tile, that the last two pieces are straights (the grid stands on them, behind a start line
-at the end of the main straight) and that the straights before the line are long enough for the grid of `maxCars` cars (rows of two, 0.4 tile apart, plus one car's length), and that the numbers are integers in range. A track that fails it never loads.
+claim a tile, that the straights before the start line (at the end of the main straight) are long
+enough for the grid of `maxCars` cars — rows of two, 0.4 tile apart, plus a car's length — and that
+the numbers are integers in range. A track that fails it never loads. The Ring passes with four
+units to spare: a longer grid row, a bigger car or a shorter final straight will need a longer
+straight there.
 
 A car's place on the track is its piece and its `(along, lateral)` in that piece: along the
 centreline and across it. A straight projects linearly; a corner by its distance from the centre
@@ -190,3 +193,16 @@ steering; binary snapshots.
   and makes the room carry either kind of changes.
 - Measured: a lone bot runs three laps of the Ring in 62.0 s without touching a wall; twenty bots
   finish between 62.0 and 70.1 s, nobody is slower than 10 units for more than 3 ticks.
+
+What plan 11's review changed:
+
+- **A car that joins mid-race sits out** (`out`) until the next race; it was placed at the origin,
+  walked back over the line and blocked the "everyone finished" end.
+- **A rider who comes back finds no keys held**, and a car whose rider was absent at the start
+  cruises (`abandoned`) instead of racing at a bot's pace and taking a bot's draw from the seed.
+- **A bump that pushes a car back over the line counts once**: every car is walked again after the
+  bumps and that crossing joins the tick's.
+- **The grid follows the room's numeric order of public ids**; slots stay fixed between races, so
+  the results keep their colours; **a race that is over does not step**.
+- Recorded for plan 12: the `Mode` typing let the race be registered with no type error while the
+  worker would have sent empty deltas.
