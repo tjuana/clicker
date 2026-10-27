@@ -154,6 +154,20 @@ describe('applyDelta', () => {
     expect(fromFull(fullOf([5, 1])).cars.get(1)?.flags).toBe(0);
   });
 
+  it('drops a car the delta no longer lists', () => {
+    const model = fromFull(fullOf([0, 1]));
+    const result = applyDelta(model, deltaOf(11, [1, 9, 9, 9, 9, 0, 0]));
+    expect([...(result?.model.cars.keys() ?? [])]).toEqual([1]);
+    expect(result?.model.order).toEqual([1]);
+  });
+
+  it('leaves the model whole when a delta is refused for a slot it has never seen', () => {
+    const model = fromFull(fullOf([0, 1]));
+    const before = JSON.stringify([model.order, [...model.cars]]);
+    expect(applyDelta(model, deltaOf(11, [1, 9, 9, 9, 9, 0, 0, 7, 0, 0, 0, 0, 0, 0]))).toBeNull();
+    expect(JSON.stringify([model.order, [...model.cars]])).toBe(before);
+  });
+
   it('asks for the whole race when a slot appears that it has never seen', () => {
     const model = fromFull(fullOf([0, 1]));
     expect(applyDelta(model, deltaOf(11, [0, 0, 0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 0, 0]))).toBeNull();

@@ -128,17 +128,20 @@ export function createRaceTimeline(tickMs: number): RaceTimeline {
     const t = slot * STRIDE;
     const f = from !== null && from.present[slot] === 1 ? from : null;
     const a = f === null ? 1 : alpha;
-    const mix = (k: number): number => {
-      const end = to.data[t + k] as number;
-      return f === null ? end : (f.data[t + k] as number) + (end - (f.data[t + k] as number)) * a;
-    };
+    // Inlined by hand: a closure per car per frame is a thousand short-lived objects a second.
+    const x1 = to.data[t] as number;
+    const y1 = to.data[t + 1] as number;
+    const v1 = to.data[t + 3] as number;
+    const x0 = f === null ? x1 : (f.data[t] as number);
+    const y0 = f === null ? y1 : (f.data[t + 1] as number);
+    const v0 = f === null ? v1 : (f.data[t + 3] as number);
     car.slot = slot;
-    car.x = mix(0);
-    car.y = mix(1);
+    car.x = x0 + (x1 - x0) * a;
+    car.y = y0 + (y1 - y0) * a;
     const h0 = f === null ? (to.data[t + 2] as number) : (f.data[t + 2] as number);
     const h = h0 + turnBetween(h0, to.data[t + 2] as number) * a;
     car.heading = ((h % TURN) + TURN) % TURN;
-    car.speed = mix(3);
+    car.speed = v0 + (v1 - v0) * a;
     car.lap = to.data[t + 4] as number;
     car.flags = to.data[t + 5] as number;
     car.alpha = a;

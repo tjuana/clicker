@@ -17,7 +17,7 @@ function slotOf(id: string | null): number {
 /**
  * The race's sound: an engine that follows the player's own car, and a blip, a chord and a thud for
  * what the server says happened to it. The engine is driven from a frame loop of its own, reading
- * the same sample the scene draws: React renders are for the HUD, not for sixty updates a second.
+ * the newest tick of the race model: React renders are for the HUD, not for sixty updates a second.
  */
 export function useRaceSound(): void {
   const muted = useMuted((state) => state.muted);
@@ -39,18 +39,15 @@ export function useRaceSound(): void {
     let frame = 0;
     const loop = (): void => {
       frame = requestAnimationFrame(loop);
-      const { timeline } = useRace.getState();
       const running = useClient.getState().snapshot?.phase === 'running';
       const slot = slotOf(useClient.getState().you);
-      const sample = running && slot >= 0 ? (timeline?.sample(performance.now()) ?? null) : null;
-      let ratio = -1;
-      if (sample !== null) {
-        for (let k = 0; k < sample.count; k += 1) {
-          const car = sample.cars[k];
-          if (car === undefined || car.slot !== slot || (car.flags & FINISHED) !== 0) continue;
-          ratio = Math.min(1, Math.abs(car.speed) / RACE.topSpeed);
-        }
-      }
+      // The newest tick, not the interpolated one the scene draws: the pitch runs about a tick
+      // ahead of the picture, which no ear can tell, and a frame does not sample the timeline twice.
+      const car = running && slot >= 0 ? useRace.getState().model?.cars.get(slot) : undefined;
+      const ratio =
+        car === undefined || (car.flags & FINISHED) !== 0
+          ? -1
+          : Math.min(1, Math.abs(car.speed) / RACE.topSpeed);
       if (ratio < 0) synth.engineOff();
       else synth.engine(ratio);
     };
