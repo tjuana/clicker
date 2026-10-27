@@ -1,41 +1,12 @@
-import { lazy, Suspense } from 'react';
+import { formatTicks } from '../race/format';
+import { raceColour } from '../race/hud';
 import { useClient } from '../store';
 import { strings } from '../strings';
 import { theme } from '../theme';
 import { Button, ErrorNote, LinkButton, Screen } from '../ui';
 import { HostSettings, type RoomSettings } from './host-settings';
 
-/** three.js is about a megabyte: the entry screens must not carry it. */
-const Ring = lazy(() => import('../scene/ring'));
-
 const head = { textAlign: 'left', color: theme.muted, padding: 8 } as const;
-
-/**
- * Stands where the arena will be until the race screen exists (plan 13, task 5): the track,
- * seen from above, with the text over it.
- */
-export function RacePlaceholder({ onLeave }: { onLeave: () => void }) {
-  return (
-    <Screen>
-      <div style={{ position: 'fixed', inset: 0, zIndex: 0 }}>
-        <Suspense fallback={null}>
-          <Ring />
-        </Suspense>
-      </div>
-      <p
-        data-testid="race-placeholder"
-        style={{ fontSize: 22, margin: 0, position: 'relative', zIndex: 1 }}
-      >
-        {strings.ringRace.comingSoon}
-      </p>
-      <div style={{ position: 'relative', zIndex: 1 }}>
-        <LinkButton testId="leave" onClick={onLeave}>
-          {strings.leave}
-        </LinkButton>
-      </div>
-    </Screen>
-  );
-}
 
 export function RaceResults({
   settings,
@@ -52,6 +23,7 @@ export function RaceResults({
   if (snapshot === null || snapshot.mode !== 'race') return null;
 
   const results = snapshot.data.results ?? [];
+  const { tickMs } = snapshot.data;
 
   return (
     <Screen>
@@ -62,6 +34,7 @@ export function RaceResults({
             <th style={head}>{strings.resultsHeaders.rank}</th>
             <th style={head}>{strings.resultsHeaders.name}</th>
             <th style={{ ...head, textAlign: 'right' }}>{strings.ringRace.laps}</th>
+            <th style={{ ...head, textAlign: 'right' }}>{strings.ringRace.time}</th>
             <th style={{ ...head, textAlign: 'right' }}>{strings.ringRace.bestLap}</th>
           </tr>
         </thead>
@@ -69,10 +42,15 @@ export function RaceResults({
           {results.map((row) => (
             <tr key={row.id} style={{ color: row.rank === 1 ? theme.goldBright : theme.text }}>
               <td style={{ padding: 8 }}>{row.rank}</td>
-              <td style={{ padding: 8 }}>{row.name}</td>
+              <td style={{ padding: 8 }}>
+                <span style={{ color: raceColour(row.slot) }}>{'\u25cf'}</span> {row.name}
+              </td>
               <td style={{ padding: 8, textAlign: 'right' }}>{row.laps}</td>
               <td style={{ padding: 8, textAlign: 'right' }}>
-                {row.best === null ? strings.ringRace.noLap : row.best}
+                {row.finish === null ? strings.ringRace.noLap : formatTicks(row.finish, tickMs)}
+              </td>
+              <td style={{ padding: 8, textAlign: 'right' }}>
+                {row.best === null ? strings.ringRace.noLap : formatTicks(row.best, tickMs)}
               </td>
             </tr>
           ))}

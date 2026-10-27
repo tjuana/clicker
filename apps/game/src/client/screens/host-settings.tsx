@@ -18,7 +18,7 @@ export interface RoomSettings {
   removeBot: () => void;
 }
 
-const MODES = (['clicker', 'cycles'] as const).map((value) => ({
+const MODES = (['clicker', 'cycles', 'race'] as const).map((value) => ({
   value,
   label: strings.modes[value],
 }));
@@ -65,6 +65,25 @@ export function HostSettings({
   const walls = snapshot?.mode === 'cycles' ? snapshot.data.walls : null;
   const bots = snapshot?.players.filter((player) => player.bot).length ?? 0;
 
+  const botsRow = (
+    <Setting testId="bots" label={`${strings.botsLabel}: ${bots}`}>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <Button
+          testId="remove-bot"
+          variant="secondary"
+          onClick={settings.removeBot}
+          disabled={bots === 0}
+          style={{ flex: 1 }}
+        >
+          {strings.removeBot}
+        </Button>
+        <Button testId="add-bot" variant="secondary" onClick={settings.addBot} style={{ flex: 1 }}>
+          {strings.addBot}
+        </Button>
+      </div>
+    </Setting>
+  );
+
   return (
     <>
       <Setting label={strings.modeLabel}>
@@ -88,28 +107,10 @@ export function HostSettings({
               onChoose={settings.setWalls}
             />
           </Setting>
-          <Setting testId="bots" label={`${strings.botsLabel}: ${bots}`}>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <Button
-                testId="remove-bot"
-                variant="secondary"
-                onClick={settings.removeBot}
-                disabled={bots === 0}
-                style={{ flex: 1 }}
-              >
-                {strings.removeBot}
-              </Button>
-              <Button
-                testId="add-bot"
-                variant="secondary"
-                onClick={settings.addBot}
-                style={{ flex: 1 }}
-              >
-                {strings.addBot}
-              </Button>
-            </div>
-          </Setting>
+          {botsRow}
         </>
+      ) : mode === 'race' ? (
+        botsRow
       ) : null}
     </>
   );

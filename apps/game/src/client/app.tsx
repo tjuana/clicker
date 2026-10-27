@@ -8,7 +8,8 @@ import type { RoomSettings } from './screens/host-settings';
 import { Join } from './screens/join';
 import { Landing } from './screens/landing';
 import { Lobby } from './screens/lobby';
-import { RacePlaceholder, RaceResults } from './screens/race-room';
+import { RaceArena } from './screens/race-arena';
+import { RaceResults } from './screens/race-room';
 import { Results } from './screens/results';
 import { useClient } from './store';
 import { strings } from './strings';
@@ -77,6 +78,7 @@ function Room({ roomId, onLeave }: { roomId: string; onLeave: () => void }) {
   const turn = useCallback((side: 'left' | 'right') => connectionRef.current?.turn(side), []);
   const boost = useCallback(() => connectionRef.current?.boost(), []);
   const wall = useCallback((on: boolean) => connectionRef.current?.wall(on), []);
+  const keys = useCallback((mask: number) => connectionRef.current?.keys(mask), []);
   const settings = useMemo<RoomSettings>(
     () => ({
       setMode: (mode) => connectionRef.current?.setMode(mode),
@@ -110,7 +112,7 @@ function Room({ roomId, onLeave }: { roomId: string; onLeave: () => void }) {
         snapshot.mode === 'cycles' ? (
           <CyclesArena onTurn={turn} onBoost={boost} onWall={wall} />
         ) : snapshot.mode === 'race' ? (
-          <RacePlaceholder onLeave={onLeave} />
+          <RaceArena onKeys={keys} />
         ) : (
           <Arena onClick={click} />
         )
