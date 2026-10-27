@@ -1214,3 +1214,28 @@ git commit -m "docs: correct the study's colour finding and record what the fram
     33 draw calls, 79k triangles
     headroom to 60 fps: 10.80 of 16.67 ms
   ```
+
+## What plan 14's review changed (2026-10-27)
+
+An independent Opus review found no blocking defect and six findings; each was reproduced first.
+
+1. **Confirmed, fixed.** A frame that throws skips R3F's after-effect, the timer's query stays
+   open, WebGL refuses the next one, and the GPU figure froze for good while the rest of the line
+   kept moving. The test's fake GPU threw where WebGL only refuses; made faithful, the test went red
+   (0 results of 20). `begin()` now closes a query left open.
+2. **Confirmed, fixed.** After a lost and restored context the scene drew again but the line read
+   0 calls: three builds a new `renderer.info` (`WebGLRenderer.js:463, 559`) and the queries died
+   with the old context. A probe with `WEBGL_lose_context` showed it; an end-to-end test went red;
+   the meter is now rebuilt on `webglcontextrestored`.
+3. **Confirmed, fixed.** The race's first frame costs 42 calls (the sky's cube camera and PMREM),
+   every frame after it 15 — a probe counted it in three runs of three. The line showed the last
+   frame, so the gate's `15` held only because of when the scene appeared. Draw calls and triangles
+   are now the median of the last nine frames; a unit test went red first.
+4. **Confirmed, fixed.** The model-fetch guard counted at the race's first second, which rested on
+   the order of two browser events; it counts at the results now, and still fails with the defect
+   put back (the car fetched twice).
+5. **Fixed.** The `measure` samples overlap at 60 Hz (the comment said they never do); CPU time is
+   shown to one decimal, the grain of `performance.now()` in a page that is not cross-origin
+   isolated; `measure` says it measures `vite dev`.
+6. **Recorded** in the study's section 6: empty instanced meshes draw nothing (particles), the
+   global `addEffect`, and the unverified GPU timer on Android.
