@@ -8,6 +8,7 @@ import type { RoomSettings } from './screens/host-settings';
 import { Join } from './screens/join';
 import { Landing } from './screens/landing';
 import { Lobby } from './screens/lobby';
+import { RacePlaceholder, RaceResults } from './screens/race-room';
 import { Results } from './screens/results';
 import { useClient } from './store';
 import { strings } from './strings';
@@ -108,11 +109,15 @@ function Room({ roomId, onLeave }: { roomId: string; onLeave: () => void }) {
       ) : snapshot.phase === 'countdown' || snapshot.phase === 'running' ? (
         snapshot.mode === 'cycles' ? (
           <CyclesArena onTurn={turn} onBoost={boost} onWall={wall} />
+        ) : snapshot.mode === 'race' ? (
+          <RacePlaceholder onLeave={onLeave} />
         ) : (
           <Arena onClick={click} />
         )
       ) : snapshot.mode === 'cycles' ? (
         <CyclesResults settings={settings} onStart={start} onLeave={onLeave} />
+      ) : snapshot.mode === 'race' ? (
+        <RaceResults settings={settings} onStart={start} onLeave={onLeave} />
       ) : (
         <Results settings={settings} onStart={start} onLeave={onLeave} />
       )}

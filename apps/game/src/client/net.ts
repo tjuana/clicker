@@ -67,7 +67,7 @@ export function connect(roomId: string, name: string): Connection {
       followPhase(message.phase);
     }
     if (message.type === 'error') useClient.getState().fail(message.code);
-    // The race's frames are for a screen that does not exist yet (plan 12, task 5).
+    // The race's frames are accepted and ignored until it has a scene (plan 13); only the cycles feed theirs.
     if ((message.type === 'full' || message.type === 'delta') && message.mode === 'cycles') {
       if (feedCycles(message, performance.now()) === 'resync') {
         send({ v: PROTOCOL_VERSION, type: 'resync' });

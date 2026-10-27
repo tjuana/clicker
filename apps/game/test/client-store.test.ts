@@ -74,3 +74,39 @@ describe('the speed a finished round was played at', () => {
     expect(played()).toBeNull();
   });
 });
+
+describe('a snapshot of the ring race', () => {
+  beforeEach(() => useClient.setState(useClient.getInitialState()));
+
+  it('is kept as it came, with no light-cycle speed taken from it', () => {
+    const snapshot: SnapshotMessage = {
+      v: PROTOCOL_VERSION,
+      type: 'snapshot',
+      serverNow: 0,
+      phase: 'results',
+      mode: 'race',
+      players: [],
+      round: { goAt: 1_000, endsAt: 61_000 },
+      notice: null,
+      data: {
+        results: [
+          {
+            id: '1',
+            name: 'Anna',
+            slot: 0,
+            rank: 1,
+            laps: 3,
+            best: 410,
+            finish: 1200,
+            short: null,
+          },
+        ],
+      },
+    };
+
+    useClient.getState().receive(snapshot);
+
+    expect(useClient.getState().snapshot).toEqual(snapshot);
+    expect(useClient.getState().playedSpeed).toBeNull();
+  });
+});
