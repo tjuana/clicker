@@ -75,7 +75,13 @@ number nobody has measured is the size of a race delta: Task 3 measures it in a 
 - [ ] The client parses version 4. A room in race mode shows the lobby as usual (host settings: the mode list stays clicker and light cycles until plan 13 adds the race), and a running race shows a placeholder line ("The ring race is coming") instead of an arena; race `full`/`delta` messages are accepted and ignored.
 - [ ] Commit: `feat(app): keep the client steady in a race room`.
 
-### Task 6: End to end (qa)
+### Task 6: End to end (qa) — dropped
+
+A whole three-lap race takes over a minute of real time in workerd, and the worker knows nothing
+about laps, so there is no honest way to shorten it there. The "everyone finished" end is tested on
+the rules (Task 2), the clock end and the rest in workerd (Task 4); plan 13's end-to-end test races
+in a browser. What was planned:
+
 
 - [ ] workerd: twenty-car race room with nineteen bots and one player who sends gas; it finishes and every result row is present. Playwright is not needed until plan 13.
 - [ ] Commit: `test: run a whole ring race through the room`.

@@ -60,7 +60,7 @@ single deploy.
 A game is a directory under `packages/game/src/modes/` behind the `Mode` interface — derived from
 the clicker and the light cycles once both existed — plus its schemas in `packages/protocol` and its
 screens on the client. It does not touch the room, the message envelope or the lobby. Input travels
-as a generic `input` command only the mode interprets, and a protocol version (now 3) tells an old
+as a generic `input` command only the mode interprets, and a protocol version (now 4) tells an old
 tab to reload instead of letting it misread a message in silence.
 
 What comes next is in [docs/superpowers/specs](docs/superpowers/specs/): proposals for a textured
@@ -90,9 +90,9 @@ pnpm --filter @clicker/app run deploy     # build and publish to Cloudflare
 
 | Part | State |
 |---|---|
-| Game rules (`packages/game`) | clicker, light cycles and the ring race's rules (not playable yet), 357 tests |
-| Wire format (`packages/protocol`) | version 3, 89 tests |
-| Room server and client (`apps/game`) | 225 tests, including integration tests in the Workers runtime |
+| Game rules (`packages/game`) | clicker, light cycles and the ring race (its rules and room; not on screen yet), 389 tests |
+| Wire format (`packages/protocol`) | version 4, 115 tests |
+| Room server and client (`apps/game`) | 231 tests, including integration tests in the Workers runtime |
 | End to end | a clicker round, a light-cycle round against bots, and walls on a key, desktop and phone |
 | Deploy | every push to `main`, through Cloudflare Workers Builds |
 

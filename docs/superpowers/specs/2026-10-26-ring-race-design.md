@@ -209,3 +209,19 @@ What plan 11's review changed:
   the results keep their colours; **a race that is over does not step**.
 - Recorded for plan 12: the `Mode` typing let the race be registered with no type error while the
   worker would have sent empty deltas.
+
+## Decisions made while building plan 12 (2026-10-27)
+
+- **A mistyped mode is a type error.** `Mode<S, I, C>` has its constraints back and no default for
+  the changes of a tick; `ModeChanges` is the union, and the room's `stepped` event is a variant on
+  `mode`, so the worker and `toDelta` must narrow before they read the changes. Plan 11's review
+  had registered the race with no error while the worker would have sent empty deltas.
+- **A mode can end its round** (`over`), checked where a deserted round ends.
+- **Version 4**: `full` and `delta` are variants on a required `mode`. The race's `delta` takes its
+  cars from the state and its events from the tick (`toDelta(state, stepped)`); its flags (finished,
+  on grass, at a wall) come from the rules (`carFlags`). Measured: 856 bytes for twenty cars at speed.
+- **A car that joined mid-race is in neither `full` nor `delta`** until the next race.
+- **No race on screen yet.** The host cannot pick it; a room put into race mode shows a placeholder
+  while it runs and the results as a table. A whole three-lap race through the room was not tested
+  in workerd — it takes a minute of real time — and its "everyone finished" end is tested on the
+  rules; plan 13's end-to-end test races in a browser.
