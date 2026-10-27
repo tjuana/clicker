@@ -58,12 +58,32 @@ describe.skip('the floor blur kernel', () => {
     }
   });
 
+  // Within a tenth: a sound kernel sampled per texel, integrated over each texel or cut at 2.5σ
+  // lands inside, and so does three's own bloom blur. A bilinear fraction swapped or dropped lands
+  // far outside, and so does a cut at 2σ — Figure 12.2's five taps, carried past σ = 1 — as a
+  // blur narrower than the one asked for.
   it('is the Gaussian it was asked for', () => {
     for (const sigma of SIGMAS) {
       let variance = 0;
       for (const [texel, weight] of texels(sigma)) variance += weight * texel * texel;
-      expect(variance / (sigma * sigma)).toBeGreaterThan(0.95);
-      expect(variance / (sigma * sigma)).toBeLessThan(1.05);
+      expect(variance / (sigma * sigma)).toBeGreaterThan(0.9);
+      expect(variance / (sigma * sigma)).toBeLessThan(1.1);
+    }
+  });
+
+  // Two copies at the right distance keep the variance, and zero-weight taps between them close
+  // every gap: what a double image or a comb cannot do is fall off steadily from the centre.
+  it('falls off from the centre, so nothing is printed twice', () => {
+    for (const sigma of SIGMAS) {
+      const kernel = texels(sigma);
+      const reach = Math.max(...[...kernel.keys()].map(Math.abs));
+      for (let texel = 1; texel <= reach; texel += 1) {
+        for (const side of [1, -1]) {
+          const inner = kernel.get(side * (texel - 1)) ?? 0;
+          const outer = kernel.get(side * texel) ?? 0;
+          expect(outer).toBeLessThanOrEqual(inner + 1e-6);
+        }
+      }
     }
   });
 
