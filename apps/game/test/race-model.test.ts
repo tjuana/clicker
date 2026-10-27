@@ -6,6 +6,7 @@ import {
   ON_GRASS,
   type RaceState,
   type RoomState,
+  TOUCHING,
   TURN,
 } from '@clicker/game';
 import {
@@ -55,9 +56,6 @@ function record(ticks: number): {
   }
   return { full, deltas, states };
 }
-
-// The rules' bit for contact is not in the package's root exports, only its sibling flags are.
-const TOUCHING = 8;
 
 describe('replaying a recorded race', () => {
   const ticks = 600;

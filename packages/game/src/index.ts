@@ -42,6 +42,7 @@ export {
   type RaceState,
   RIGHT,
   TILE,
+  TOUCHING,
   TRACKS,
   type TrackData,
   TURN,
