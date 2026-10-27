@@ -99,7 +99,7 @@ export const raceMode: Mode<RaceState, RaceInput, RaceChanges> = {
     cars[i] = { ...car, bot: true, abandoned: true, keys: 0, pace: RACE.coolPace };
     return { ...state, cars };
   },
-  finish: (state) => ({ ...state, results: raceResults(state, TRACK, RACE) }),
+  finish: (state, names) => ({ ...state, results: raceResults(state, TRACK, RACE, names) }),
   // Back to a lobby: the same players, none of the round.
   clear: (state) =>
     withCars(

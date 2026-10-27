@@ -13,6 +13,8 @@ export interface RaceResultRow {
   rank: number;
   slot: number;
   publicId: string;
+  /** As the room knew the player at the finish; the room may have forgotten them by the time the results are read. */
+  name: string;
   /** Laps completed, never more than the race has. */
   laps: number;
   best: number | null;

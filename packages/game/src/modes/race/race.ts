@@ -106,7 +106,16 @@ export function over(state: RaceState, config: RaceConfig): boolean {
   return state.cars.every((car) => car.out || car.finish !== null);
 }
 
-export function raceResults(state: RaceState, track: Track, config: RaceConfig): RaceResultRow[] {
+/**
+ * `names` are fixed into the rows: the results stay on screen between races, when the room may
+ * already have forgotten a player who left.
+ */
+export function raceResults(
+  state: RaceState,
+  track: Track,
+  config: RaceConfig,
+  names: Record<string, string> = {},
+): RaceResultRow[] {
   return order(state, track).map((i, place) => {
     const car = state.cars[i] as Car;
     const done = car.finish !== null;
@@ -114,6 +123,7 @@ export function raceResults(state: RaceState, track: Track, config: RaceConfig):
       rank: place + 1,
       slot: car.slot,
       publicId: car.publicId,
+      name: names[car.publicId] ?? '',
       laps: done ? config.laps : Math.max(0, Math.min(config.laps, car.lap - 1)),
       best: car.best,
       finish: car.finish,

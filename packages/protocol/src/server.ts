@@ -304,13 +304,11 @@ function cyclesDataOf(
 function raceDataOf(state: RoomState): v.InferOutput<typeof raceDataSchema> {
   const { results } = state.modeState as RaceState;
   if (results === null) return { results: null };
-  // The rules' rows know a car by its public id only; the name is the room's.
-  const names = new Map<string, string>();
-  for (const player of Object.values(state.players)) names.set(player.publicId, player.name);
   return {
     results: results.map((row) => ({
       id: row.publicId,
-      name: names.get(row.publicId) ?? '',
+      // Fixed into the row at the finish. Rows stored by an earlier build have no name.
+      name: row.name ?? '',
       slot: row.slot,
       rank: row.rank,
       laps: row.laps,

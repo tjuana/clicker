@@ -86,6 +86,26 @@ describe('the race snapshot', () => {
     expect(JSON.stringify(snapshot)).not.toContain('secret');
   });
 
+  it('keeps a name in the results after the player is gone from the room', () => {
+    const { state } = raceRoom(2, 3);
+    const over = apply(state, { type: 'tick' }, 10_000_000, RACE).state;
+    const left = apply(
+      over,
+      { type: 'leave', playerId: 'secret-host', connectionId: 'conn-host' },
+      10_000_000,
+      RACE,
+    ).state;
+    // Past the grace, outside a round: the room forgets the player, the results must not.
+    const later = 10_000_000 + RACE.reconnectGraceMs + 1;
+    const forgotten = apply(left, { type: 'tick' }, later, RACE).state;
+    expect(Object.values(forgotten.players).map((player) => player.publicId)).not.toContain('1');
+
+    const snapshot = toSnapshot(forgotten, later);
+
+    if (snapshot.mode !== 'race') throw new Error('not a race snapshot');
+    expect(snapshot.data.results?.find((row) => row.id === '1')?.name).toBe('Аня');
+  });
+
   it('is refused when it carries another mode’s data', () => {
     const { state } = raceRoom(1, 1);
     const snapshot = toSnapshot(state, 0);

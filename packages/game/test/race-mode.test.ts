@@ -121,6 +121,17 @@ describe('the race mode', () => {
     expect(RACE.laps).toBe(3);
   });
 
+  it('writes the players’ names into the results, so a player who leaves keeps theirs', () => {
+    const finished = raceMode.finish(build(['1', '2'], new Set(['1', '2'])), {
+      '1': 'Ann',
+      '2': 'Bob',
+    });
+    const gone = raceMode.removePlayers(finished, ['1']);
+
+    const names = Object.fromEntries((gone.results ?? []).map((row) => [row.publicId, row.name]));
+    expect(names).toEqual({ '1': 'Ann', '2': 'Bob' });
+  });
+
   describe('a player who joins in the middle of a race', () => {
     const step = raceMode.step as NonNullable<typeof raceMode.step>;
     function running(): RaceState {
