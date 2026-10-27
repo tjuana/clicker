@@ -25,6 +25,7 @@ function order(state: RaceState, track: Track): number[] {
   const covered = cars.map((car) => progress(car, track));
   return cars
     .map((_, i) => i)
+    .filter((i) => !(cars[i] as Car).out)
     .sort((a, b) => {
       const x = cars[a] as Car;
       const y = cars[b] as Car;
@@ -88,6 +89,7 @@ export function startRace(state: RaceState, track: Track, config: RaceConfig): R
       lapStart: 0,
       pace,
       wall: 0,
+      out: false,
     });
   });
   return { ...state, cars, seed, tick: 0, firstFinish: null, results: null };
@@ -97,7 +99,7 @@ export function over(state: RaceState, config: RaceConfig): boolean {
   if (state.tick >= config.cap) return true;
   if (state.firstFinish !== null && state.tick >= state.firstFinish + config.afterFirst)
     return true;
-  return state.cars.every((car) => car.finish !== null);
+  return state.cars.every((car) => car.out || car.finish !== null);
 }
 
 export function raceResults(state: RaceState, track: Track, config: RaceConfig): RaceResultRow[] {
@@ -128,30 +130,33 @@ export function stepRace(
 ): { state: RaceState; changes: RaceChanges } {
   const tick = state.tick + 1;
   const cars = state.cars.map((car) => ({ ...car }));
+  // A car that joined mid-race is not on the field: it is neither driven, nor bumped, nor
+  // counted, and the bots do not see it. `live` holds the same objects as `cars`.
+  const live = cars.some((car) => car.out) ? cars.filter((car) => !car.out) : cars;
   // Bots, and finished cars of either kind, decide before anybody moves, all from the one
   // picture of where the cars stand.
-  const bins = cars.some((car) => car.bot || car.finish !== null)
-    ? binCars(cars, track.bounds)
+  const bins = live.some((car) => car.bot || car.finish !== null)
+    ? binCars(live, track.bounds)
     : null;
-  for (let i = 0; i < cars.length; i += 1) {
-    const car = cars[i] as Car;
+  for (let i = 0; i < live.length; i += 1) {
+    const car = live[i] as Car;
     if ((car.bot || car.finish !== null) && bins !== null) {
-      car.keys = decide(i, cars, bins, track, config);
+      car.keys = decide(i, live, bins, track, config);
     }
   }
-  const crossings = new Int8Array(cars.length);
-  for (let i = 0; i < cars.length; i += 1) {
-    crossings[i] = drive(cars[i] as Car, track, config);
+  const crossings = new Int8Array(live.length);
+  for (let i = 0; i < live.length; i += 1) {
+    crossings[i] = drive(live[i] as Car, track, config);
   }
 
-  const beforeX = Int32Array.from(cars, (car) => car.x);
-  const beforeY = Int32Array.from(cars, (car) => car.y);
-  bump(cars, track.bounds, config);
+  const beforeX = Int32Array.from(live, (car) => car.x);
+  const beforeY = Int32Array.from(live, (car) => car.y);
+  bump(live, track.bounds, config);
 
   const changes: RaceChanges = { laps: [], finished: [], bumped: [] };
   let firstFinish = state.firstFinish;
-  for (let i = 0; i < cars.length; i += 1) {
-    const car = cars[i] as Car;
+  for (let i = 0; i < live.length; i += 1) {
+    const car = live[i] as Car;
     if (car.x !== beforeX[i] || car.y !== beforeY[i]) changes.bumped.push(car.slot);
     if (car.finish !== null) continue;
     const crossed = crossings[i] as number;

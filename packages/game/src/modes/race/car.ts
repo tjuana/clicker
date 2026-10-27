@@ -12,6 +12,8 @@ export interface Car {
   /** The id other players see; the secret one never reaches the rules. */
   publicId: string;
   bot: boolean;
+  /** Joined in the middle of a race: off the field until the next one begins. */
+  out: boolean;
   x: number;
   y: number;
   /** In `TURN` steps; 0 is east, increasing clockwise as drawn (y down). */

@@ -10,6 +10,7 @@ function car(slot: number, x: number, y: number): Car {
     slot,
     publicId: `p${slot}`,
     bot: false,
+    out: false,
     x,
     y,
     heading: 0,

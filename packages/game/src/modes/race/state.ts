@@ -39,6 +39,7 @@ export function newCar(slot: number, publicId: string, bot: boolean): Car {
     slot,
     publicId,
     bot,
+    out: false,
     x: 0,
     y: 0,
     heading: 0,

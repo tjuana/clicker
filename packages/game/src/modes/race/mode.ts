@@ -25,7 +25,11 @@ export const raceMode: Mode<RaceState, RaceInput, RaceChanges> = {
   create: (seed) => emptyRace(TRACK_ID, seed),
   addPlayer: (state, publicId, bot) => {
     if (state.index[publicId] !== undefined) return state;
-    return withCars(state, [...state.cars, newCar(state.cars.length, publicId, bot)]);
+    // Off the field until the next round: a car put on the grid's origin mid-race would walk
+    // back over the line, be shoved by a wall and keep the race from ever being over. The
+    // round that follows brings everybody in (`startRace`). A new car takes the next free slot.
+    const slot = state.cars.reduce((top, car) => Math.max(top, car.slot + 1), 0);
+    return withCars(state, [...state.cars, { ...newCar(slot, publicId, bot), out: true }]);
   },
   // Slots are renumbered so they stay 0…n-1, as the grid expects.
   removePlayers: (state, publicIds) => {

@@ -16,6 +16,7 @@ function carAt(piece: number, along: number, lateral: number, over: Partial<Car>
     slot: 0,
     publicId: 'a',
     bot: false,
+    out: false,
     x: spot.x,
     y: spot.y,
     heading: spot.heading,

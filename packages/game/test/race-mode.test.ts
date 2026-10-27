@@ -3,7 +3,7 @@ import { DEFAULT_CYCLES_SETTINGS } from '../src/modes/cycles/config';
 import { random } from '../src/modes/cycles/random';
 import { raceMode } from '../src/modes/race';
 import { RACE } from '../src/modes/race/config';
-import { standings } from '../src/modes/race/race';
+import { over, raceResults, standings } from '../src/modes/race/race';
 import type { RaceState } from '../src/modes/race/state';
 import { buildTrack, type TrackData } from '../src/modes/race/track';
 import { TRACKS } from '../src/modes/race/tracks';
@@ -112,5 +112,43 @@ describe('the race mode', () => {
     expect(cleared.tick).toBe(0);
     expect(cleared.cars).toHaveLength(20);
     expect(RACE.laps).toBe(3);
+  });
+
+  describe('a player who joins in the middle of a race', () => {
+    const step = raceMode.step as NonNullable<typeof raceMode.step>;
+    function running(): RaceState {
+      let state = build(['1', '2'], new Set(['1']));
+      for (let i = 0; i < 40; i += 1) state = step(state, settings).state;
+      return raceMode.addPlayer(state, '0', false, 0, config, settings);
+    }
+    const track = buildTrack(TRACKS.ring as TrackData);
+
+    it('sits where it was put, off the field, and does not move', () => {
+      let state = running();
+      state = raceMode.applyInput(state, '0', { type: 'keys', mask: 1 }, 0, config, settings);
+      const before = JSON.stringify(state.cars[state.index['0'] as number]);
+      for (let i = 0; i < 30; i += 1) state = step(state, settings).state;
+      expect(JSON.stringify(state.cars[state.index['0'] as number])).toBe(before);
+      expect(standings(state, track)).not.toContain(state.cars[state.index['0'] as number]?.slot);
+      expect(raceResults(state, track, RACE).map((r) => r.publicId)).not.toContain('0');
+    });
+
+    it('does not keep the race from ending when everyone else has finished', () => {
+      const state = running();
+      const done = {
+        ...state,
+        cars: state.cars.map((c) => (c.publicId === '0' ? c : { ...c, finish: 100 })),
+      };
+      expect(over(done, RACE)).toBe(true);
+    });
+
+    it('races from the grid in the next round', () => {
+      const next = raceMode.startRound(running(), 0, config, settings);
+      const late = next.cars[next.index['0'] as number];
+      expect(standings(next, track)).toContain(late?.slot);
+      let state = raceMode.applyInput(next, '0', { type: 'keys', mask: 1 }, 0, config, settings);
+      for (let i = 0; i < 30; i += 1) state = step(state, settings).state;
+      expect(state.cars[state.index['0'] as number]?.speed).toBeGreaterThan(0);
+    });
   });
 });

@@ -11,6 +11,7 @@ function car(slot: number, x: number, y: number, over: Partial<Car> = {}): Car {
     slot,
     publicId: `p${slot}`,
     bot: false,
+    out: false,
     x,
     y,
     heading: 0,
