@@ -1,6 +1,8 @@
 import { randomBelow } from '../cycles/random';
+import { binCars } from './bins';
+import { decide } from './bot';
 import { bump } from './bump';
-import { BRAKE, type Car, drive } from './car';
+import { type Car, drive } from './car';
 import type { RaceConfig } from './config';
 import type { RaceChanges, RaceResultRow, RaceState } from './state';
 import { point, project, type Track } from './track';
@@ -126,12 +128,20 @@ export function stepRace(
 ): { state: RaceState; changes: RaceChanges } {
   const tick = state.tick + 1;
   const cars = state.cars.map((car) => ({ ...car }));
-  const crossings = new Int8Array(cars.length);
+  // Bots, and finished cars of either kind, decide before anybody moves, all from the one
+  // picture of where the cars stand.
+  const bins = cars.some((car) => car.bot || car.finish !== null)
+    ? binCars(cars, track.bounds)
+    : null;
   for (let i = 0; i < cars.length; i += 1) {
     const car = cars[i] as Car;
-    // A finished car is frozen: it brakes to a stop and its keys no longer matter.
-    if (car.finish !== null) car.keys = car.speed > 0 ? BRAKE : 0;
-    crossings[i] = drive(car, track, config);
+    if ((car.bot || car.finish !== null) && bins !== null) {
+      car.keys = decide(i, cars, bins, track, config);
+    }
+  }
+  const crossings = new Int8Array(cars.length);
+  for (let i = 0; i < cars.length; i += 1) {
+    crossings[i] = drive(cars[i] as Car, track, config);
   }
 
   const beforeX = Int32Array.from(cars, (car) => car.x);
@@ -159,6 +169,9 @@ export function stepRace(
       changes.laps.push({ slot: car.slot, lap: car.lap });
       if (car.lap > config.laps) {
         car.finish = tick;
+        // Not frozen: a car stopped on the line is a wall for the cars still racing, and twenty
+        // of them across a tile-wide road were one. It cruises on, out of the way, under autopilot.
+        car.pace = config.coolPace;
         firstFinish ??= tick;
         changes.finished.push(car.slot);
       }

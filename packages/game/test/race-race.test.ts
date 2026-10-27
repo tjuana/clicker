@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BRAKE, type Car, GAS } from '../src/modes/race/car';
+import { BRAKE, type Car, GAS, LEFT } from '../src/modes/race/car';
 import { RACE } from '../src/modes/race/config';
 import { cos, ONE, sin } from '../src/modes/race/fixed';
 import { over, raceResults, standings, startRace, stepRace } from '../src/modes/race/race';
@@ -161,15 +161,16 @@ describe('the finish', () => {
     expect(done.changes.finished).toEqual([0]);
   });
 
-  it('stops the car, whatever the keys say', () => {
+  it('goes on under its own steam, whatever the keys say, and counts no more laps', () => {
     let state = stepRace(crossing(3), track, RACE).state;
-    state = run({ ...state, cars: state.cars.map((c) => ({ ...c, keys: GAS })) }, 120);
+    state = run({ ...state, cars: state.cars.map((c) => ({ ...c, keys: BRAKE | LEFT })) }, 400);
     const car = state.cars[0];
-    expect(car?.speed).toBe(0);
     expect(car?.finish).toBe(501);
-    const keep = { x: car?.x, y: car?.y };
-    state = run(state, 30);
-    expect({ x: state.cars[0]?.x, y: state.cars[0]?.y }).toEqual(keep);
+    expect(car?.lap).toBe(4);
+    // Cruising at half the top speed rather than reversing as the keys asked, and never stopped:
+    // a car left standing on the line is a wall for those still racing.
+    expect(car?.speed).toBeGreaterThan(0);
+    expect(car?.speed).toBeLessThanOrEqual(RACE.topSpeed / 2);
   });
 });
 
