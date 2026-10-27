@@ -8,7 +8,7 @@ import { Button, ErrorNote, LinkButton, Screen } from '../ui';
 import { HostSettings, type RoomSettings } from './host-settings';
 
 /** three.js is about a megabyte: the entry screens must not carry it. */
-const Race = lazy(() => import('../scene/race'));
+const Race = lazy(() => import('../scene/clicker'));
 
 export function Results({
   settings,

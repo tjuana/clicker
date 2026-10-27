@@ -42,7 +42,13 @@ export function Lobby({
   // loading a megabyte of three.js in the middle of it costs the player real clicks:
   // the countdown keeps running on the server while the browser is busy compiling.
   useEffect(() => {
-    void (mode === 'cycles' ? import('../scene/cycles') : import('../scene/race'));
+    void (mode === 'cycles'
+      ? import('../scene/cycles')
+      : mode === 'race'
+        ? Promise.all([import('../scene/ring'), import('../race-preload')]).then(([, assets]) =>
+            assets.preloadRace(),
+          )
+        : import('../scene/clicker'));
   }, [mode]);
 
   return (
@@ -93,6 +99,7 @@ export function Lobby({
         </p>
       )}
       {mode === 'cycles' ? <HowToPlay onKey={walls === 'button'} /> : null}
+      {mode === 'race' ? <HowTo how={strings.ringRace.howTo} /> : null}
       {/* One grey line, never two: side by side these two said the same thing twice. */}
       <p style={{ color: theme.muted, margin: 0 }}>
         {players.length === 1 ? strings.alone : strings.inviteHint}
@@ -139,6 +146,15 @@ function HowToPlay({ onKey }: { onKey: boolean }) {
   const how = strings.cycles.howTo;
   // The wall key belongs right after the boost, which is the other thing a finger does.
   const rows = onKey ? [...how.rows.slice(0, 2), how.wallRow, ...how.rows.slice(2)] : how.rows;
+  return <HowTo how={{ title: how.title, goal: how.goal, rows }} />;
+}
+
+function HowTo({
+  how,
+}: {
+  how: { title: string; goal: string; rows: readonly (readonly [string, string])[] };
+}) {
+  const { rows } = how;
   return (
     <section
       data-testid="how-to-play"

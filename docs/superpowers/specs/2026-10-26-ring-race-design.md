@@ -256,3 +256,54 @@ What plan 12's review changed:
   best lap and lap start. The track's piece list, `TILE` and `TURN` are exported as data.
 - Measured again over a whole twenty-car race: a delta of 609 bytes on average and 804 at most,
   about 18 KB/s per player.
+
+## Decisions made while building plan 13 (2026-10-27)
+
+- **The client builds the track from the piece list**, exported by the rules as data with `TILE`
+  and `TURN`; it never calls the rules' geometry. The barriers' centreline is computed in the scene,
+  a straight or a quarter circle per piece.
+- **Tone mapping is Khronos PBR Neutral**: ACES washed the sky, the barriers and the grass out
+  (screenshots of both were taken); one constant in `scene/race-look.ts` switches it.
+- **At the Ring's S-bend** the left one-tile corner's inner wall shrinks to a point, and the blocks
+  of the neighbouring walls meet there at a right angle; they stand back by a gap of their own. The
+  test that keeps barrier blocks apart found it on its first run.
+- **The clock estimate is shared** between the light cycles' timeline and the race's; the race keeps
+  the last sixteen ticks in a ring and draws every car between two of them.
+- **The client takes the keys' bits and the lap times from the rules**: the bits are exported, and the
+  wire's `lap` event carries the lap's time (null for the first crossing and a lap cut short)
+  and the car's best lap after it (`best`, null while it has none), and the car flags are exported as
+  `FINISHED`, `ON_GRASS`, `AT_WALL` and `TOUCHING` — an earlier version of the HUD had recomputed
+  the best lap and redefined the bits, copies of rules the client must not hold.
+- **The race clock rebases after a stall.** A server stall longer than the ticker's catch-up (ten
+  steps) leaves the tick numbers behind the wall clock, and the estimate's old minimum then kept the
+  clock early for four seconds: the render time sat clamped at the newest tick and the cars stood
+  still between messages. After five arrivals in a row at which the clock was ahead of the data
+  the estimate rebases on those arrivals; the render time still never goes backwards. The light
+  cycles' timeline is unchanged.
+- **The latency readout is left for later.** Sections 1 and 6 make "no client prediction" depend on
+  a readout of how long the server takes to answer, and the race does not have one yet. The light
+  cycles time a turn's echo; the race's equivalent is a key change to the speed or heading response
+  that follows it, which has to be told from the car's own dynamics (acceleration, a bump, grass)
+  and is a task of its own. Until it exists nobody has measured whether prediction is needed.
+- **The camera follows the player's car**, or the leader when the player has none on the field.
+- **Sound**: one detuned engine voice re-pitched by the player's speed, a blip a lap, a chord at the
+  finish, a thud on a bump; checked to run without errors, not yet listened to by the owner.
+- Measured in a real window at 1280 × 760: 120 fps (the display's cap) with twenty cars and 15 draw
+  calls; the race arena renders four times in a whole race.
+
+What plan 13's review changed:
+
+- **Held keys survive a reconnect**: the client re-sends its mask on `welcome`, since the server
+  forgets a returning rider's keys and the mask is otherwise sent only when it changes.
+- **Phone buttons work in the countdown**, as the keyboard did; **a failed asset load no longer
+  blanks the app** (an error boundary round the scene); **the race clock recovers from a server
+  stall** longer than the ticker's catch-up (before, the cars stood still on 281 of 478 frames for
+  about four seconds).
+- **The client holds no copy of a rule**: the best lap arrives on the `lap` event, the flag bits
+  are exported by the rules.
+- **The scene's track is tested against the rules' track** — the same poses, the same tiles, road
+  where the rules have road; before, the scene's tests agreed only with themselves.
+- **The drawn car is no wider than it collides** (0.138 tile against 0.130; it was 0.162).
+- **The end-to-end race checks that the car moves** under gas, not only that keys were sent.
+- Recorded: one app test failed once while two agents ran suites at the same time, and was not
+  identified; three runs alone and five by the agent were green.

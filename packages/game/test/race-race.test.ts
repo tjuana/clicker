@@ -107,8 +107,63 @@ describe('laps', () => {
   it('reports the lap in the tick it is crossed', () => {
     const start = placed(last, lastLength - 10, { speed: 150, keys: GAS, lap: 0 });
     const { state, changes } = stepRace(start, track, RACE);
-    expect(changes.laps).toEqual([{ slot: 0, lap: 1 }]);
+    expect(changes.laps).toEqual([{ slot: 0, lap: 1, time: null, best: null }]);
     expect(state.cars[0]?.lap).toBe(1);
+  });
+
+  it('says how many ticks the lap took, counted between two crossings', () => {
+    const start = placed(
+      last,
+      lastLength - 10,
+      { speed: 150, keys: GAS, lap: 1, lapStart: 40 },
+      99,
+    );
+    const { changes, state } = stepRace(start, track, RACE);
+    expect(changes.laps).toEqual([
+      { slot: 0, lap: 2, time: state.tick - 40, best: state.tick - 40 },
+    ]);
+    expect(state.cars[0]?.best).toBe(state.tick - 40);
+  });
+
+  it('carries the car best lap, which a slower lap does not take', () => {
+    const start = placed(
+      last,
+      lastLength - 10,
+      { speed: 150, keys: GAS, lap: 2, lapStart: 40, best: 5 },
+      99,
+    );
+    const { changes, state } = stepRace(start, track, RACE);
+    expect(changes.laps).toEqual([{ slot: 0, lap: 3, time: state.tick - 40, best: 5 }]);
+    expect(state.cars[0]?.best).toBe(5);
+  });
+
+  it('carries a faster lap as the new best', () => {
+    const start = placed(
+      last,
+      lastLength - 10,
+      { speed: 150, keys: GAS, lap: 2, lapStart: 40, best: 100000 },
+      99,
+    );
+    const { changes, state } = stepRace(start, track, RACE);
+    expect(changes.laps[0]?.best).toBe(state.tick - 40);
+  });
+
+  it('gives a lap no time when the one before was cut short', () => {
+    const start = placed(last, lastLength - 10, { speed: 150, keys: GAS, lap: 1, lapStart: -1 });
+    expect(stepRace(start, track, RACE).changes.laps).toEqual([
+      { slot: 0, lap: 2, time: null, best: null },
+    ]);
+  });
+
+  it('keeps the earlier best on a lap that was cut short', () => {
+    const start = placed(last, lastLength - 10, {
+      speed: 150,
+      keys: GAS,
+      lap: 2,
+      lapStart: -1,
+      best: 7,
+    });
+    expect(stepRace(start, track, RACE).changes.laps[0]?.best).toBe(7);
   });
 
   it('gives nothing for driving back over the line and forward again', () => {

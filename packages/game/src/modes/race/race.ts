@@ -206,12 +206,13 @@ export function stepRace(
       car.lapStart = -1;
     } else if (crossed > 0) {
       car.lap += crossed;
+      let time: number | null = null;
       if (car.lap >= 2 && car.lapStart >= 0) {
-        const time = tick - car.lapStart;
+        time = tick - car.lapStart;
         car.best = car.best === null ? time : Math.min(car.best, time);
       }
       car.lapStart = tick;
-      changes.laps.push({ slot: car.slot, lap: car.lap });
+      changes.laps.push({ slot: car.slot, lap: car.lap, time, best: car.best });
       if (car.lap > config.laps) {
         car.finish = tick;
         // Not frozen: a car stopped on the line is a wall for the cars still racing, and twenty

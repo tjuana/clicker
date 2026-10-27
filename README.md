@@ -11,8 +11,8 @@ Object that talks to players over WebSockets.
 
 1. Open the game and create a room.
 2. Send the link to everyone else — the link is the invitation, and it cannot be guessed.
-3. The host picks a game, and for the light cycles a speed, the walls and any bots; then presses
-   Start.
+3. The host picks a game, and for the light cycles a speed and the walls; bots for the light cycles
+   and the race; then presses Start.
 
 **Clicker** — three seconds of countdown, ten seconds of clicking. Most clicks wins; on a tie,
 whoever reached that score first.
@@ -22,6 +22,11 @@ others into yours and stay clear of everything yourself. A / D or the arrows tur
 crash puts you back in two seconds. Three-minute rounds, up to twenty riders with bots, ranked by
 kills. The host can put the walls on a key: then a bike lays its wall only while W or ↑ is held,
 from four seconds of energy that refill in eight, and every kill adds a second.
+
+**Ring race** — three laps of a track built from Kenney's racing tiles, with textured asphalt and
+grass under a real sky. W / ↑ gas, S / ↓ brake, A / D or the arrows steer; on a phone, four buttons.
+Cars bump each other, up to twenty racers with bots, ranked by laps and time. Everything runs on
+the server; the client draws.
 
 ## Architecture
 
@@ -90,10 +95,10 @@ pnpm --filter @clicker/app run deploy     # build and publish to Cloudflare
 
 | Part | State |
 |---|---|
-| Game rules (`packages/game`) | clicker, light cycles and the ring race (its rules and room; not on screen yet), 389 tests |
-| Wire format (`packages/protocol`) | version 4, 115 tests |
-| Room server and client (`apps/game`) | 231 tests, including integration tests in the Workers runtime |
-| End to end | a clicker round, a light-cycle round against bots, and walls on a key, desktop and phone |
+| Game rules (`packages/game`) | clicker, light cycles and the ring race, 410 tests |
+| Wire format (`packages/protocol`) | version 4, 123 tests |
+| Room server and client (`apps/game`) | 289 tests, including integration tests in the Workers runtime |
+| End to end | a clicker round, a light-cycle round against bots, walls on a key, and a ring race, desktop and phone |
 | Deploy | every push to `main`, through Cloudflare Workers Builds |
 
 The designs are the [specs](docs/superpowers/specs/),

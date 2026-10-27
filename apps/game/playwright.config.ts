@@ -36,8 +36,8 @@ export default defineConfig({
   webServer: {
     command: 'pnpm exec vite dev --port 5173',
     url: 'http://localhost:5173',
-    // The clicker's ten seconds are the default in code, so only the light cycles feel this: their
-    // round is three minutes. The plugin reads the process environment only when asked to; a
+    // The clicker's ten seconds are the default in code, so only the light cycles and the ring race
+    // feel this: a light-cycle round is three minutes and a race may run five. The plugin reads the process environment only when asked to; a
     // `.dev.vars` file next to wrangler.jsonc would take precedence over it and silently undo this.
     env: { ROUND_MS: '10000', CLOUDFLARE_INCLUDE_PROCESS_ENV: 'true' },
     reuseExistingServer: false,

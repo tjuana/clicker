@@ -2,6 +2,8 @@ import { type ClientMessage, PROTOCOL_VERSION, parseServerMessage } from '@click
 import PartySocket from 'partysocket';
 import { turnSent } from './cycles/latency-store';
 import { clearCycles, feedCycles, followPhase } from './cycles/store';
+import { createHeldKeys } from './race/held-keys';
+import { clearRace, feedRace, followRacePhase } from './race/store';
 import { hostKeyFor, playerId } from './room-link';
 import { useClient } from './store';
 
@@ -13,6 +15,7 @@ export interface Connection {
   turn: (side: 'left' | 'right') => void;
   boost: () => void;
   wall: (on: boolean) => void;
+  keys: (mask: number) => void;
   setMode: (mode: Message<'setMode'>['mode']) => void;
   setSpeed: (speed: Message<'setSpeed'>['speed']) => void;
   setWalls: (walls: Message<'setWalls'>['walls']) => void;
@@ -31,6 +34,7 @@ export function connect(roomId: string, name: string): Connection {
   let closedByUs = false;
   // A round from another room must not linger under this one.
   clearCycles();
+  clearRace();
 
   const send = (message: unknown): boolean => {
     // Clicks can't be queued during a disconnect: they'd all arrive in a burst after the round ends.
@@ -61,17 +65,23 @@ export function connect(roomId: string, name: string): Connection {
     if (typeof event.data !== 'string') return;
     const message = parseServerMessage(event.data);
     if (message === null) return;
-    if (message.type === 'welcome') useClient.getState().welcome(message.you, message.isHost);
+    if (message.type === 'welcome') {
+      useClient.getState().welcome(message.you, message.isHost);
+      // A rejoin resets the car's keys on the room; a key still held must be said again.
+      held.resend();
+    }
     if (message.type === 'snapshot') {
       useClient.getState().receive(message);
       followPhase(message.phase);
+      followRacePhase(message.phase);
     }
     if (message.type === 'error') useClient.getState().fail(message.code);
-    // The race's frames are accepted and ignored until it has a scene (plan 13); only the cycles feed theirs.
-    if ((message.type === 'full' || message.type === 'delta') && message.mode === 'cycles') {
-      if (feedCycles(message, performance.now()) === 'resync') {
-        send({ v: PROTOCOL_VERSION, type: 'resync' });
-      }
+    if (message.type === 'full' || message.type === 'delta') {
+      const resync =
+        message.mode === 'cycles'
+          ? feedCycles(message, performance.now())
+          : feedRace(message, performance.now());
+      if (resync === 'resync') send({ v: PROTOCOL_VERSION, type: 'resync' });
     }
   });
 
@@ -80,6 +90,8 @@ export function connect(roomId: string, name: string): Connection {
     useClient.getState().clearError();
     return send({ v: PROTOCOL_VERSION, ...message });
   };
+
+  const held = createHeldKeys((mask) => command({ type: 'input', input: { type: 'keys', mask } }));
 
   return {
     start: () => {
@@ -100,6 +112,7 @@ export function connect(roomId: string, name: string): Connection {
     },
     boost: () => command({ type: 'input', input: { type: 'boost' } }),
     wall: (on) => command({ type: 'input', input: { type: 'wall', on } }),
+    keys: (mask) => held.set(mask),
     setMode: (mode) => command({ type: 'setMode', mode }),
     setSpeed: (speed) => command({ type: 'setSpeed', speed }),
     setWalls: (walls) => command({ type: 'setWalls', walls }),

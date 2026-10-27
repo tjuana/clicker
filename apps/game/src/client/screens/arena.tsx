@@ -9,7 +9,7 @@ import { theme } from '../theme';
 import { Button, CountdownOverlay, Screen } from '../ui';
 
 /** three.js is about a megabyte: the entry screens must not carry it. */
-const Race = lazy(() => import('../scene/race'));
+const Race = lazy(() => import('../scene/clicker'));
 
 export function Arena({ onClick }: { onClick: () => void }) {
   const now = useServerClock();

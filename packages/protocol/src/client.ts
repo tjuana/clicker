@@ -1,4 +1,4 @@
-import { MODE_IDS, SPEEDS, WALL_MODES } from '@clicker/game';
+import { BRAKE, GAS, LEFT, MODE_IDS, RIGHT, SPEEDS, WALL_MODES } from '@clicker/game';
 import * as v from 'valibot';
 import { ID_PATTERN } from './ids';
 
@@ -47,7 +47,7 @@ export const cyclesInputSchema = v.variant('type', [
 /** The race's input: which of gas, brake, left and right are held now (bits 0 to 3). */
 export const raceInputSchema = v.strictObject({
   type: v.literal('keys'),
-  mask: v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(15)),
+  mask: v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(GAS | BRAKE | LEFT | RIGHT)),
 });
 
 export const joinSchema = v.strictObject({
