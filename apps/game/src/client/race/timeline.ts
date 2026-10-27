@@ -10,6 +10,11 @@ import type { RaceModel } from './model';
 export const RING_TICKS = 16;
 /** A car's slot indexes the tables below. The room seats twenty; a slot beyond this is not drawn. */
 export const MAX_SLOTS = 64;
+/**
+ * Arrivals in a row at which the clock was found ahead of the data before it is believed wrong.
+ * One late message looks the same as a stalled server; five at 30 Hz are a sixth of a second.
+ */
+export const BEHIND_ARRIVALS = 5;
 /** x, y, heading, speed, lap, flags. */
 const STRIDE = 6;
 
@@ -89,6 +94,8 @@ export function createRaceTimeline(tickMs: number): RaceTimeline {
   let newest = -1;
   let length = 0;
   let latest = Number.NEGATIVE_INFINITY;
+  /** Arrivals in a row at which the clock, unclamped, was at or past the newest tick. */
+  let behind = 0;
   const out: Sample = {
     alpha: 0,
     count: 0,
@@ -140,6 +147,17 @@ export function createRaceTimeline(tickMs: number): RaceTimeline {
   return {
     arrive: (model, now, delta) => {
       if (delta) clock.observe(model.tick, now);
+      // A clock that is early is stuck on the newest tick, one jump per message. That is what a
+      // stall longer than the ticker's catch-up leaves: the ticks fall behind the wall clock while
+      // the old minimum is still believed. The cure is the recent arrivals alone.
+      if (delta) {
+        const unclamped = (now - clock.base() - delay) / tickMs;
+        behind = unclamped >= model.tick ? behind + 1 : 0;
+        if (behind >= BEHIND_ARRIVALS) {
+          clock.rebase(behind);
+          behind = 0;
+        }
+      }
       // A full for the tick the newest entry already holds replaces it; anything else is next.
       if (length === 0 || (ring[newest] as Entry).tick !== model.tick) {
         newest = (newest + 1) % RING_TICKS;

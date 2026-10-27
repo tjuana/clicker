@@ -15,7 +15,7 @@ export const renderDelay = (tickMs: number): number => tickMs + JITTER_MS;
  * outlive a server that stalled: the old minimum is forgotten once it is this old.
  */
 const WINDOW_MS = 4_000;
-/** Twenty ticks a second is the fastest a room runs: eighty arrivals fit in the window, and room to spare. */
+/** Thirty ticks a second is the fastest a room runs: 120 arrivals fit in the window, and a few to spare. */
 const CAPACITY = 128;
 
 export interface ClockEstimate {
@@ -25,6 +25,12 @@ export interface ClockEstimate {
   started: () => boolean;
   /** The local time at which the server stepped tick 0, as far as the arrivals tell. */
   base: () => number;
+  /**
+   * Forgets every arrival but the last `recent`. For a clock that has proved too early: after a
+   * stall the ticker could not fully catch up, every tick arrives later than the old minimum says,
+   * and that minimum would be believed until it aged out of the window.
+   */
+  rebase: (recent: number) => void;
 }
 
 /**
@@ -43,18 +49,29 @@ export function createClockEstimate(tickMs: number): ClockEstimate {
   const offsets = new Float64Array(CAPACITY);
   const arrivals = new Float64Array(CAPACITY);
   let seen = 0;
+  /** Arrivals before this index are forgotten. */
+  let from = 0;
   let base = 0;
+  const refresh = (now: number): void => {
+    base = Number.POSITIVE_INFINITY;
+    for (let k = Math.max(from, seen - CAPACITY); k < seen; k += 1) {
+      if (now - (arrivals[k % CAPACITY] as number) <= WINDOW_MS) {
+        base = Math.min(base, offsets[k % CAPACITY] as number);
+      }
+    }
+  };
   return {
     observe: (tick, now) => {
       offsets[seen % CAPACITY] = now - tick * tickMs;
       arrivals[seen % CAPACITY] = now;
       seen += 1;
-      base = Number.POSITIVE_INFINITY;
-      for (let i = 0; i < Math.min(seen, CAPACITY); i += 1) {
-        if (now - (arrivals[i] as number) <= WINDOW_MS) base = Math.min(base, offsets[i] as number);
-      }
+      refresh(now);
     },
     started: () => seen > 0,
     base: () => base,
+    rebase: (recent) => {
+      from = Math.max(from, seen - recent);
+      if (seen > 0) refresh(arrivals[(seen - 1) % CAPACITY] as number);
+    },
   };
 }
