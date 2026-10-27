@@ -1175,3 +1175,42 @@ git commit -m "docs: correct the study's colour finding and record what the fram
 - [ ] `review-and-merge`: an independent Opus review, every finding reproduced before it is fixed.
 - [ ] A summary for the owner, in Russian, in the chat: per mode, GPU and CPU milliseconds, draw
   calls, the headroom to 16.7 ms, and how many of the book's effects that budget leaves room for.
+
+---
+
+## What plan 14 decided while it was built (2026-10-27)
+
+- **`WebGLQuery` cannot be named in `scene/frame-stats.ts`.** `tsconfig.worker.json` typechecks
+  `test/` with no DOM library, and the test imports the file; the timer takes an opaque
+  `type Query = object` instead, and a real `WebGL2RenderingContext` still fits it.
+- **The arena's ceiling is 33 draw calls, not 37.** With the borders' culling turned off the count
+  sits at 33: the floor's reflection does not draw them a second time. The gate holds 29–33.
+- **The race's gates cannot see the meter's own worst defect.** With three's per-render reset left
+  on, the arena reads 1 call and fails; the race still reads 15, because its last render does not
+  reset. The arena's gates and the unit test guard it.
+- **The gate caught a defect of plan 13 on its first runs.** The race read 0 draw calls for about
+  two seconds after the countdown: the track's and the cars' effect cleanup called
+  `useLoader.clear`, React runs every cleanup once right after mounting in development
+  (`StrictMode`), and the render that started the race fetched every model again with the scene
+  blank meanwhile. Proved by a probe that logged asset requests and the meter's calls with and
+  without `StrictMode`. Fixed by keeping the cache (the lobby preloads it before every race anyway);
+  guarded by `e2e/race.spec.ts`, "the race fetches its models once", seen failing first (the car
+  fetched twice). Production never ran the cleanup early, so the live game was not affected.
+- **The line is opaque.** At 390 px it wraps onto the race's controls hint, and see-through text
+  over text was unreadable.
+- **The rule about fps went under "Optimise from a measurement"** in `CLAUDE.md`, where it reads
+  as a rule about measuring, rather than under "Count the hot path".
+- Measured with `pnpm --filter @clicker/app run measure` on the M2 Pro, twenty players, vsync on:
+
+  ```
+  race, 20 players, 1280x760
+    GPU  median 1.20 ms, worst p95 2.01 ms
+    CPU  median 0.30 ms, worst p95 1.40 ms
+    15 draw calls, 64k triangles
+    headroom to 60 fps: 13.25 of 16.67 ms
+  cycles, 20 players, 1280x760
+    GPU  median 2.66 ms, worst p95 4.46 ms
+    CPU  median 0.30 ms, worst p95 1.40 ms
+    33 draw calls, 79k triangles
+    headroom to 60 fps: 10.80 of 16.67 ms
+  ```
