@@ -1,5 +1,6 @@
 import { type ClickerScore, type ClickerState, emptyScore } from '../src/modes/clicker/state';
 import type { CyclesState } from '../src/modes/cycles/state';
+import type { RaceState } from '../src/modes/race/state';
 import { apply } from '../src/room/apply';
 import type { Command } from '../src/room/commands';
 import { DEFAULT_CONFIG, type GameConfig } from '../src/room/config';
@@ -48,6 +49,12 @@ export function clickerOf(state: RoomState): ClickerState {
 export function cyclesOf(state: RoomState): CyclesState {
   if (state.mode !== 'cycles') throw new Error(`expected a cycles room, got ${state.mode}`);
   return state.modeState as CyclesState;
+}
+
+/** The ring race's slice of a room. */
+export function raceOf(state: RoomState): RaceState {
+  if (state.mode !== 'race') throw new Error(`expected a race room, got ${state.mode}`);
+  return state.modeState as RaceState;
 }
 
 /** A lobby with a host ("host", publicId 1) and nobody else. Every later publicId follows from 2. */

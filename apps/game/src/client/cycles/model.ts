@@ -1,4 +1,4 @@
-import type { DeltaMessage, FullMessage } from '@clicker/protocol';
+import type { CyclesDeltaMessage, CyclesFullMessage } from '@clicker/protocol';
 
 /** What the scene needs to lay or lift one wall. `from` is the cell laid before, or -1. */
 export type WallOp =
@@ -37,7 +37,7 @@ function apart(a: number, b: number, side: number): number {
 }
 
 /** Starts over from a full message; returns the walls to draw from scratch. */
-export function fromFull(full: FullMessage): { model: CyclesModel; walls: WallOp[] } {
+export function fromFull(full: CyclesFullMessage): { model: CyclesModel; walls: WallOp[] } {
   const ids = new Map<number, string>();
   const heads = new Map<number, Head>();
   const kills = new Map<number, number>();
@@ -87,8 +87,8 @@ export function fromFull(full: FullMessage): { model: CyclesModel; walls: WallOp
  */
 export function applyDelta(
   model: CyclesModel,
-  delta: DeltaMessage,
-): { model: CyclesModel; walls: WallOp[]; events: DeltaMessage['events'] } | null {
+  delta: CyclesDeltaMessage,
+): { model: CyclesModel; walls: WallOp[]; events: CyclesDeltaMessage['events'] } | null {
   if (delta.t <= model.tick) return { model, walls: [], events: [] };
   if (delta.t !== model.tick + 1) return null;
 

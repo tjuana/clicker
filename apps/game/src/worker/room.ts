@@ -9,6 +9,8 @@ import {
   type GameEvent,
   type ModeState,
   nextDeadline,
+  onField,
+  type RaceState,
   type RoomState,
   syncConnections,
   upgradeStored,
@@ -34,9 +36,22 @@ const SNAPSHOT_INTERVAL_MS = 100;
 /** A `full` is tens of kilobytes and a client can ask for it as often as it likes. */
 const RESYNC_MIN_GAP_MS = 1000;
 
-/** How many bikes the room has seated: a new one means every client's slot table is out of date. */
+/**
+ * How many bikes or cars the room has seated: a new one means every client's slot table is out
+ * of date. The race counts the cars on the field only: a car that joins in the middle of a race
+ * waits off it, and nobody else's table has to change for that.
+ */
 function seats(state: RoomState): number {
-  return state.mode === 'cycles' ? (state.modeState as CyclesState).bikes.length : 0;
+  switch (state.mode) {
+    case 'cycles':
+      return (state.modeState as CyclesState).bikes.length;
+    case 'race':
+      return (state.modeState as RaceState).cars.filter(onField).length;
+    case 'clicker':
+      return 0;
+    default:
+      return state.mode satisfies never;
+  }
 }
 
 export class Room extends Server<Env> {
@@ -219,7 +234,8 @@ export class Room extends Server<Env> {
     const configChanged =
       applied.state.mode !== this.#state.mode ||
       applied.state.settings.speed !== this.#state.settings.speed;
-    const newSeat = seats(applied.state) > seats(this.#state);
+    // Only a join can seat anybody, and counting the race's cars is a scan: not for every input.
+    const newSeat = command.type === 'join' && seats(applied.state) > seats(this.#state);
     this.#state = applied.state;
     if (configChanged) this.#config = this.#configOf(applied.state);
 
@@ -264,7 +280,7 @@ export class Room extends Server<Env> {
         you: event.publicId,
         isHost: event.isHost,
       });
-      // Someone arriving in the middle of a light-cycle round has missed every delta so far.
+      // Someone arriving in the middle of a round of a living mode has missed every delta so far.
       // Right after the welcome, so the next thing they hear is the state the deltas build on.
       // A bike that did not exist a moment ago has a slot nobody else knows: everyone gets the
       // round again, the newcomer included, in the same synchronous step as the welcome.
@@ -281,8 +297,7 @@ export class Room extends Server<Env> {
       return;
     }
     // One string for the whole room, however many are connected.
-    if (event.type === 'stepped')
-      this.broadcast(JSON.stringify(toDelta(event.tick, event.changes)));
+    if (event.type === 'stepped') this.broadcast(JSON.stringify(toDelta(this.#state, event)));
   }
 
   /** The base config belongs to the mode in play; what the environment sets wins over it. */
@@ -323,7 +338,7 @@ export class Room extends Server<Env> {
   }
 
   /**
-   * `null` outside a light-cycle round. One string, however many connections it goes to, and the
+   * `null` outside a round of a mode with a field. One string, however many connections it goes to, and the
    * same string for as long as the state is the same one: building it walks every trail (tens of
    * kilobytes), and `resync` lets any client ask. The key is the mode's state object itself —
    * the rules never mutate, so a changed tick or bike set is always a different object, and

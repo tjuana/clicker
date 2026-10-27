@@ -30,6 +30,7 @@ function carAt(piece: number, along: number, lateral: number, over: Partial<Car>
     lapStart: 0,
     pace: 100,
     wall: 0,
+    touch: 0,
     ...over,
   };
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_CYCLES_SETTINGS } from '../src/modes/cycles/config';
 import { random } from '../src/modes/cycles/random';
-import { raceMode } from '../src/modes/race';
+import { carsInOrder, onField, raceMode } from '../src/modes/race';
 import { RACE } from '../src/modes/race/config';
 import { over, raceResults, standings } from '../src/modes/race/race';
 import type { RaceState } from '../src/modes/race/state';
@@ -119,6 +119,66 @@ describe('the race mode', () => {
     expect(cleared.tick).toBe(0);
     expect(cleared.cars).toHaveLength(20);
     expect(RACE.laps).toBe(3);
+  });
+
+  it('writes the players’ names into the results, so a player who leaves keeps theirs', () => {
+    const finished = raceMode.finish(build(['1', '2'], new Set(['1', '2'])), {
+      '1': 'Ann',
+      '2': 'Bob',
+    });
+    const gone = raceMode.removePlayers(finished, ['1']);
+
+    const names = Object.fromEntries((gone.results ?? []).map((row) => [row.publicId, row.name]));
+    expect(names).toEqual({ '1': 'Ann', '2': 'Bob' });
+  });
+
+  it('says which cars are on the field, and puts them in the order of the race', () => {
+    const step = raceMode.step as NonNullable<typeof raceMode.step>;
+    const racing = step(build(['1', '2', '3'], new Set()), settings).state;
+    const joined = raceMode.addPlayer(racing, '9', false, 0, config, settings);
+    // Slot 2 has finished first, slot 0 second; the rest are where the grid left them.
+    const cars = joined.cars.map((car) =>
+      car.slot === 2 ? { ...car, finish: 100 } : car.slot === 0 ? { ...car, finish: 200 } : car,
+    );
+
+    const order = carsInOrder({ ...joined, cars });
+
+    expect(order.map((car) => car.slot)).toEqual([2, 0, 1]);
+    expect(cars.filter(onField)).toHaveLength(3);
+  });
+
+  describe('a player who joins in the countdown', () => {
+    const track = buildTrack(TRACKS.ring as TrackData);
+
+    it('takes the next place on the grid and races', () => {
+      const grid = build(['1', '2'], new Set());
+      const joined = raceMode.addPlayer(grid, '3', false, 0, config, settings);
+
+      const late = joined.cars[joined.index['3'] as number];
+      expect(late?.out).toBe(false);
+      expect(standings(joined, track)).toContain(late?.slot);
+      // Where the grid would have put it had it been there when the round started.
+      const together = build(['1', '2', '3'], new Set(['1', '3']));
+      const expected = together.cars[together.index['3'] as number];
+      expect(late).toMatchObject({ x: expected?.x, y: expected?.y, heading: expected?.heading });
+      let state = raceMode.applyInput(joined, '3', { type: 'keys', mask: 1 }, 0, config, settings);
+      const step = raceMode.step as NonNullable<typeof raceMode.step>;
+      for (let i = 0; i < 30; i += 1) state = step(state, settings).state;
+      expect(state.cars[state.index['3'] as number]?.speed).toBeGreaterThan(0);
+    });
+
+    it('waits off the field when it comes to a lobby, where nobody stands on the grid yet', () => {
+      let lobby = raceMode.create(1);
+      lobby = raceMode.addPlayer(lobby, '1', false, 0, config, settings);
+      expect(lobby.cars[0]?.out).toBe(true);
+    });
+
+    it('waits off the field once the lights are out', () => {
+      const step = raceMode.step as NonNullable<typeof raceMode.step>;
+      const state = step(build(['1', '2'], new Set(['1'])), settings).state;
+      const joined = raceMode.addPlayer(state, '3', false, 0, config, settings);
+      expect(joined.cars[joined.index['3'] as number]?.out).toBe(true);
+    });
   });
 
   describe('a player who joins in the middle of a race', () => {

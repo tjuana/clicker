@@ -301,7 +301,16 @@ function step(state: RoomState): ApplyResult {
   return {
     state: { ...state, modeState: stepped.state },
     // The tick number comes from the state that was produced, so it cannot drift from it.
-    events: [{ type: 'stepped', tick: tickOf(stepped.state), changes: stepped.changes }],
+    // `state.mode` and the changes travel together, as `modeFor` says; a mode that steps is
+    // never the clicker, so the pairing is asserted here once.
+    events: [
+      {
+        type: 'stepped',
+        tick: tickOf(stepped.state),
+        mode: state.mode,
+        changes: stepped.changes,
+      } as GameEvent,
+    ],
   };
 }
 

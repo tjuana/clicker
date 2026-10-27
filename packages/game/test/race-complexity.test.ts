@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { carsInOrder } from '../src/modes/race';
 import { bump } from '../src/modes/race/bump';
 import type { Car } from '../src/modes/race/car';
 import { RACE } from '../src/modes/race/config';
 import { TILE } from '../src/modes/race/fixed';
-import { counted, growth, LINEAR, type Tally } from './complexity';
+import { emptyRace, newCar } from '../src/modes/race/state';
+import { counted, growth, LINEAR, type Tally, traversalCost } from './complexity';
 
 function car(slot: number, x: number, y: number): Car {
   return {
@@ -24,6 +26,7 @@ function car(slot: number, x: number, y: number): Car {
     lapStart: 0,
     pace: 100,
     wall: 0,
+    touch: 0,
   };
 }
 
@@ -53,5 +56,21 @@ describe('bumping cars', () => {
     );
     expect(pairs).toBeGreaterThan(LINEAR * 0.5);
     expect(pairs).toBeLessThan(LINEAR * 2);
+  });
+});
+
+describe('putting the cars in the order of the race', () => {
+  // Done once a tick for the delta, so it may not grow faster than the field.
+  it('walks the cars a fixed number of times, however many there are', () => {
+    const ratio = growth((size) => {
+      const cars = Array.from({ length: size }, (_, i) => ({
+        ...newCar(i, `p${i}`, false),
+        lap: 1 + (i % 3),
+      }));
+      const state = emptyRace('ring', 1, cars);
+      return traversalCost(() => carsInOrder(state));
+    });
+    expect(ratio).toBeGreaterThan(LINEAR * 0.5);
+    expect(ratio).toBeLessThan(LINEAR * 2);
   });
 });

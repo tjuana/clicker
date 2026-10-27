@@ -49,6 +49,8 @@ describe('step', () => {
     if (event?.type !== 'stepped') return;
     expect(event.tick).toBe(cyclesOf(state).tick + 1);
     expect(event.tick).toBe(cyclesOf(first.state).tick);
+    expect(event.mode).toBe('cycles');
+    if (event.mode !== 'cycles') return;
     expect(event.changes.cells.length).toBeGreaterThan(0);
   });
 

@@ -166,6 +166,14 @@ describe('parseClientMessage', () => {
     expect(parseClientMessage(raw)).toEqual({ ok: false, reason: 'bad_version' });
   });
 
+  // Version 3 had no race: its `full` and `delta` carried no `mode`, which a version-4 reader needs
+  // to tell the race from the light cycles.
+  it('turns away the clients of version 3', () => {
+    const raw = encode({ v: 3, type: 'start' });
+
+    expect(parseClientMessage(raw)).toEqual({ ok: false, reason: 'bad_version' });
+  });
+
   // Version 2 had no `walls` in the light-cycle snapshot: a strict version-2 client rejects it.
   it('turns away the clients of version 2', () => {
     const raw = encode({ v: 2, type: 'start' });
@@ -184,6 +192,9 @@ describe('parseClientMessage', () => {
   it.each([
     { type: 'setMode', mode: 'cycles' },
     { type: 'setMode', mode: 'clicker' },
+    { type: 'setMode', mode: 'race' },
+    { type: 'input', input: { type: 'keys', mask: 0 } },
+    { type: 'input', input: { type: 'keys', mask: 15 } },
     { type: 'setSpeed', speed: 8 },
     { type: 'setSpeed', speed: 12 },
     { type: 'setSpeed', speed: 16 },
@@ -209,6 +220,12 @@ describe('parseClientMessage', () => {
       'a turn to a side that does not exist',
       { type: 'input', input: { type: 'turn', side: 'up' } },
     ],
+    ['a key mask of 16', { type: 'input', input: { type: 'keys', mask: 16 } }],
+    ['a negative key mask', { type: 'input', input: { type: 'keys', mask: -1 } }],
+    ['a fractional key mask', { type: 'input', input: { type: 'keys', mask: 1.5 } }],
+    ['a key mask as text', { type: 'input', input: { type: 'keys', mask: '3' } }],
+    ['keys without a mask', { type: 'input', input: { type: 'keys' } }],
+    ['an extra field in keys', { type: 'input', input: { type: 'keys', mask: 1, gas: true } }],
     ['a mode that does not exist', { type: 'setMode', mode: 'chess' }],
     ['a setMode without a mode', { type: 'setMode' }],
     ['a speed that is not on offer', { type: 'setSpeed', speed: 10 }],

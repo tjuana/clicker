@@ -23,6 +23,8 @@ function pass(cars: Car[], bounds: Bounds, config: RaceConfig): number {
   const pushY = new Int32Array(count);
   const limit = new Float64Array(count);
   const slot = new Int32Array(count);
+  // Who each car overlapped this pass, as a bitmask over slots (see `Car.touch`).
+  const touched = new Int32Array(count);
   const heading = new Int32Array(count);
   // The two circles of car i: front at 2i, rear at 2i + 1.
   const circleX = new Int32Array(2 * count);
@@ -75,6 +77,8 @@ function pass(cars: Car[], bounds: Bounds, config: RaceConfig): number {
         const share = (touching - dist) / (2 * dist);
         const sx = Math.trunc(dx * share);
         const sy = Math.trunc(dy * share);
+        touched[i] = (touched[i] as number) | (1 << (slot[j] as number));
+        touched[j] = (touched[j] as number) | (1 << (slot[i] as number));
         pushX[i] = (pushX[i] as number) - sx;
         pushY[i] = (pushY[i] as number) - sy;
         pushX[j] = (pushX[j] as number) + sx;
@@ -94,6 +98,7 @@ function pass(cars: Car[], bounds: Bounds, config: RaceConfig): number {
     const car = cars[i] as Car;
     car.x = (px[i] as number) + (pushX[i] as number);
     car.y = (py[i] as number) + (pushY[i] as number);
+    car.touch |= touched[i] as number;
     if (car.speed > 0) car.speed = Math.min(car.speed, Math.max(0, limit[i] as number));
   }
   return pairs;
@@ -102,8 +107,10 @@ function pass(cars: Car[], bounds: Bounds, config: RaceConfig): number {
 /**
  * Separates overlapping cars and slows the one behind. Two passes, the second from the
  * positions the first left: a car pushed by several neighbours at once is otherwise still inside
- * one of them. Mutates the cars, which are the step's own copies.
+ * one of them. Mutates the cars, which are the step's own copies; each car's `touch` is left as
+ * the set of cars it overlapped in either pass.
  */
 export function bump(cars: Car[], bounds: Bounds, config: RaceConfig): number {
+  for (const car of cars) car.touch = 0;
   return pass(cars, bounds, config) + pass(cars, bounds, config);
 }

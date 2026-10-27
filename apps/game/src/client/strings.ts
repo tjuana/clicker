@@ -45,9 +45,15 @@ export const strings = {
     name: 'Name',
     clicks: 'Clicks',
   },
+  ringRace: {
+    comingSoon: 'The ring race is coming',
+    laps: 'Laps',
+    bestLap: 'Best lap',
+    noLap: '\u2014',
+  },
   // The light cycles. Sentences are assembled from parts in the screens, so the word order is English.
   modeLabel: 'Game',
-  modes: { clicker: 'Clicker', cycles: 'Light cycles' },
+  modes: { clicker: 'Clicker', cycles: 'Light cycles', race: 'Ring race' },
   speedLabel: 'Speed',
   speeds: { 8: 'Slow', 12: 'Normal', 16: 'Fast', 20: 'Insane' },
   cellsPerSecond: 'cells/s',

@@ -5,25 +5,42 @@ import type { CyclesSettings } from './cycles/config';
 import { cyclesMode } from './cycles/mode';
 import type { CyclesInput, CyclesState } from './cycles/state';
 import type { TickChanges } from './cycles/step';
+import { type RaceInput, raceMode } from './race';
+import type { RaceChanges, RaceState } from './race/state';
 
-export type ModeId = 'clicker' | 'cycles';
-export type ModeState = ClickerState | CyclesState;
-export type ModeInput = ClickerInput | CyclesInput;
+/**
+ * The one table of modes. Every list of them — the ids, the unions of states and inputs, the
+ * registry, what a step reports, the protocol's cases — is derived from it, so adding a mode
+ * is one line here and a compile error everywhere a case is missing.
+ *
+ * `changes` is what a tick of a living mode reports, and `never` for a mode that does not step.
+ */
+export interface ModeTypes {
+  clicker: { state: ClickerState; input: ClickerInput; changes: never };
+  cycles: { state: CyclesState; input: CyclesInput; changes: TickChanges };
+  race: { state: RaceState; input: RaceInput; changes: RaceChanges };
+}
+
+export type ModeId = keyof ModeTypes;
+export type ModeState = ModeTypes[ModeId]['state'];
+export type ModeInput = ModeTypes[ModeId]['input'];
+/** What a tick of a living mode reports. The room carries it without looking inside. */
+export type ModeChanges = ModeTypes[ModeId]['changes'];
 
 /**
  * Everything the room asks of a game. Derived from two implementations, not designed ahead of
- * them: the clicker and the light cycles, which is the moment CLAUDE.md names for it.
+ * them: the clicker and the light cycles, which is the moment CLAUDE.md names for it. The race
+ * is the third.
  *
  * `settings` is the room's light-cycle settings, speed and walls. Only the light cycles read
  * them; they come last so a mode that does not care leaves them off.
  *
- * `_I` is the mode's own input. `applyInput` takes any `ModeInput` and refuses the foreign kind;
- * a mode that is not yet one of `ModeInput`, the race, adds its own to what it accepts.
+ * `I` is the mode's own input. `applyInput` takes any `ModeInput` and refuses the foreign kind.
  *
- * `C` is what a tick reports. The light cycles' `TickChanges` is the default; the race reports
- * `RaceChanges` and is not registered in `MODES` until the room learns to carry both.
+ * `C` is what a tick reports, and has no default on purpose: a default is what once let a mode
+ * whose changes the worker could not read type-check. The clicker never steps, so it says `never`.
  */
-export interface Mode<S, _I, C = TickChanges> {
+export interface Mode<S extends ModeState, I extends ModeInput, C extends ModeChanges> {
   create(seed: number): S;
   addPlayer(
     state: S,
@@ -39,7 +56,7 @@ export interface Mode<S, _I, C = TickChanges> {
   applyInput(
     state: S,
     publicId: string,
-    input: ModeInput | _I,
+    input: ModeInput | I,
     now: number,
     config: GameConfig,
     settings: CyclesSettings,
@@ -56,17 +73,28 @@ export interface Mode<S, _I, C = TickChanges> {
   finish(state: S, names: Record<string, string>): S;
   /** An interrupted round: nothing of it may be left on screen in the lobby. */
   clear(state: S, settings: CyclesSettings): S;
+  /**
+   * The round has reached its own end before the clock: the room ends it where it ends a deserted
+   * one. A mode that only the clock ends answers `false`.
+   */
+  over(state: S): boolean;
   /** Whether bots can take part. */
   bots: boolean;
 }
 
-export const MODES = { clicker: clickerMode, cycles: cyclesMode } as const;
+/** Typed by the table, so a mode registered under another's id, or left out, does not compile. */
+export const MODES: {
+  [K in ModeId]: Mode<ModeTypes[K]['state'], ModeTypes[K]['input'], ModeTypes[K]['changes']>;
+} = { clicker: clickerMode, cycles: cyclesMode, race: raceMode };
+
+/** Every mode's id, for a place that needs the list at run time: a schema's picklist. */
+export const MODE_IDS = Object.keys(MODES) as ModeId[];
 
 /**
  * The one place the mode's type is widened. `state.mode` and `state.modeState` always travel
  * together — `apply` never sets one without the other — but TypeScript cannot see that through
  * a spread, so the pairing is asserted here instead of at every call site.
  */
-export function modeFor(id: ModeId): Mode<ModeState, ModeInput> {
-  return MODES[id] as unknown as Mode<ModeState, ModeInput>;
+export function modeFor(id: ModeId): Mode<ModeState, ModeInput, ModeChanges> {
+  return MODES[id] as unknown as Mode<ModeState, ModeInput, ModeChanges>;
 }

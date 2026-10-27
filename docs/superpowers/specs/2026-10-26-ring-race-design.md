@@ -114,11 +114,20 @@ Everything is an integer, as in the light cycles; the purity gate extends to `mo
 
 - **Mode `race`**, up to 20 participants with bots, host picks it in the lobby like the others. No
   race settings in this version.
-- **Wire.** `full` carries the track id, `tickMs`, and every car. Each tick's `delta` is one string
+- **Wire.** `full` carries the track id, `tickMs`, and every car, in the order of the race, with
+  its best lap and the tick its current lap began on (lap times survive a resync). The snapshot's
+  race data carries `tickMs` too, so the results, which are in ticks, can be shown as time.
+  The delta's tuples are in the order of the race as well, so the standings cost no bytes. Each tick's `delta` is one string
   for the room: per car `slot, x, y, heading, speed, lap, flags` (integers), plus events (`lap`,
-  `finished`, `bump`). That is about 20 × 7 small numbers a tick, roughly 0.6 KB, 18 KB/s per
-  player at 30 Hz, measured before any binary format is considered (A14). The protocol version
-  goes to 4.
+  `finished`, `bump`). That is 20 × 7 numbers a tick. **Measured** over a whole race (twenty cars,
+  nineteen bots, 2762 ticks): 609 bytes as JSON on average and 804 at the most, about 18 KB/s per
+  player at 30 Hz, not the 0.6 KB guessed: the coordinates are five digits. A `bump` event is sent
+  once, on the tick two cars begin to touch; while they stay in contact the flags' bit 3 says so. Still no binary format; A14 says to move only if a number
+  forces it. The delta carries every car on the field each tick (a car moves every tick, so
+  there is nothing to leave out). The protocol version is 4. A car that joined mid-race is off
+  the field until the next round and is in neither the `full` nor the deltas; one that joins
+  while the cars still stand on the grid (the countdown, and the instant before the first tick)
+  takes the next grid spot and races, and every client is sent a new `full`.
 - **Client.** The timeline the light cycles use, generalised to car states, draws the world one
   tick plus jitter behind the server. The scene builds the track from the Kenney tiles, puts PBR
   asphalt and grass on their flat colours with world-space UVs, lights it with an HDRI and soft
@@ -206,3 +215,44 @@ What plan 11's review changed:
   the results keep their colours; **a race that is over does not step**.
 - Recorded for plan 12: the `Mode` typing let the race be registered with no type error while the
   worker would have sent empty deltas.
+
+## Decisions made while building plan 12 (2026-10-27)
+
+- **A mistyped mode is a type error.** `Mode<S, I, C>` has its constraints back and no default for
+  the changes of a tick; `ModeChanges` is the union, and the room's `stepped` event is a variant on
+  `mode`, so the worker and `toDelta` must narrow before they read the changes. Plan 11's review
+  had registered the race with no error while the worker would have sent empty deltas.
+- **A mode can end its round** (`over`), checked where a deserted round ends.
+- **Version 4**: `full` and `delta` are variants on a required `mode`. The race's `delta` takes its
+  cars from the state and its events from the tick (`toDelta(state, stepped)`); its flags (finished,
+  on grass, at a wall, touching a car) come from the rules (`carFlags`). Measured over a whole
+  twenty-car race: 609 bytes on average, 804 at the most (an earlier figure of 856 was one tick, 20 s
+  in). A contact is kept per car as a bitmask over slots, so a `bump` event comes when it begins
+  and not on every tick of it.
+- **What plan 13 needs on the wire** (added after plan 12's review): the cars of `full` and `delta`
+  in race order; `tickMs` in the snapshot's race data; `best` and `lapStart` per car in `full`;
+  `TILE`, `TURN`, `TRACKS` and the `TrackData`/`Piece` types exported from `@clicker/game`, since
+  the client builds the scene from the piece list; `carFlags(state, car)` reads the state's own
+  track; `onField(car)` is the one test of whether a car takes part.
+- **A car that joined mid-race is in neither `full` nor `delta`** until the next race. One that
+  joins before the first tick takes the next spot on the grid (`RaceState.onGrid`) and races.
+- **No race on screen yet.** The host cannot pick it; a room put into race mode shows a placeholder
+  while it runs and the results as a table. A whole three-lap race through the room was not tested
+  in workerd — it takes a minute of real time — and its "everyone finished" end is tested on the
+  rules; plan 13's end-to-end test races in a browser.
+
+What plan 12's review changed:
+
+- **One table of mode types** (`ModeTypes`) is the source of `ModeId`, the unions, `MODES`, the
+  `stepped` event and the protocol's `setMode` list; the protocol's per-mode functions are
+  exhaustive `switch`es. Registering a mode twice, swapping two, or adding one without its wire
+  format is a compile error — checked by doing each once.
+- **A bump is the moment contact begins**; contact itself is bit 3 of a car's flags. Before, a
+  "bump" fired on nearly every tick for the cars in a pack and made up a third of each delta.
+- **Names are fixed into the results at the finish**; an absent rider's car is never sent as a bot;
+  a car that joins in the countdown takes the next grid spot and races.
+- **For the race client**: cars on the wire are in race order (key them by slot: the order changes
+  from tick to tick), the snapshot's race data carries `tickMs`, and the `full` carries each car's
+  best lap and lap start. The track's piece list, `TILE` and `TURN` are exported as data.
+- Measured again over a whole twenty-car race: a delta of 609 bytes on average and 804 at most,
+  about 18 KB/s per player.

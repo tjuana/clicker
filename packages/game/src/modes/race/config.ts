@@ -35,6 +35,8 @@ export interface BotConfig {
 
 export interface RaceConfig {
   bot: BotConfig;
+  /** The race's own pace: the one place that says 30 Hz. The room's tick length follows it. */
+  ticksPerSecond: number;
   /** Top speed on the road: 1.6 tiles/s, which makes a 21 s lap of the Ring. */
   topSpeed: number;
   /** Top speed on grass, 0.6 tiles/s: cutting a corner costs more than it saves. */
@@ -87,7 +89,10 @@ export interface RaceConfig {
   gridRow: number;
 }
 
+const TICKS_PER_SECOND = 30;
+
 export const RACE: RaceConfig = {
+  ticksPerSecond: TICKS_PER_SECOND,
   bot: {
     lane: 696,
     lookBase: 1843,
@@ -121,8 +126,8 @@ export const RACE: RaceConfig = {
   maxCars: 20,
   laps: 3,
   coolPace: 50,
-  afterFirst: 30 * 30,
-  cap: 5 * 60 * 30,
+  afterFirst: 30 * TICKS_PER_SECOND,
+  cap: 5 * 60 * TICKS_PER_SECOND,
   gridLateral: 614,
   gridFront: 1024,
   gridRow: 1638,

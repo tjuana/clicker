@@ -67,7 +67,8 @@ export function connect(roomId: string, name: string): Connection {
       followPhase(message.phase);
     }
     if (message.type === 'error') useClient.getState().fail(message.code);
-    if (message.type === 'full' || message.type === 'delta') {
+    // The race's frames are accepted and ignored until it has a scene (plan 13); only the cycles feed theirs.
+    if ((message.type === 'full' || message.type === 'delta') && message.mode === 'cycles') {
       if (feedCycles(message, performance.now()) === 'resync') {
         send({ v: PROTOCOL_VERSION, type: 'resync' });
       }

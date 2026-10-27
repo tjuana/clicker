@@ -11,6 +11,7 @@ import {
 } from '.';
 import { type CyclesConfig, type CyclesSettings, cyclesConfigFor } from './config';
 import type { CyclesInput, CyclesState } from './state';
+import type { TickChanges } from './step';
 import { emptyTrail } from './trail';
 
 /**
@@ -50,7 +51,7 @@ function clear(state: CyclesState, settings: CyclesSettings): CyclesState {
   };
 }
 
-export const cyclesMode: Mode<CyclesState, CyclesInput> = {
+export const cyclesMode: Mode<CyclesState, CyclesInput, TickChanges> = {
   create: createCyclesState,
   addPlayer: (state, publicId, bot, _now, _config, settings) =>
     addPlayer(state, publicId, bot, cyclesConfigFor(settings)),
@@ -69,5 +70,6 @@ export const cyclesMode: Mode<CyclesState, CyclesInput> = {
   abandon: leave,
   finish,
   clear,
+  over: () => false,
   bots: true,
 };

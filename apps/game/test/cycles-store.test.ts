@@ -1,4 +1,8 @@
-import { type DeltaMessage, type FullMessage, PROTOCOL_VERSION } from '@clicker/protocol';
+import {
+  type CyclesDeltaMessage as DeltaMessage,
+  type CyclesFullMessage as FullMessage,
+  PROTOCOL_VERSION,
+} from '@clicker/protocol';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { seenOnScreen, turnSent, useLatencyView } from '../src/client/cycles/latency-store';
 import {
@@ -18,6 +22,7 @@ const full = (
 ): FullMessage => ({
   v: PROTOCOL_VERSION,
   type: 'full',
+  mode: 'cycles',
   tick,
   tickMs: 125,
   side: 10,
@@ -46,6 +51,7 @@ const full = (
 const delta = (t: number): DeltaMessage => ({
   v: PROTOCOL_VERSION,
   type: 'delta',
+  mode: 'cycles',
   t,
   cells: [12 + (t - 5), 1],
   heads: [1, 12 + (t - 5), 0, 3, 0, 80, 80, 1],

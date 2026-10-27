@@ -2,7 +2,7 @@ import { randomBelow } from '../cycles/random';
 import { binCars } from './bins';
 import { decide } from './bot';
 import { bump } from './bump';
-import { type Car, drive } from './car';
+import { type Car, drive, onField } from './car';
 import type { RaceConfig } from './config';
 import type { RaceChanges, RaceResultRow, RaceState } from './state';
 import { point, project, type Track, walk } from './track';
@@ -25,7 +25,7 @@ function order(state: RaceState, track: Track): number[] {
   const covered = cars.map((car) => progress(car, track));
   return cars
     .map((_, i) => i)
-    .filter((i) => !(cars[i] as Car).out)
+    .filter((i) => onField(cars[i] as Car))
     .sort((a, b) => {
       const x = cars[a] as Car;
       const y = cars[b] as Car;
@@ -36,40 +36,56 @@ function order(state: RaceState, track: Track): number[] {
     });
 }
 
-/** Slots in race order: finishers by their finish tick, then the rest by progress. */
+/** The cars on the field in race order: finishers by their finish tick, then the rest by progress. */
+export function raceOrder(state: RaceState, track: Track): Car[] {
+  return order(state, track).map((i) => state.cars[i] as Car);
+}
+
+/** Slots in race order. */
 export function standings(state: RaceState, track: Track): number[] {
-  return order(state, track).map((i) => (state.cars[i] as Car).slot);
+  return raceOrder(state, track).map((car) => car.slot);
 }
 
 /**
- * Cars two abreast behind the start line, back along the centreline in slot order, facing the
- * way round. A new race: the clock, the finish and the results are cleared. Bots draw their
- * pace from the seed here, so a replay from this state is the same race.
+ * The place-th spot on the grid: two abreast behind the start line, back along the centreline,
+ * facing the way round.
+ */
+export function gridSpot(
+  track: Track,
+  config: RaceConfig,
+  place: number,
+): { x: number; y: number; heading: number; piece: number } {
+  const count = track.pieces.length;
+  let piece = count - 1;
+  let along =
+    (track.pieces[piece]?.length ?? 0) - config.gridFront - Math.floor(place / 2) * config.gridRow;
+  while (along < 0) {
+    piece = (piece + count - 1) % count;
+    along += track.pieces[piece]?.length ?? 0;
+  }
+  const where = point(
+    track,
+    piece,
+    along,
+    place % 2 === 0 ? -config.gridLateral : config.gridLateral,
+  );
+  return { x: where.x, y: where.y, heading: where.heading, piece };
+}
+
+/**
+ * Cars two abreast behind the start line, in slot order (`gridSpot`). A new race: the clock,
+ * the finish and the results are cleared. Bots draw their pace from the seed here, so a replay
+ * from this state is the same race.
  */
 export function startRace(state: RaceState, track: Track, config: RaceConfig): RaceState {
   const rank = state.cars
     .map((_, i) => i)
     .sort((a, b) => (state.cars[a] as Car).slot - (state.cars[b] as Car).slot);
   let seed = state.seed;
-  const count = track.pieces.length;
   const cars = state.cars.map((car) => ({ ...car }));
   rank.forEach((index, place) => {
     const car = cars[index] as Car;
-    let piece = count - 1;
-    let along =
-      (track.pieces[piece]?.length ?? 0) -
-      config.gridFront -
-      Math.floor(place / 2) * config.gridRow;
-    while (along < 0) {
-      piece = (piece + count - 1) % count;
-      along += track.pieces[piece]?.length ?? 0;
-    }
-    const where = point(
-      track,
-      piece,
-      along,
-      place % 2 === 0 ? -config.gridLateral : config.gridLateral,
-    );
+    const spot = gridSpot(track, config, place);
     let pace = 100;
     if (car.abandoned) {
       // Nobody is at the wheel of a person's car, so it does not race, and it takes no draw: the
@@ -81,11 +97,8 @@ export function startRace(state: RaceState, track: Track, config: RaceConfig): R
       pace = 88 + drawn.value;
     }
     Object.assign(car, {
-      x: where.x,
-      y: where.y,
-      heading: where.heading,
+      ...spot,
       speed: 0,
-      piece,
       lap: 0,
       keys: 0,
       finish: null,
@@ -93,20 +106,30 @@ export function startRace(state: RaceState, track: Track, config: RaceConfig): R
       lapStart: 0,
       pace,
       wall: 0,
+      touch: 0,
       out: false,
     });
   });
-  return { ...state, cars, seed, tick: 0, firstFinish: null, results: null };
+  return { ...state, cars, seed, tick: 0, firstFinish: null, results: null, onGrid: true };
 }
 
 export function over(state: RaceState, config: RaceConfig): boolean {
   if (state.tick >= config.cap) return true;
   if (state.firstFinish !== null && state.tick >= state.firstFinish + config.afterFirst)
     return true;
-  return state.cars.every((car) => car.out || car.finish !== null);
+  return state.cars.every((car) => !onField(car) || car.finish !== null);
 }
 
-export function raceResults(state: RaceState, track: Track, config: RaceConfig): RaceResultRow[] {
+/**
+ * `names` are fixed into the rows: the results stay on screen between races, when the room may
+ * already have forgotten a player who left.
+ */
+export function raceResults(
+  state: RaceState,
+  track: Track,
+  config: RaceConfig,
+  names: Record<string, string> = {},
+): RaceResultRow[] {
   return order(state, track).map((i, place) => {
     const car = state.cars[i] as Car;
     const done = car.finish !== null;
@@ -114,6 +137,7 @@ export function raceResults(state: RaceState, track: Track, config: RaceConfig):
       rank: place + 1,
       slot: car.slot,
       publicId: car.publicId,
+      name: names[car.publicId] ?? '',
       laps: done ? config.laps : Math.max(0, Math.min(config.laps, car.lap - 1)),
       best: car.best,
       finish: car.finish,
@@ -139,7 +163,7 @@ export function stepRace(
   const cars = state.cars.map((car) => ({ ...car }));
   // A car that joined mid-race is not on the field: it is neither driven, nor bumped, nor
   // counted, and the bots do not see it. `live` holds the same objects as `cars`.
-  const live = cars.some((car) => car.out) ? cars.filter((car) => !car.out) : cars;
+  const live = cars.some((car) => car.out) ? cars.filter(onField) : cars;
   // Bots, and finished cars of either kind, decide before anybody moves, all from the one
   // picture of where the cars stand.
   const bins = live.some((car) => car.bot || car.finish !== null)
@@ -156,8 +180,7 @@ export function stepRace(
     crossings[i] = drive(live[i] as Car, track, config);
   }
 
-  const beforeX = Int32Array.from(live, (car) => car.x);
-  const beforeY = Int32Array.from(live, (car) => car.y);
+  const touchedBefore = Int32Array.from(live, (car) => car.touch);
   bump(live, track.bounds, config);
   // A push can carry a car back over the line it has just crossed. Its piece is then stale and
   // the next tick would count the same crossing again, as a lap lost and a lap won; walking it
@@ -173,7 +196,8 @@ export function stepRace(
   let firstFinish = state.firstFinish;
   for (let i = 0; i < live.length; i += 1) {
     const car = live[i] as Car;
-    if (car.x !== beforeX[i] || car.y !== beforeY[i]) changes.bumped.push(car.slot);
+    // A car newly touching someone: a contact that goes on is not another bump.
+    if ((car.touch & ~(touchedBefore[i] as number)) !== 0) changes.bumped.push(car.slot);
     if (car.finish !== null) continue;
     const crossed = crossings[i] as number;
     if (crossed < 0) {
