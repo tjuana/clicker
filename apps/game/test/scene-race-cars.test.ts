@@ -1,4 +1,4 @@
-import { TILE, TURN } from '@clicker/game';
+import { RACE, TILE, TURN } from '@clicker/game';
 import {
   Box3,
   BufferGeometry,
@@ -37,6 +37,17 @@ describe('the baked car', () => {
     expect(box.min.y).toBeCloseTo(0, 4);
     expect((box.min.x + box.max.x) / 2).toBeCloseTo(0, 4);
     expect((box.min.z + box.max.z) / 2).toBeCloseTo(0, 4);
+  });
+
+  it('is drawn no wider than the two circles it collides as, so it never sinks into a barrier', async () => {
+    const parts = await bakeCar(await loadCar());
+    const box = new Box3();
+    for (const part of parts) {
+      part.geometry.computeBoundingBox();
+      box.union(part.geometry.boundingBox as Box3);
+    }
+    const collides = (2 * RACE.radius) / TILE;
+    expect(box.max.x - box.min.x).toBeLessThanOrEqual(collides + 0.01);
   });
 
   it('keeps one part per material, the body white for the slot colour to show', async () => {

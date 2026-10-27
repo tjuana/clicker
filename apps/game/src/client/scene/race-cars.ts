@@ -23,7 +23,7 @@ export interface CarPart {
 
 /**
  * The Kit's car baked per material: each mesh in its place, the whole car centred on its
- * footprint with the wheels on the ground and scaled to `CAR.length`. The geometry and the cloned
+ * footprint with the wheels on the ground and scaled to `CAR.length` and slimmed by `CAR.widthScale`. The geometry and the cloned
  * materials are the caller's to dispose; the loaded model is not touched.
  */
 export function bakeCar(root: Object3D): CarPart[] {
@@ -32,7 +32,7 @@ export function bakeCar(root: Object3D): CarPart[] {
   const scale = CAR.length / (box.max.z - box.min.z);
   // The Kit's root node carries an offset of its own: centre by the real bounds, never by luck.
   const fit = new Matrix4()
-    .makeScale(scale, scale, scale)
+    .makeScale(scale * CAR.widthScale, scale, scale)
     .multiply(
       new Matrix4().makeTranslation(
         -(box.min.x + box.max.x) / 2,

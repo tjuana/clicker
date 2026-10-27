@@ -87,6 +87,12 @@ export const OVERVIEW = {
 export const CAR = {
   /** Nose to tail in tiles; a lane is 0.69 wide, so a car takes under half of it. */
   length: 0.3,
+  /**
+   * The Kit's car is 0.162 tile wide but collides as two circles 0.13 wide: drawn at full width it
+   * sinks 0.026 into a barrier and overlaps a neighbour by 0.032. Only the width shrinks; the
+   * length already matches the collision.
+   */
+  widthScale: 0.85,
   /** The Kit names the body material `red`; it is made white so the slot colour is what shows. */
   bodyMaterial: 'red',
   /** Instances per mesh: the room seats twenty and a slot beyond this is not drawn. */
