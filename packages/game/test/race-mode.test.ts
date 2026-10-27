@@ -98,6 +98,13 @@ describe('the race mode', () => {
     let state = build(['a', 'b'], new Set(['a', 'b']));
     state = raceMode.applyInput(state, 'a', { type: 'keys', mask: 1 }, 0, config, settings);
     state = raceMode.abandon(state, 'a');
+    // At once, before any tick: the held key is let go and the autopilot has the wheel.
+    expect(state.cars[0]).toMatchObject({
+      bot: true,
+      abandoned: true,
+      keys: 0,
+      pace: RACE.coolPace,
+    });
     const step = raceMode.step as NonNullable<typeof raceMode.step>;
     for (let i = 0; i < 60; i += 1) state = step(state, settings).state;
     expect(state.cars).toHaveLength(2);

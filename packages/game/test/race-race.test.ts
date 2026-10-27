@@ -204,6 +204,30 @@ describe('the finish', () => {
     expect(car?.speed).toBeGreaterThan(0);
     expect(car?.speed).toBeLessThanOrEqual(RACE.topSpeed / 2);
   });
+
+  it('counts no more laps when it drives over the line again', () => {
+    // Finished, and about five tiles short of the line: at its cruising pace the line is crossed
+    // inside the 600 ticks, and the race is not yet over (it ends 900 ticks after the first finish).
+    const piece = track.pieces.findIndex((p) => track.length - p.start < 5 * 4096);
+    const done = placed(piece, 0, {
+      finish: 500,
+      lap: 4,
+      pace: RACE.coolPace,
+      speed: 100,
+    });
+    const other = { ...field(2).cars[1], keys: 0 } as Car;
+    let state: RaceState = { ...done, cars: [...done.cars, other], tick: 501, firstFinish: 500 };
+    let wrapped = false;
+    for (let i = 0; i < 600; i += 1) {
+      const before = state.cars[0]?.piece ?? 0;
+      state = stepRace(state, track, RACE).state;
+      if ((state.cars[0]?.piece ?? 0) < before) wrapped = true;
+    }
+    expect(wrapped).toBe(true);
+    expect(state.cars[0]?.lap).toBe(4);
+    expect(state.cars[0]?.best).toBeNull();
+    expect(state.cars[0]?.finish).toBe(500);
+  });
 });
 
 describe('standings', () => {

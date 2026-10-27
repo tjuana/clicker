@@ -2,7 +2,8 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { addPlayer, createCyclesState, startRound, step } from '../src/modes/cycles';
-import { CYCLES_CONFIG } from '../src/modes/cycles/config';
+import { CYCLES_CONFIG, DEFAULT_CYCLES_SETTINGS } from '../src/modes/cycles/config';
+import { raceMode } from '../src/modes/race';
 import { apply } from '../src/room/apply';
 import { nextDeadline } from '../src/room/deadline';
 import { abortRound, syncConnections } from '../src/room/recovery';
@@ -170,6 +171,34 @@ describe('the rules at runtime', () => {
         for (let i = 0; i < 6; i += 1) state = addPlayer(state, `bot-${i}`, true, CYCLES_CONFIG);
         state = startRound(state, CYCLES_CONFIG);
         for (let tick = 0; tick < 600; tick += 1) state = step(state, CYCLES_CONFIG).state;
+      }),
+    ).not.toThrow();
+  });
+
+  it('plays a race of bots and a person, bumps and finishes included, without the clock or the dice', () => {
+    expect(() =>
+      sealed(() => {
+        const settings = config();
+        let state = raceMode.create(3);
+        for (let i = 0; i < 6; i += 1) {
+          state = raceMode.addPlayer(state, String(i), i > 0, 0, settings, DEFAULT_CYCLES_SETTINGS);
+        }
+        state = raceMode.startRound(state, 0, settings, DEFAULT_CYCLES_SETTINGS);
+        state = raceMode.applyInput(
+          state,
+          '0',
+          { type: 'keys', mask: 1 },
+          0,
+          settings,
+          DEFAULT_CYCLES_SETTINGS,
+        );
+        for (let tick = 0; tick < 600; tick += 1) {
+          state = (raceMode.step as NonNullable<typeof raceMode.step>)(
+            state,
+            DEFAULT_CYCLES_SETTINGS,
+          ).state;
+        }
+        raceMode.finish(state, {});
       }),
     ).not.toThrow();
   });

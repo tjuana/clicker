@@ -53,6 +53,8 @@ interface Run {
   state: RaceState;
   wallTicks: number[];
   slowSpell: number;
+  /** The longest run of ticks any car spent touching a wall. */
+  worstWall: number;
   overlap: number;
 }
 
@@ -61,17 +63,19 @@ function race(count: number, ticks: number): Run {
   const wallTicks = state.cars.map(() => 0);
   const spell = state.cars.map(() => 0);
   let slowSpell = 0;
+  let worstWall = 0;
   let overlap = 0;
   for (let t = 0; t < ticks && !state.cars.every((c) => c.finish !== null); t += 1) {
     state = stepRace(state, track, RACE).state;
     state.cars.forEach((c, i) => {
       if (c.wall > 0) wallTicks[i] = (wallTicks[i] ?? 0) + 1;
+      worstWall = Math.max(worstWall, c.wall);
       spell[i] = c.finish === null && Math.abs(c.speed) < 10 ? (spell[i] ?? 0) + 1 : 0;
       slowSpell = Math.max(slowSpell, spell[i] ?? 0);
     });
     if (count > 1) overlap = Math.max(overlap, deepest(state.cars));
   }
-  return { state, wallTicks, slowSpell, overlap };
+  return { state, wallTicks, slowSpell, worstWall, overlap };
 }
 
 describe('a lone bot', () => {
@@ -93,6 +97,11 @@ describe('twenty bots', () => {
 
   it('never stand still for more than two and a half seconds', () => {
     expect(result.slowSpell).toBeLessThanOrEqual(75);
+  });
+
+  it('never stay on a wall for more than two seconds', () => {
+    // Spec section 5: a car that has touched a wall for 60 ticks in a row is stuck. Measured: 16.
+    expect(result.worstWall).toBeLessThanOrEqual(60);
   });
 
   it('are never seen inside one another: no overlap of 0.03 tile', () => {
