@@ -56,7 +56,9 @@ export function advance(state: RoomState, now: number, config: GameConfig): Adva
     if (
       next.phase === 'running' &&
       next.round !== null &&
-      (now >= next.round.endsAt + config.lateGraceMs || deserted(next, now, config))
+      (now >= next.round.endsAt + config.lateGraceMs ||
+        modeFor(next.mode).over(next.modeState) ||
+        deserted(next, now, config))
     ) {
       next = {
         ...next,

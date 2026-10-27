@@ -26,5 +26,6 @@ export const clickerMode: Mode<ClickerState, ClickerInput, never> = {
   abandon: (state) => state,
   finish,
   clear: clearScores,
+  over: () => false,
   bots: false,
 };

@@ -70,5 +70,6 @@ export const cyclesMode: Mode<CyclesState, CyclesInput, TickChanges> = {
   abandon: leave,
   finish,
   clear,
+  over: () => false,
   bots: true,
 };

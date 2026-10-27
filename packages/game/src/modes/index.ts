@@ -60,6 +60,11 @@ export interface Mode<S extends ModeState, I extends ModeInput, C extends ModeCh
   finish(state: S, names: Record<string, string>): S;
   /** An interrupted round: nothing of it may be left on screen in the lobby. */
   clear(state: S, settings: CyclesSettings): S;
+  /**
+   * The round has reached its own end before the clock: the room ends it where it ends a deserted
+   * one. A mode that only the clock ends answers `false`.
+   */
+  over(state: S): boolean;
   /** Whether bots can take part. */
   bots: boolean;
 }

@@ -2,7 +2,7 @@ import type { Mode } from '..';
 import { comparePublicIds } from '../clicker';
 import { BRAKE, type Car, GAS, LEFT, RIGHT } from './car';
 import { RACE } from './config';
-import { raceResults, startRace, stepRace } from './race';
+import { over, raceResults, startRace, stepRace } from './race';
 import { emptyRace, newCar, type RaceChanges, type RaceState } from './state';
 import { buildTrack, type TrackData } from './track';
 import { TRACKS } from './tracks';
@@ -100,5 +100,6 @@ export const raceMode: Mode<RaceState, RaceInput, RaceChanges> = {
         abandoned: car.abandoned,
       })),
     ),
+  over: (state) => over(state, RACE),
   bots: true,
 };
