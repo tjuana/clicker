@@ -221,8 +221,8 @@ the book read against this code, not in the abstract.
 ### Track B — the picture (what the browser draws)
 
 1. **RTR 2–3** (the pipeline and the GPU). Reading only: the vocabulary for everything after.
-2. **RTR 5.4–5.6, 8.2** (antialiasing, display encoding, tone mapping). Exercise: P1 and P4 —
-   the arena with `OutputPass`, side by side with today's, for the owner.
+2. **RTR 5.4–5.6, 8.2** (antialiasing, display encoding, tone mapping). Exercise: P4 (done in
+   plan 13) and the arena's `OutputPass` — exercise A in section 6 — side by side with today's.
 3. **RTR 6.1–6.2** (texturing, filtering). Exercise: a check that every texture the scene creates
    gets anisotropic filtering and the right colour space.
 4. **RTR 9–10** (physically based shading, environment light). Reading: what
@@ -231,8 +231,9 @@ the book read against this code, not in the abstract.
    bounds; measure with P2.
 6. **RTR 11.3, 12.1–12.5, 13.6–13.8** (AO, image effects, billboards, particles). Exercise: P5 and
    P6, each measured.
-7. **RTR 18** (pipeline optimisation). Exercise: P2, then a bottleneck hunt on the race at twenty
-   cars by RTR 18.2's method.
+7. **RTR 18** (pipeline optimisation). Exercise: P2 (done in plan 14), then a bottleneck hunt by
+   RTR 18.2's method: the race at twenty cars, and the arena, whose 2.7 ms are not its floor
+   (section 6).
 8. **RTR 19.4–19.5, 23** (culling, portals, hardware). Reading against DooM_42; a phone tier for P1
    from RTR 23.10's tiling architecture.
 
@@ -266,17 +267,25 @@ row above gets a sibling. A, B and C change the arena's picture and come from th
      `UnrealBloomPass`); three's `OutputPass` in `three/examples/jsm/postprocessing/OutputPass.js`;
      the brightness figures in `scene/look.ts`.
    - *Proof:* no red test — what changes is how a halo looks. `shots` before and after.
-   - *Numbers:* GPU and CPU from `measure` before and after. `CYCLES_CALLS` in
-     `e2e/frame.spec.ts` moves by the passes added, and the commit says so.
+   - *Numbers:* GPU and CPU from `measure` before and after. The draw count does not move: while
+     the bloom is last it spends a draw copying its input to the screen, and `OutputPass` takes
+     over exactly that draw — checked with the arena's gate in `e2e/frame.spec.ts`. The cost is
+     elsewhere: the bloom's last blend now writes into the composer's multisampled half-float
+     target instead of the screen, which by three's code means one more resolve of that target a
+     frame. The meter says what it costs.
    - P1's shared module is not part of it: it waits for the race's own composer (exercise 8).
 3. **B — the floor** (RTR 11.6.4, 12.1, 9.8; Figure 11.40).
-   - *Read:* 11.6.4, planar reflections — what `Reflector` does; 12.1 from "Some filtering kernels
-     are separable" to the ping-pong buffers — separable Gaussians, bilinear taps, downsampling;
-     9.8 and Figure 11.40 — why a rough floor stretches a reflection towards the viewer.
+   - *Read:* 11.6.4, planar reflections — what `Reflector` does; 12.1 from Equation 12.1 (p. 515:
+     the Gaussian, its normalisation, the rule of thumb for its width) through the bilinear taps
+     and the separable filters to downsampling and the ping-pong buffers, stopping before 12.1.1;
+     9.8 and Figure 11.40 — why a rough floor stretches a reflection towards the viewer. If there
+     is time, 12.3's directional streak filter (p. 525) is the book's closest relative of the
+     floor's vertical streak.
    - *Where:* `scene/floor.tsx` (`Floor`, where drei's `MeshReflectorMaterial` goes), `FLOOR` in
      `scene/look.ts`, and the kernel's contract in `scene/blur-kernel.ts`.
-   - *Red test:* `test/scene-blur-kernel.test.ts`. Take `.skip` off, watch five tests fail against
-     the stub, then write `gaussianTaps`.
+   - *Red test:* `test/scene-blur-kernel.test.ts`. Take `.skip` off, watch six tests fail against
+     the stub, then write `gaussianTaps`. What they ask for is written on the stub; Figure 12.2's
+     five taps, cut at 2σ for wider blurs, come out narrower than asked for, on purpose.
    - *Traps plan 15's prototype found:*
      - `Reflector` renders its mirror inside the frame it is drawn in: a probe read update,
        reflection, update, reflection… on every frame. No priorities to arrange, unlike drei's
@@ -285,12 +294,23 @@ row above gets a sibling. A, B and C change the arena's picture and come from th
        only because the clone came before `Field` enabled the grid's layer 1. Set the reflection
        camera to layer 0 yourself, or a floor rebuilt for a new field mirrors the grid.
      - Its target is half-float and 4× multisampled. Half float keeps reflected bikes above 1 for
-       the bloom; the multisampling cost 0.3 ms at 512² for edges the blur erases anyway.
-     - Its material is built from the `shader` option: fog needs `UniformsLib.fog` merged into the
-       uniforms, the fog chunks in both shaders and `material.fog = true`.
-     - The blur goes into the floor's `onBeforeRender`, after `Reflector`'s own: keep
-       `renderer.getRenderTarget()`, draw the passes with `FullScreenQuad`
-       (`postprocessing/Pass.js`), restore the target, point `tDiffuse` at the result.
+       the bloom. 512² with multisampling cost 0.3 ms more than 256² without — in one run that
+       changed both at once, which RTR 18.2 would not do. Multisampled edges are blurred away
+       either way.
+     - Its target is square and its camera takes the canvas's projection, so at 1280 × 760 a texel
+       covers about 5 pixels across and 3 down: the same σ both ways is 1.7 times wider sideways
+       on screen. Size the target to the canvas's aspect, or scale σ across.
+     - Its material is built from the `shader` option, and the constructor sets `color`,
+       `tDiffuse` and `textureMatrix` on it: a shader without a `color` uniform throws, even if it
+       never reads it.
+     - Fog needs `UniformsLib.fog` merged into the uniforms, the fog chunks in both shaders and
+       `material.fog = true` — and `fog_vertex` reads `mvPosition`, which `Reflector`'s own vertex
+       shader never declares. The grid's shader in `scene/floor.tsx` declares it; copy that.
+     - The blur goes into the floor's `onBeforeRender`, after `Reflector`'s own — which calls
+       `this.getReflectionCamera`, so it is called as `original.call(reflector, …)`; an arrow that
+       calls it bare throws. Keep `renderer.getRenderTarget()`, draw the passes with
+       `FullScreenQuad` (`postprocessing/Pass.js`), restore the target, point `tDiffuse` at the
+       result.
      - Taps three texels apart showed as horizontal bands across the streak.
    - *Numbers:* on the M2 the floor costs nothing the meter can separate from noise — drei's
      2.64–2.70 ms GPU median, no floor at all 2.71–2.73, `Reflector` at 256² with two blur passes
@@ -336,6 +356,7 @@ Traps plan 14's review found on the way to these exercises:
   has one canvas.
 - **The draw count is the median of nine frames,** so a change in structure shows on the line
   within five frames, not on the first one.
-- **`OutputPass` and ambient occlusion move the gates' constants** (`RACE_CALLS`,
-  `CYCLES_CALLS` in `e2e/frame.spec.ts`) — by design: the exercise changes the number, and the
-  commit says why.
+- **The floor and ambient occlusion move the gates' constants** (`CYCLES_CALLS`, `RACE_CALLS` in
+  `e2e/frame.spec.ts`) — by design: drei's floor is 9 to 12 draws, `Reflector` 4 to 7 plus one per
+  blur pass. The commit says why. `OutputPass` moves nothing: it takes over the bloom's own copy
+  to the screen (plan 15's review, checked with the gate).

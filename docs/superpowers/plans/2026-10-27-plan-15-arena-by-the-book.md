@@ -61,8 +61,9 @@ vsync on, ten one-second samples:
 | `Reflector`, 256², no MSAA, two blur passes | 2.68 ms | 4.46 ms | 26–30 |
 
 On the M2 the floor costs nothing the meter can separate from run-to-run noise (about 0.1 ms):
-exercise B is about the picture, not speed. The one cost that showed is MSAA on a reflection that
-is blurred anyway — 0.3 ms for edges nobody sees. The arena's 2.7 ms go elsewhere; the bloom's
+exercise B is about the picture, not speed. The one difference that showed: 512² with 4× MSAA cost
+0.3 ms more than 256² without — but that run changed the size and the multisampling at once, so
+it does not say which (see the review below). The arena's 2.7 ms go elsewhere; the bloom's
 passes and the full-screen multisampled target are the suspects, for a bottleneck hunt by RTR
 18.2's method later. drei's floor takes 9 to 12 draw calls; `Reflector` takes 4 to 7 — the scene
 again — plus one per blur pass.
@@ -347,3 +348,43 @@ bottleneck hunt (track B, step 7).
   `main`. Not pushed: that is the owner's call.
 - [ ] A Russian summary for the owner: what is ready for each exercise, the prototype's numbers,
   and the baseline pictures.
+
+---
+
+## What plan 15's review changed
+
+An Opus reviewer read the branch; every finding was reproduced before anything changed.
+
+1. **The red test refused sound kernels** — confirmed. Weights integrated over each texel came to a
+   variance of 1.076 σ², a cut at 2.5σ to 0.944; the band was 0.95–1.05. Now 0.9–1.1, and the stub
+   says what the tests ask for. Figure 12.2's taps pass at σ = 1 and, cut at 2σ, fail beyond it:
+   a narrower blur than the one asked for.
+2. **The reading started past the Gaussian** — confirmed. B's note now reads 12.1 from Equation
+   12.1 to the ping-pong buffers and stops before bilateral filtering, with 12.3's streak filter
+   as an extra.
+3. **A doubled reflection passed all five tests** — confirmed: two copies at the right distance
+   with zero-weight taps closing the gaps. A sixth test asks the texel weights to fall off from the
+   centre. Ten kernels rerun: the stub fails all six, a correct kernel passes all, each broken
+   one fails its own property, the two sound ones from finding 1 pass.
+4. **`OutputPass` does not move the arena's draw count** — confirmed: with it added, the arena's
+   gate stayed green at 4 and 20 riders. It takes over the draw in which the bloom copied its input
+   to the screen. Notes for A corrected; what may cost instead is a second resolve of the
+   composer's multisampled target.
+5. **Three more `Reflector` traps** — confirmed in three's source: its `onBeforeRender` uses `this`;
+   its constructor sets a `color` uniform that a custom shader must declare; `fog_vertex` reads an
+   `mvPosition` its vertex shader never declares. Added to B's traps.
+6. **The first picture landed on the countdown's end** — confirmed by the baseline (3:00, no
+   trail) and the code. `shots` now waits for the countdown to come and go, then two seconds; the
+   spawns differ between runs, and the script and the spec say so.
+7. **A square reflection target stretches texels on screen** — confirmed by the projection's
+   arithmetic: about 5 × 3 pixels at 1280 × 760. Added to B's traps.
+8. **The 0.3 ms put on multisampling was confounded** with the target's size — reworded, here and
+   in B's note.
+9. **The script filters matched any path** — confirmed: `clicker` listed all three tests. Now
+   `measure/frame.measure` and `measure/shots.measure`.
+10. **`shots` cannot share port 5173 with `pnpm dev`** — by the config's `reuseExistingServer:
+    false`. The README says to stop it first.
+11. **Exercise numbers disagreed** between the spec and the study, and track B's steps 2 and 7 still
+    pointed at the old plan — corrected.
+12. **`e2e/frame.spec.ts` keeps its own `host`** — left: each end-to-end spec carries its own, and
+    tying the browser suite to the measuring scripts' folder is not worth one function.

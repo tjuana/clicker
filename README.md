@@ -91,7 +91,7 @@ pnpm format                               # apply formatting
 pnpm --filter @clicker/app run build      # build
 pnpm --filter @clicker/app run e2e        # end-to-end tests in a browser
 pnpm --filter @clicker/app run measure    # a frame's cost with twenty players, on a real GPU only
-LABEL=before pnpm --filter @clicker/app run shots   # the arena at the same moments, into shots/
+LABEL=before pnpm --filter @clicker/app run shots   # the arena at the same moments, into shots/ (pnpm dev stopped)
 pnpm --filter @clicker/app run deploy     # build and publish to Cloudflare
 ```
 

@@ -50,7 +50,7 @@ side, a dumbbell.
    the study's queue: capsules, depth, particles, ambient occlusion.
 6. **No shared render-pipeline module yet.** The study's P1 proposed `scene/pipeline.ts` for every
    mode. Today only the arena has a composer, so a shared module would be an abstraction with one
-   user. It arrives when the race gets a composer of its own — ambient occlusion, exercise 6.
+   user. It arrives when the race gets a composer of its own — ambient occlusion, the study's exercise 8.
 
 ## 3. The exercises
 
@@ -65,8 +65,9 @@ numbers come from the frame meter: `P` in the arena, and
   re-tuned by the owner's eye where the new output asks for it.
 - **Proof.** No red test is honest here: what changes is how the halo looks. Proof is the same
   moments of the arena side by side, before and after (§4.2), and the meter.
-- **Numbers.** GPU and CPU before and after — one full-screen pass more. `CYCLES_CALLS` in
-  `e2e/frame.spec.ts` moves by the passes added, and the commit says so.
+- **Numbers.** GPU and CPU before and after. The draw count stays: `OutputPass` takes over the
+  draw in which the bloom, last until now, copies its input to the screen (checked by plan 15's
+  review). What may cost is one more resolve of the composer's multisampled target a frame.
 
 ### B. The floor (RTR 11.6.4, 12.1, 9.8, 11.6.5)
 
@@ -113,8 +114,9 @@ numbers come from the frame meter: `P` in the arena, and
    target keeps brightness above 1 for the bloom. It measures today's floor against a bare
    `Reflector`. Its findings go into the plan; none of its blur goes into the repository: that is
    the exercise.
-2. **A command for side-by-side pictures.** It drives the arena to the same moments every time and
-   saves them under a label, so `before` and `after` sit next to each other. It is reused by A, B,
+2. **A command for side-by-side pictures.** It drives the arena to the same moments every time — the
+   same moments, not the same arena: the room seeds each round from the clock — and saves them
+   under a label, so `before` and `after` sit next to each other. It is reused by A, B,
    C and later by the race's ambient occlusion.
 3. **B's red test** by `qa`: skipped in CI, shown failing against broken kernels and passing against
    a correct one kept out of the repository.
