@@ -35,8 +35,10 @@ plan you were given.
 1. `pnpm check`, `pnpm typecheck` and `pnpm test` are clean — quote the counts.
 2. **You looked at it.** A screenshot from a real window (not headless: software WebGL lies about
    both looks and speed), described in words, per the `verify-visually` skill.
-3. **You measured it.** fps with 20 participants in a real window, the number in your report; the
-   bar is 60 on the owner's M2.
+3. **You measured it.** `pnpm --filter @clicker/app run measure` on the owner's machine, or the `P`
+   line with 20 participants in a real window: GPU and CPU milliseconds and draw calls, in your
+   report. The bar is a 60 fps frame, 16.7 ms, on the owner's M2. Never report fps: it is capped
+   by the display, not by the work.
 4. Anything a test can hold — instance bookkeeping, uploads, dates, geometry — has a test that was
    first seen failing against the defect it guards.
 

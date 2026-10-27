@@ -17,6 +17,7 @@ import {
   Vector3,
 } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { FrameMeter } from './frame-meter';
 import { Racers } from './race';
 import {
   ASSETS,
@@ -146,8 +147,10 @@ function Track({ pieces }: { pieces: readonly Walked[] }) {
     return { geometry, materials, ground, groundMap, groundGeometry, barriers, centre };
   }, [gltfs, textures, pieces, gl]);
 
-  // Everything above is ours and goes with the component. The loaded textures and models are
-  // cached by useLoader, so they are dropped from the cache and freed here too.
+  // Everything above is ours and goes with the component; the loaded textures and models give back
+  // their GPU memory too. They stay in useLoader's cache: the lobby fills it before every race, and
+  // React runs this cleanup once right after mounting in development — clearing the cache here made
+  // the next render fetch every model again and left the race blank for two seconds at the start.
   useEffect(
     () => () => {
       for (const layer of LAYERS) {
@@ -167,8 +170,6 @@ function Track({ pieces }: { pieces: readonly Walked[] }) {
           mesh.geometry?.dispose();
         });
       }
-      useLoader.clear(TextureLoader, TEXTURE_URLS);
-      useLoader.clear(GLTFLoader, MODEL_URLS);
     },
     [built, textures, gltfs],
   );
@@ -259,6 +260,7 @@ export default function Ring({ track = 'ring' }: { track?: string }) {
       camera={{ fov: OVERVIEW.fov, near: OVERVIEW.near, far: OVERVIEW.far }}
       style={{ width: '100%', height: '100%' }}
     >
+      <FrameMeter />
       <Suspense fallback={null}>
         <Environment
           files={SKY}

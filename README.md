@@ -28,6 +28,8 @@ grass under a real sky. W / ↑ gas, S / ↓ brake, A / D or the arrows steer; o
 Cars bump each other, up to twenty racers with bots, ranked by laps and time. Everything runs on
 the server; the client draws.
 
+In any scene, **P** shows what a frame costs: GPU and CPU milliseconds, draw calls and triangles.
+
 ## Architecture
 
 Four layers, dependencies pointing downwards only.
@@ -88,6 +90,7 @@ pnpm check                                # linter and formatter
 pnpm format                               # apply formatting
 pnpm --filter @clicker/app run build      # build
 pnpm --filter @clicker/app run e2e        # end-to-end tests in a browser
+pnpm --filter @clicker/app run measure    # a frame's cost with twenty players, on a real GPU only
 pnpm --filter @clicker/app run deploy     # build and publish to Cloudflare
 ```
 
@@ -97,8 +100,8 @@ pnpm --filter @clicker/app run deploy     # build and publish to Cloudflare
 |---|---|
 | Game rules (`packages/game`) | clicker, light cycles and the ring race, 410 tests |
 | Wire format (`packages/protocol`) | version 4, 123 tests |
-| Room server and client (`apps/game`) | 289 tests, including integration tests in the Workers runtime |
-| End to end | a clicker round, a light-cycle round against bots, walls on a key, and a ring race, desktop and phone |
+| Room server and client (`apps/game`) | 308 tests, including integration tests in the Workers runtime |
+| End to end | a clicker round, a light-cycle round against bots, walls on a key, a ring race, and the draw calls of a frame, desktop and phone |
 | Deploy | every push to `main`, through Cloudflare Workers Builds |
 
 The designs are the [specs](docs/superpowers/specs/),

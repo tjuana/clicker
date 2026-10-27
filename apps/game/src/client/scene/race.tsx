@@ -46,7 +46,8 @@ export function Racers() {
     return out;
   }, [gltf]);
 
-  // Geometry and materials are ours; the loaded model is cached by useLoader and freed here too.
+  // Geometry and materials are ours; the loaded model gives back its GPU memory too but stays in
+  // useLoader's cache, for the reason given at the track's cleanup in ring.tsx.
   useEffect(
     () => () => {
       for (const mesh of meshes) {
@@ -59,7 +60,6 @@ export function Racers() {
         mesh.geometry?.dispose();
         mesh.material?.dispose();
       });
-      useLoader.clear(GLTFLoader, CAR_URL);
     },
     [meshes, gltf],
   );

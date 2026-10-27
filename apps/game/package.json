@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "deploy": "vite build && wrangler deploy",
     "e2e": "playwright test",
+    "measure": "playwright test -c playwright.measure.config.ts",
     "test": "vitest run",
     "types": "wrangler types",
     "typecheck": "wrangler types && tsc -p tsconfig.client.json --noEmit && tsc -p tsconfig.worker.json --noEmit"

@@ -113,6 +113,25 @@ async function endOfRound(page: Page): Promise<void> {
   }
 }
 
+// The lobby preloads the race's models so the scene can draw at once. A scene whose effect cleanup
+// emptied the loader's cache fetched them all again at the start — React runs every cleanup once
+// right after mounting in development — and stood blank for two seconds while they came back.
+test('the race fetches its models once, in the lobby, and keeps them through the start', async ({
+  page,
+}) => {
+  const fetched = new Map<string, number>();
+  page.on('request', (request) => {
+    const name = request.url().split('/').pop() ?? '';
+    if (name.endsWith('.glb')) fetched.set(name, (fetched.get(name) ?? 0) + 1);
+  });
+  await startRace(page);
+  // Counted at the results, not at the start: by then every render of the race has happened, so
+  // no refetch can still be on its way, whatever the order of the browser's events.
+  await endOfRound(page);
+  expect(fetched.get('raceCarRed.glb')).toBe(1);
+  for (const [name, times] of fetched) expect(times, name).toBe(1);
+});
+
 test('holding W is gas on the wire, the clock runs, four rows at the end', async ({ page }) => {
   const sent = masksSent(page);
   const { poses } = ownCar(page);
