@@ -32,6 +32,13 @@ export interface Car {
   pace: number;
   /** Consecutive ticks the car has been touching a wall. */
   wall: number;
+  /**
+   * The cars this one overlapped last tick, a bit for each slot. Kept so that a bump is
+   * reported when a contact begins and not on every tick it lasts. A mask over slots, one number
+   * a car, because a list of pairs would grow with the square of the field; it fits since slots
+   * are numbered from zero at each start and a room holds at most twenty (`maxCars`).
+   */
+  touch: number;
 }
 
 function accelerate(car: Car, config: RaceConfig, top: number): void {

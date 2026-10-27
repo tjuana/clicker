@@ -243,16 +243,43 @@ describe('the race delta', () => {
     expect(parseServerMessage(JSON.stringify({ ...delta, cars: ['x'] }))).toBeNull();
   });
 
-  // Measured on 2026-10-27: twenty cars, tick 600 (20 s into the race, nineteen bots at speed),
-  // `JSON.stringify` length 856 bytes, about 25 KB/s per player at 30 Hz. The spec guessed 0.6 KB:
-  // the coordinates are five digits each. Binary stays out of the picture until a number says so
-  // (plan 5's A14); the bound is the measurement rounded up, so growth shows.
-  it('stays under a kilobyte for twenty cars', () => {
-    const { state, stepped } = raceRoom(19, 600);
-    const raw = JSON.stringify(toDelta(state, stepped as Stepped));
+  // Measured on 2026-10-27, a whole race of twenty cars (nineteen bots; the host's car stands
+  // still and the bots drive round it): 2762 ticks (92 s),
+  // `JSON.stringify` length 609 bytes on average and 804 at the most, about 18 KB/s per player at
+  // 30 Hz. The spec guessed 0.6 KB: the coordinates are five digits each. Binary stays out of the
+  // picture until a number says so (plan 5's A14); the bounds are the measurement rounded up,
+  // so growth shows.
+  it('stays small for twenty cars, on average and at its largest, over a whole race', () => {
+    const { state: start } = raceRoom(19, 0);
+    let state = start;
+    let ticks = 0;
+    let total = 0;
+    let largest = 0;
+    let touching = 0;
+    const goAt = state.round?.goAt ?? 0;
+    while (state.phase === 'running' && ticks < 20_000) {
+      const result = apply(state, { type: 'step' }, goAt + ticks, RACE);
+      state = result.state;
+      const stepped = result.events.find((event): event is Stepped => event.type === 'stepped');
+      if (stepped === undefined) break;
+      const delta = toDelta(state, stepped);
+      const raw = JSON.stringify(delta);
+      expect(parseServerMessage(raw)).not.toBeNull();
+      if (delta.mode === 'race') {
+        for (let at = 6; at < delta.cars.length; at += 7) {
+          if (((delta.cars[at] as number) & 8) !== 0) touching += 1;
+        }
+      }
+      total += raw.length;
+      largest = Math.max(largest, raw.length);
+      ticks += 1;
+    }
 
-    expect(parseServerMessage(raw)).not.toBeNull();
-    expect(raw.length).toBeLessThan(900);
+    expect(ticks).toBeGreaterThan(1500);
+    // The grid is two abreast and tight: cars touch, and the flag says so.
+    expect(touching).toBeGreaterThan(0);
+    expect(total / ticks).toBeLessThan(700);
+    expect(largest).toBeLessThan(900);
   });
 
   it('carries the protocol version', () => {

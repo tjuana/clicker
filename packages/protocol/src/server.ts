@@ -213,7 +213,7 @@ export const raceDeltaSchema = v.strictObject({
   t: v.number(),
   /**
    * Flat 7-tuples for every car on the field: slot, x, y, heading, speed, lap, flags (bit 0
-   * finished, bit 1 on grass, bit 2 touching a wall). All integers.
+   * finished, bit 1 on grass, bit 2 touching a wall, bit 3 touching another car). All integers.
    */
   cars: v.array(v.pipe(v.number(), v.integer())),
   events: v.array(raceEventSchema),

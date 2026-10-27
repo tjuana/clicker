@@ -116,9 +116,10 @@ Everything is an integer, as in the light cycles; the purity gate extends to `mo
   race settings in this version.
 - **Wire.** `full` carries the track id, `tickMs`, and every car. Each tick's `delta` is one string
   for the room: per car `slot, x, y, heading, speed, lap, flags` (integers), plus events (`lap`,
-  `finished`, `bump`). That is 20 × 7 numbers a tick. **Measured** (twenty cars, 20 s in, nineteen
-  bots at speed): 856 bytes as JSON, about 25 KB/s per player at 30 Hz, not the 0.6 KB guessed:
-  the coordinates are five digits. Still no binary format; A14 says to move only if a number
+  `finished`, `bump`). That is 20 × 7 numbers a tick. **Measured** over a whole race (twenty cars,
+  nineteen bots, 2762 ticks): 609 bytes as JSON on average and 804 at the most, about 18 KB/s per
+  player at 30 Hz, not the 0.6 KB guessed: the coordinates are five digits. A `bump` event is sent
+  once, on the tick two cars begin to touch; while they stay in contact the flags' bit 3 says so. Still no binary format; A14 says to move only if a number
   forces it. The delta carries every car on the field each tick (a car moves every tick, so
   there is nothing to leave out). The protocol version is 4. A car that joined mid-race is off
   the field until the next round and is in neither the `full` nor the deltas.
@@ -219,7 +220,10 @@ What plan 11's review changed:
 - **A mode can end its round** (`over`), checked where a deserted round ends.
 - **Version 4**: `full` and `delta` are variants on a required `mode`. The race's `delta` takes its
   cars from the state and its events from the tick (`toDelta(state, stepped)`); its flags (finished,
-  on grass, at a wall) come from the rules (`carFlags`). Measured: 856 bytes for twenty cars at speed.
+  on grass, at a wall, touching a car) come from the rules (`carFlags`). Measured over a whole
+  twenty-car race: 609 bytes on average, 804 at the most (an earlier figure of 856 was one tick, 20 s
+  in). A contact is kept per car as a bitmask over slots, so a `bump` event comes when it begins
+  and not on every tick of it.
 - **A car that joined mid-race is in neither `full` nor `delta`** until the next race.
 - **No race on screen yet.** The host cannot pick it; a room put into race mode shows a placeholder
   while it runs and the results as a table. A whole three-lap race through the room was not tested

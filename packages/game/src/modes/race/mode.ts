@@ -20,11 +20,16 @@ const TRACK = buildTrack(TRACKS[TRACK_ID] as TrackData);
 
 /**
  * What a client needs to know about a car besides where it is: bit 0 finished, bit 1 on grass,
- * bit 2 touching a wall. Worked out here, where the track is, so the wire format needs none.
+ * bit 2 touching a wall, bit 3 touching another car. Worked out here, where the track is, so the wire format needs none.
  */
 export function carFlags(car: Car): number {
   const onGrass = Math.abs(walk(TRACK, car.piece, car.x, car.y).lateral) > RACE.road;
-  return (car.finish !== null ? 1 : 0) | (onGrass ? 2 : 0) | (car.wall > 0 ? 4 : 0);
+  return (
+    (car.finish !== null ? 1 : 0) |
+    (onGrass ? 2 : 0) |
+    (car.wall > 0 ? 4 : 0) |
+    (car.touch !== 0 ? 8 : 0)
+  );
 }
 
 function withCars(state: RaceState, cars: Car[]): RaceState {

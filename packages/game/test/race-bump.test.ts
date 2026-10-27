@@ -25,6 +25,7 @@ function car(slot: number, x: number, y: number, over: Partial<Car> = {}): Car {
     lapStart: 0,
     pace: 100,
     wall: 0,
+    touch: 0,
     ...over,
   };
 }

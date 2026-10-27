@@ -93,6 +93,7 @@ export function startRace(state: RaceState, track: Track, config: RaceConfig): R
       lapStart: 0,
       pace,
       wall: 0,
+      touch: 0,
       out: false,
     });
   });
@@ -166,8 +167,7 @@ export function stepRace(
     crossings[i] = drive(live[i] as Car, track, config);
   }
 
-  const beforeX = Int32Array.from(live, (car) => car.x);
-  const beforeY = Int32Array.from(live, (car) => car.y);
+  const touchedBefore = Int32Array.from(live, (car) => car.touch);
   bump(live, track.bounds, config);
   // A push can carry a car back over the line it has just crossed. Its piece is then stale and
   // the next tick would count the same crossing again, as a lap lost and a lap won; walking it
@@ -183,7 +183,8 @@ export function stepRace(
   let firstFinish = state.firstFinish;
   for (let i = 0; i < live.length; i += 1) {
     const car = live[i] as Car;
-    if (car.x !== beforeX[i] || car.y !== beforeY[i]) changes.bumped.push(car.slot);
+    // A car newly touching someone: a contact that goes on is not another bump.
+    if ((car.touch & ~(touchedBefore[i] as number)) !== 0) changes.bumped.push(car.slot);
     if (car.finish !== null) continue;
     const crossed = crossings[i] as number;
     if (crossed < 0) {

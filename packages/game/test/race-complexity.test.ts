@@ -24,6 +24,7 @@ function car(slot: number, x: number, y: number): Car {
     lapStart: 0,
     pace: 100,
     wall: 0,
+    touch: 0,
   };
 }
 

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { carFlags } from '../src/modes/race';
 import { BRAKE, type Car, GAS, LEFT } from '../src/modes/race/car';
 import { RACE } from '../src/modes/race/config';
 import { cos, ONE, sin } from '../src/modes/race/fixed';
@@ -359,5 +360,47 @@ describe('the step', () => {
     };
     const { changes } = stepRace(state, track, RACE);
     expect(changes.bumped).toEqual([0, 1]);
+  });
+
+  describe('two cars held in contact', () => {
+    // The rear car keeps its foot down on a car standing still in front of it: every tick it
+    // drives into the other, is pushed back, and drives into it again.
+    function held() {
+      const base = field(2);
+      const [a, b] = base.cars as [(typeof base.cars)[number], (typeof base.cars)[number]];
+      let state: RaceState = {
+        ...base,
+        cars: [
+          { ...a, speed: 0, keys: 0 },
+          {
+            ...b,
+            x: a.x - Math.trunc((1000 * cos(a.heading)) / ONE),
+            y: a.y - Math.trunc((1000 * sin(a.heading)) / ONE),
+            heading: a.heading,
+            piece: a.piece,
+            speed: 0,
+            keys: GAS,
+          },
+        ],
+      };
+      let bumps = 0;
+      const touching: boolean[] = [];
+      for (let i = 0; i < 60; i += 1) {
+        const stepped = stepRace(state, track, RACE);
+        state = stepped.state;
+        bumps += stepped.changes.bumped.length;
+        touching.push(state.cars.every((car) => (carFlags(car) & 8) !== 0));
+      }
+      return { bumps, touching };
+    }
+
+    it('bump once, on the tick the contact begins', () => {
+      // One event for the pair is two slots: each car was bumped by the other.
+      expect(held().bumps).toBe(2);
+    });
+
+    it('are flagged as touching on every tick of the contact', () => {
+      expect(held().touching).toEqual(Array(60).fill(true));
+    });
   });
 });

@@ -5,7 +5,7 @@ export interface RaceChanges {
   laps: { slot: number; lap: number }[];
   /** Slots that completed the last lap this tick. */
   finished: number[];
-  /** Slots that were pushed by another car this tick. */
+  /** Slots of cars that began touching another car this tick: one event per contact, not per tick of it. */
   bumped: number[];
 }
 
@@ -55,6 +55,7 @@ export function newCar(slot: number, publicId: string, bot: boolean): Car {
     lapStart: 0,
     pace: 100,
     wall: 0,
+    touch: 0,
   };
 }
 

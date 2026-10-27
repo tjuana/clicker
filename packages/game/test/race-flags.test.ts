@@ -36,4 +36,10 @@ describe('the flags of a car', () => {
     expect(carFlags({ ...car, wall: 3 }) & 4).toBe(4);
     expect(carFlags({ ...car, wall: 0 }) & 4).toBe(0);
   });
+
+  it('say the car touches another car in bit 3', () => {
+    const car = grid().cars[0] as NonNullable<ReturnType<typeof grid>['cars'][0]>;
+    expect(carFlags({ ...car, touch: 2 }) & 8).toBe(8);
+    expect(carFlags({ ...car, touch: 0 }) & 8).toBe(0);
+  });
 });
