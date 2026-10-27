@@ -10,7 +10,7 @@ import {
 } from '.';
 import type { ClickerInput, ClickerState } from './state';
 
-export const clickerMode: Mode<ClickerState, ClickerInput> = {
+export const clickerMode: Mode<ClickerState, ClickerInput, never> = {
   // Nothing in a click race is random, so the seed has no use here.
   create: () => createClickerState(),
   addPlayer: (state, publicId, _bot, now, config) => addPlayer(state, publicId, now, config),

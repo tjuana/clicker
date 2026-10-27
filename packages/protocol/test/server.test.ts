@@ -202,7 +202,7 @@ function cyclesRoom(
     const stepped = result.events.find(
       (event): event is Extract<GameEvent, { type: 'stepped' }> => event.type === 'stepped',
     );
-    if (stepped !== undefined) {
+    if (stepped?.mode === 'cycles') {
       lastChanges = stepped.changes;
       lastTick = stepped.tick;
     }

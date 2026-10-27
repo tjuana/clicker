@@ -239,6 +239,9 @@ export function toSnapshot(state: RoomState, now: number): SnapshotMessage {
   if (state.mode === 'clicker') {
     return { ...common, mode: 'clicker', data: toModeData(state.modeState as ClickerState) };
   }
+  // The race has no `data` yet: its wire format is protocol 4. Nothing can pick it before then
+  // (`setMode` refuses it), and a cast to the cycles' data here would be a lie on the wire.
+  if (state.mode === 'race') throw new Error('the ring race has no snapshot yet');
   return {
     ...common,
     mode: 'cycles',

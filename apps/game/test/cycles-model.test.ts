@@ -328,7 +328,7 @@ function record(
       }
     }
     for (const event of run({ type: 'step' }, config.countdownMs)) {
-      if (event.type !== 'stepped') continue;
+      if (event.type !== 'stepped' || event.mode !== 'cycles') continue;
       deltas.push(toDelta(event.tick, event.changes));
       fields.push((state.modeState as CyclesState).field);
     }

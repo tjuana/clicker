@@ -52,6 +52,8 @@ export const MODE_CONFIG: Record<ModeId, Partial<GameConfig>> = {
   clicker: {},
   // No `tickMs`: the light cycles take one cell per tick, so the speed decides it (`configFor`).
   cycles: { roundMs: 180_000, maxPlayers: 20 },
+  // The round's length is only the race's cap: it ends itself well before (`Mode.over`).
+  race: { roundMs: 300_000, maxPlayers: 20, tickMs: 1000 / 30 },
 };
 
 /** The time between ticks of a light-cycle room: one cell per tick, so it is the time a cell takes. */
