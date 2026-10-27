@@ -202,6 +202,18 @@ describe('the frame meter', () => {
     expect(meter.read()).toMatchObject({ calls: 15, triangles: 64_222 });
   });
 
+  it('is not moved by a one-off frame', () => {
+    // The race's first frame also builds the sky's maps: 42 calls once, 15 ever after.
+    const { info, render } = counters();
+    const meter = createFrameMeter(() => 0, info, null);
+    for (const calls of [15, 15, 15, 15, 15, 15, 15, 15, 42]) {
+      meter.begin();
+      render(calls, calls * 1000);
+      meter.end();
+    }
+    expect(meter.read()).toMatchObject({ calls: 15, triangles: 15_000 });
+  });
+
   it('times the CPU between the start and the end of a frame', () => {
     const { info } = counters();
     let now = 0;

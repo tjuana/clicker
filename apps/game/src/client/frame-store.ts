@@ -14,7 +14,10 @@ export interface FrameReadout {
   /** Null where the browser has no GPU timer: Safari, Firefox, headless Chromium. */
   gpu: Spread | null;
   cpu: Spread;
-  /** Of the last frame, every pass of it: shadows, reflections and post-processing included. */
+  /**
+   * Of a typical recent frame — the median of the last few — with every pass in it: shadows,
+   * reflections and post-processing included.
+   */
   calls: number;
   triangles: number;
 }

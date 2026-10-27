@@ -3,6 +3,14 @@ import type { FrameReadout, Spread } from '../frame-store';
 /** How many frames a readout spans: a second at 120 Hz, two at 60. */
 export const WINDOW = 120;
 
+/**
+ * Frames the draw-call count is the median of. Short on purpose: the count is structure, not
+ * noise, so a few frames are enough to keep a one-off frame (the race's first, which also builds
+ * the sky's maps: 42 calls once, 15 after) off the line, and it settles within five frames of a
+ * scene appearing even where frames are slow.
+ */
+const COUNTS = 9;
+
 /** Queries in flight at most. Results come back a frame or three late; a frame finding none free goes untimed. */
 const IN_FLIGHT = 8;
 
@@ -129,8 +137,8 @@ export function createFrameMeter(now: () => number, info: DrawCounters, timer: G
   // Made once: `collect` takes it every frame.
   const takeGpu = (ms: number): void => gpu.push(ms);
   let start = 0;
-  let calls = 0;
-  let triangles = 0;
+  const calls = createWindow(COUNTS);
+  const triangles = createWindow(COUNTS);
   info.autoReset = false;
 
   return {
@@ -145,13 +153,19 @@ export function createFrameMeter(now: () => number, info: DrawCounters, timer: G
     end(): void {
       timer?.end();
       cpu.push(now() - start);
-      calls = info.render.calls;
-      triangles = info.render.triangles;
+      calls.push(info.render.calls);
+      triangles.push(info.render.triangles);
     },
     read(): FrameReadout | null {
       const work = cpu.spread();
       if (work === null) return null;
-      return { gpu: timer === null ? null : gpu.spread(), cpu: work, calls, triangles };
+      return {
+        gpu: timer === null ? null : gpu.spread(),
+        cpu: work,
+        // Pushed together with the CPU time, so never empty here.
+        calls: (calls.spread() as Spread).median,
+        triangles: (triangles.spread() as Spread).median,
+      };
     },
     dispose(): void {
       timer?.dispose();
