@@ -179,4 +179,34 @@ describe('the race mode', () => {
       expect(racing.cars[0]?.pace).toBe(100);
     });
   });
+
+  describe('a human who was abandoned before the start', () => {
+    function lobby(ids: string[], gone: string[]): RaceState {
+      let state = raceMode.create(42);
+      for (const id of ids) state = raceMode.addPlayer(state, id, id !== '1', 0, config, settings);
+      for (const id of gone) state = raceMode.abandon(state, id);
+      return raceMode.startRound(state, 0, config, settings);
+    }
+    const pace = (s: RaceState, id: string) => s.cars[s.index[id] as number]?.pace;
+
+    it('cruises instead of racing, and is driven on by the autopilot', () => {
+      const state = lobby(['1', '2', '3'], ['1']);
+      expect(pace(state, '1')).toBe(RACE.coolPace);
+      const step = raceMode.step as NonNullable<typeof raceMode.step>;
+      const later = step(step(state, settings).state, settings).state;
+      expect(later.cars[later.index['1'] as number]?.speed).toBeGreaterThan(0);
+    });
+
+    it('does not change what the bots draw', () => {
+      const withHim = lobby(['1', '2', '3'], ['1']);
+      const without = lobby(['2', '3'], []);
+      expect(pace(withHim, '2')).toBe(pace(without, '2'));
+      expect(pace(withHim, '3')).toBe(pace(without, '3'));
+    });
+
+    it('races again at full pace once he is back', () => {
+      const back = raceMode.rejoin(lobby(['1', '2'], ['1']), '1', settings);
+      expect(raceMode.startRound(back, 0, config, settings).cars[0]?.pace).toBe(100);
+    });
+  });
 });

@@ -71,7 +71,11 @@ export function startRace(state: RaceState, track: Track, config: RaceConfig): R
       place % 2 === 0 ? -config.gridLateral : config.gridLateral,
     );
     let pace = 100;
-    if (car.bot) {
+    if (car.abandoned) {
+      // Nobody is at the wheel of a person's car, so it does not race, and it takes no draw: the
+      // bots' paces must not depend on whether somebody's connection happened to be down.
+      pace = config.coolPace;
+    } else if (car.bot) {
       const drawn = randomBelow(seed, 10);
       seed = drawn.seed;
       pace = 88 + drawn.value;

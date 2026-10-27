@@ -11,6 +11,7 @@ function car(slot: number, x: number, y: number): Car {
     publicId: `p${slot}`,
     bot: false,
     out: false,
+    abandoned: false,
     x,
     y,
     heading: 0,

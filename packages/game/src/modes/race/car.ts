@@ -12,6 +12,8 @@ export interface Car {
   /** The id other players see; the secret one never reaches the rules. */
   publicId: string;
   bot: boolean;
+  /** A person's car left to the autopilot: it cruises and draws no pace, unlike a bot of the room. */
+  abandoned: boolean;
   /** Joined in the middle of a race: off the field until the next one begins. */
   out: boolean;
   x: number;

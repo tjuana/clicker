@@ -40,6 +40,7 @@ export function newCar(slot: number, publicId: string, bot: boolean): Car {
     publicId,
     bot,
     out: false,
+    abandoned: false,
     x: 0,
     y: 0,
     heading: 0,
