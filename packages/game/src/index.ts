@@ -26,11 +26,18 @@ export {
 } from './modes/cycles';
 export {
   carFlags,
+  carsInOrder,
+  onField,
+  type Piece,
   RACE,
   type RaceChanges,
   type RaceInput,
   type RaceResultRow,
   type RaceState,
+  TILE,
+  TRACKS,
+  type TrackData,
+  TURN,
 } from './modes/race';
 export { type ApplyResult, apply } from './room/apply';
 export type {

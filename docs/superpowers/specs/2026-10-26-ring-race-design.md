@@ -114,7 +114,10 @@ Everything is an integer, as in the light cycles; the purity gate extends to `mo
 
 - **Mode `race`**, up to 20 participants with bots, host picks it in the lobby like the others. No
   race settings in this version.
-- **Wire.** `full` carries the track id, `tickMs`, and every car. Each tick's `delta` is one string
+- **Wire.** `full` carries the track id, `tickMs`, and every car, in the order of the race, with
+  its best lap and the tick its current lap began on (lap times survive a resync). The snapshot's
+  race data carries `tickMs` too, so the results, which are in ticks, can be shown as time.
+  The delta's tuples are in the order of the race as well, so the standings cost no bytes. Each tick's `delta` is one string
   for the room: per car `slot, x, y, heading, speed, lap, flags` (integers), plus events (`lap`,
   `finished`, `bump`). That is 20 × 7 numbers a tick. **Measured** over a whole race (twenty cars,
   nineteen bots, 2762 ticks): 609 bytes as JSON on average and 804 at the most, about 18 KB/s per
@@ -226,6 +229,11 @@ What plan 11's review changed:
   twenty-car race: 609 bytes on average, 804 at the most (an earlier figure of 856 was one tick, 20 s
   in). A contact is kept per car as a bitmask over slots, so a `bump` event comes when it begins
   and not on every tick of it.
+- **What plan 13 needs on the wire** (added after plan 12's review): the cars of `full` and `delta`
+  in race order; `tickMs` in the snapshot's race data; `best` and `lapStart` per car in `full`;
+  `TILE`, `TURN`, `TRACKS` and the `TrackData`/`Piece` types exported from `@clicker/game`, since
+  the client builds the scene from the piece list; `carFlags(state, car)` reads the state's own
+  track; `onField(car)` is the one test of whether a car takes part.
 - **A car that joined mid-race is in neither `full` nor `delta`** until the next race. One that
   joins before the first tick takes the next spot on the grid (`RaceState.onGrid`) and races.
 - **No race on screen yet.** The host cannot pick it; a room put into race mode shows a placeholder

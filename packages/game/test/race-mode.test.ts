@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_CYCLES_SETTINGS } from '../src/modes/cycles/config';
 import { random } from '../src/modes/cycles/random';
-import { raceMode } from '../src/modes/race';
+import { carsInOrder, onField, raceMode } from '../src/modes/race';
 import { RACE } from '../src/modes/race/config';
 import { over, raceResults, standings } from '../src/modes/race/race';
 import type { RaceState } from '../src/modes/race/state';
@@ -130,6 +130,21 @@ describe('the race mode', () => {
 
     const names = Object.fromEntries((gone.results ?? []).map((row) => [row.publicId, row.name]));
     expect(names).toEqual({ '1': 'Ann', '2': 'Bob' });
+  });
+
+  it('says which cars are on the field, and puts them in the order of the race', () => {
+    const step = raceMode.step as NonNullable<typeof raceMode.step>;
+    const racing = step(build(['1', '2', '3'], new Set()), settings).state;
+    const joined = raceMode.addPlayer(racing, '9', false, 0, config, settings);
+    // Slot 2 has finished first, slot 0 second; the rest are where the grid left them.
+    const cars = joined.cars.map((car) =>
+      car.slot === 2 ? { ...car, finish: 100 } : car.slot === 0 ? { ...car, finish: 200 } : car,
+    );
+
+    const order = carsInOrder({ ...joined, cars });
+
+    expect(order.map((car) => car.slot)).toEqual([2, 0, 1]);
+    expect(cars.filter(onField)).toHaveLength(3);
   });
 
   describe('a player who joins in the countdown', () => {

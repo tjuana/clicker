@@ -89,6 +89,7 @@ describe('a snapshot of the ring race', () => {
       round: { goAt: 1_000, endsAt: 61_000 },
       notice: null,
       data: {
+        tickMs: 1000 / 30,
         results: [
           {
             id: '1',

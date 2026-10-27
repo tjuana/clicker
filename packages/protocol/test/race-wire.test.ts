@@ -53,6 +53,20 @@ function raceRoom(
   return { state, stepped };
 }
 
+/**
+ * The room with its cars put in an order unlike their slots': slot 2 finished first, slot 0
+ * second. The rest stand where they were on the grid.
+ */
+function finishersFirst(state: RoomState): RoomState {
+  const race = state.modeState as RaceState;
+  const cars = race.cars.map((car) => {
+    if (car.slot === 2) return { ...car, finish: 100 };
+    if (car.slot === 0) return { ...car, finish: 200 };
+    return car;
+  });
+  return { ...state, modeState: { ...race, cars } };
+}
+
 describe('the race snapshot', () => {
   it('names the mode, has no results in a lobby and passes its own schema', () => {
     let state = createRoomState();
@@ -66,7 +80,7 @@ describe('the race snapshot', () => {
     const snapshot = toSnapshot(state, 5);
 
     expect(snapshot.mode).toBe('race');
-    expect(snapshot.data).toEqual({ results: null });
+    expect(snapshot.data).toEqual({ tickMs: 1000 / 30, results: null });
     expect(parseServerMessage(JSON.stringify(snapshot))).toEqual(snapshot);
   });
 
@@ -104,6 +118,17 @@ describe('the race snapshot', () => {
 
     if (snapshot.mode !== 'race') throw new Error('not a race snapshot');
     expect(snapshot.data.results?.find((row) => row.id === '1')?.name).toBe('Аня');
+  });
+
+  it('says how long a tick is, so that results in ticks can be shown as time', () => {
+    const { state } = raceRoom(2, 3);
+    const over = apply(state, { type: 'tick' }, 10_000_000, RACE).state;
+
+    const snapshot = toSnapshot(over, 10_000_000);
+
+    if (snapshot.mode !== 'race') throw new Error('not a race snapshot');
+    expect(snapshot.data.tickMs).toBeCloseTo(1000 / 30);
+    expect(parseServerMessage(JSON.stringify(snapshot))).toEqual(snapshot);
   });
 
   it('is refused when it carries another mode’s data', () => {
@@ -146,6 +171,17 @@ describe('the race full', () => {
     expect(toFull(state)).toBeNull();
   });
 
+  it('lists the cars in the order they stand in the race', () => {
+    const { state, stepped } = raceRoom(3, 5);
+
+    const delta = toDelta(finishersFirst(state), stepped as Stepped);
+
+    if (delta.mode !== 'race') throw new Error('expected a race delta');
+    const slots = delta.cars.filter((_, i) => i % 7 === 0);
+    expect(slots.slice(0, 2)).toEqual([2, 0]);
+    expect([...slots].sort()).toEqual([0, 1, 2, 3]);
+  });
+
   it('leaves out a car that joined in the middle of the race', () => {
     const { state } = raceRoom(1, 5);
     const joined = apply(
@@ -159,6 +195,38 @@ describe('the race full', () => {
 
     if (full?.mode !== 'race') throw new Error('expected a race full');
     expect(full.cars.map((car) => car.id).sort()).toEqual(['1', '2']);
+  });
+
+  it('lists the cars in the order they stand in the race', () => {
+    const { state } = raceRoom(3, 5);
+
+    const full = toFull(finishersFirst(state));
+
+    if (full?.mode !== 'race') throw new Error('expected a race full');
+    expect(full.cars.slice(0, 2).map((car) => car.slot)).toEqual([2, 0]);
+    expect(full.cars.map((car) => car.slot).sort()).toEqual([0, 1, 2, 3]);
+  });
+
+  it('carries each car’s best lap and the start of its current one, so a resync keeps them', () => {
+    const { state } = raceRoom(1, 5);
+    const race = state.modeState as RaceState;
+    const timed = {
+      ...state,
+      modeState: {
+        ...race,
+        cars: race.cars.map((car) =>
+          car.publicId === '1' ? { ...car, best: 640, lapStart: 480 } : car,
+        ),
+      },
+    };
+
+    const full = toFull(timed);
+
+    if (full?.mode !== 'race') throw new Error('expected a race full');
+    const mine = full.cars.find((car) => car.id === '1');
+    expect(mine).toMatchObject({ best: 640, lapStart: 480 });
+    expect(full.cars.find((car) => car.id === '2')).toMatchObject({ best: null, lapStart: 0 });
+    expect(parseServerMessage(JSON.stringify(full))).toEqual(full);
   });
 
   it('does not call the car of a rider who left a bot', () => {

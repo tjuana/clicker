@@ -3,6 +3,7 @@ import {
   type CyclesSettings,
   type CyclesState,
   carFlags,
+  carsInOrder,
   comparePublicIds,
   configFor,
   forEachCell,
@@ -77,6 +78,8 @@ export const cyclesDataSchema = v.strictObject({
 });
 
 export const raceDataSchema = v.strictObject({
+  /** Milliseconds a tick lasts: the results are in ticks, and this turns them into time. */
+  tickMs: v.number(),
   results: v.nullable(
     v.array(
       v.strictObject({
@@ -168,7 +171,10 @@ export const raceFullSchema = v.strictObject({
   track: v.string(),
   /** Laps to complete. */
   laps: v.number(),
-  /** Every car on the field; one that joined mid-race waits off it and is not listed. */
+  /**
+   * Every car on the field, in the order of the race; one that joined mid-race waits off it and
+   * is not listed.
+   */
   cars: v.array(
     v.strictObject({
       slot: v.number(),
@@ -181,6 +187,10 @@ export const raceFullSchema = v.strictObject({
       lap: v.number(),
       /** The tick the car finished on, or null. */
       finish: v.nullable(v.number()),
+      /** The best lap in ticks, or null: lap times survive a resync. */
+      best: v.nullable(v.number()),
+      /** The tick the current lap began on, or -1 if it was cut short and has no time. */
+      lapStart: v.number(),
     }),
   ),
 });
@@ -212,7 +222,7 @@ export const raceDeltaSchema = v.strictObject({
   mode: v.literal('race'),
   t: v.number(),
   /**
-   * Flat 7-tuples for every car on the field: slot, x, y, heading, speed, lap, flags (bit 0
+   * Flat 7-tuples for every car on the field, in the order of the race: slot, x, y, heading, speed, lap, flags (bit 0
    * finished, bit 1 on grass, bit 2 touching a wall, bit 3 touching another car). All integers.
    */
   cars: v.array(v.pipe(v.number(), v.integer())),
@@ -303,8 +313,10 @@ function cyclesDataOf(
 
 function raceDataOf(state: RoomState): v.InferOutput<typeof raceDataSchema> {
   const { results } = state.modeState as RaceState;
-  if (results === null) return { results: null };
+  const tickMs = raceTickMs();
+  if (results === null) return { tickMs, results: null };
   return {
+    tickMs,
     results: results.map((row) => ({
       id: row.publicId,
       // Fixed into the row at the finish. Rows stored by an earlier build have no name.
@@ -317,6 +329,12 @@ function raceDataOf(state: RoomState): v.InferOutput<typeof raceDataSchema> {
       short: row.short,
     })),
   };
+}
+
+function raceTickMs(): number {
+  const tickMs = configFor('race').tickMs;
+  if (tickMs === null) throw new Error('the race has a tick of its own');
+  return tickMs;
 }
 
 /** The secret playerId and hostKey never get in here. */
@@ -406,29 +424,27 @@ function cyclesFullOf(state: RoomState): CyclesFullMessage | null {
 function raceFullOf(state: RoomState): RaceFullMessage | null {
   if (state.phase === 'lobby') return null;
   const race = state.modeState as RaceState;
-  const tickMs = configFor('race').tickMs;
-  if (tickMs === null) throw new Error('the race has a tick of its own');
   return {
     v: PROTOCOL_VERSION,
     type: 'full',
     mode: 'race',
     tick: race.tick,
-    tickMs,
+    tickMs: raceTickMs(),
     track: race.track,
     laps: RACE.laps,
-    cars: race.cars
-      .filter((car) => !car.out)
-      .map((car) => ({
-        slot: car.slot,
-        id: car.publicId,
-        bot: car.bot && !car.abandoned,
-        x: car.x,
-        y: car.y,
-        heading: car.heading,
-        speed: car.speed,
-        lap: car.lap,
-        finish: car.finish,
-      })),
+    cars: carsInOrder(race).map((car) => ({
+      slot: car.slot,
+      id: car.publicId,
+      bot: car.bot && !car.abandoned,
+      x: car.x,
+      y: car.y,
+      heading: car.heading,
+      speed: car.speed,
+      lap: car.lap,
+      finish: car.finish,
+      best: car.best,
+      lapStart: car.lapStart,
+    })),
   };
 }
 
@@ -462,10 +478,11 @@ export function toDelta(
 }
 
 function raceDeltaOf(state: RoomState, tick: number, changes: RaceChanges): RaceDeltaMessage {
+  const race = state.modeState as RaceState;
   const cars: number[] = [];
-  for (const car of (state.modeState as RaceState).cars) {
-    if (car.out) continue;
-    cars.push(car.slot, car.x, car.y, car.heading, car.speed, car.lap, carFlags(car));
+  // In the order of the race, which costs no bytes: the client reads the standings off the order.
+  for (const car of carsInOrder(race)) {
+    cars.push(car.slot, car.x, car.y, car.heading, car.speed, car.lap, carFlags(race, car));
   }
   return {
     v: PROTOCOL_VERSION,

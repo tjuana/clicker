@@ -2,7 +2,7 @@ import { randomBelow } from '../cycles/random';
 import { binCars } from './bins';
 import { decide } from './bot';
 import { bump } from './bump';
-import { type Car, drive } from './car';
+import { type Car, drive, onField } from './car';
 import type { RaceConfig } from './config';
 import type { RaceChanges, RaceResultRow, RaceState } from './state';
 import { point, project, type Track, walk } from './track';
@@ -25,7 +25,7 @@ function order(state: RaceState, track: Track): number[] {
   const covered = cars.map((car) => progress(car, track));
   return cars
     .map((_, i) => i)
-    .filter((i) => !(cars[i] as Car).out)
+    .filter((i) => onField(cars[i] as Car))
     .sort((a, b) => {
       const x = cars[a] as Car;
       const y = cars[b] as Car;
@@ -36,9 +36,14 @@ function order(state: RaceState, track: Track): number[] {
     });
 }
 
-/** Slots in race order: finishers by their finish tick, then the rest by progress. */
+/** The cars on the field in race order: finishers by their finish tick, then the rest by progress. */
+export function raceOrder(state: RaceState, track: Track): Car[] {
+  return order(state, track).map((i) => state.cars[i] as Car);
+}
+
+/** Slots in race order. */
 export function standings(state: RaceState, track: Track): number[] {
-  return order(state, track).map((i) => (state.cars[i] as Car).slot);
+  return raceOrder(state, track).map((car) => car.slot);
 }
 
 /**
@@ -112,7 +117,7 @@ export function over(state: RaceState, config: RaceConfig): boolean {
   if (state.tick >= config.cap) return true;
   if (state.firstFinish !== null && state.tick >= state.firstFinish + config.afterFirst)
     return true;
-  return state.cars.every((car) => car.out || car.finish !== null);
+  return state.cars.every((car) => !onField(car) || car.finish !== null);
 }
 
 /**
@@ -158,7 +163,7 @@ export function stepRace(
   const cars = state.cars.map((car) => ({ ...car }));
   // A car that joined mid-race is not on the field: it is neither driven, nor bumped, nor
   // counted, and the bots do not see it. `live` holds the same objects as `cars`.
-  const live = cars.some((car) => car.out) ? cars.filter((car) => !car.out) : cars;
+  const live = cars.some((car) => car.out) ? cars.filter(onField) : cars;
   // Bots, and finished cars of either kind, decide before anybody moves, all from the one
   // picture of where the cars stand.
   const bins = live.some((car) => car.bot || car.finish !== null)

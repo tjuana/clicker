@@ -41,6 +41,11 @@ export interface Car {
   touch: number;
 }
 
+/** Whether the car takes part in the race. One that joined in the middle of it waits off the field. */
+export function onField(car: Pick<Car, 'out'>): boolean {
+  return !car.out;
+}
+
 function accelerate(car: Car, config: RaceConfig, top: number): void {
   const { keys } = car;
   if (keys & GAS) {

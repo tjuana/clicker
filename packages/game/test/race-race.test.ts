@@ -389,7 +389,7 @@ describe('the step', () => {
         const stepped = stepRace(state, track, RACE);
         state = stepped.state;
         bumps += stepped.changes.bumped.length;
-        touching.push(state.cars.every((car) => (carFlags(car) & 8) !== 0));
+        touching.push(state.cars.every((car) => (carFlags(state, car) & 8) !== 0));
       }
       return { bumps, touching };
     }

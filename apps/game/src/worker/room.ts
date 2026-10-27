@@ -9,6 +9,7 @@ import {
   type GameEvent,
   type ModeState,
   nextDeadline,
+  onField,
   type RaceState,
   type RoomState,
   syncConnections,
@@ -45,7 +46,7 @@ function seats(state: RoomState): number {
     case 'cycles':
       return (state.modeState as CyclesState).bikes.length;
     case 'race':
-      return (state.modeState as RaceState).cars.filter((car) => !car.out).length;
+      return (state.modeState as RaceState).cars.filter(onField).length;
     case 'clicker':
       return 0;
     default:
