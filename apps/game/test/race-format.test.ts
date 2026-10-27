@@ -28,12 +28,19 @@ describe('race HUD arithmetic', () => {
     expect(lapShown(4, 3)).toBe(3);
   });
 
-  it('takes the best lap from the times on the lap events of the own slot', () => {
-    const lap = (slot: number, time: number | null) => ({ type: 'lap', slot, lap: 2, time });
+  it('takes the best lap from the latest lap event of the own slot, as the rules reported it', () => {
+    const lap = (slot: number, best: number | null) => ({
+      type: 'lap',
+      slot,
+      lap: 2,
+      time: 900,
+      best,
+    });
     expect(bestAfterEvents(null, [lap(1, null)], 1)).toBeNull();
     expect(bestAfterEvents(null, [lap(1, 800)], 1)).toBe(800);
-    expect(bestAfterEvents(800, [lap(1, 900)], 1)).toBe(800);
-    expect(bestAfterEvents(800, [lap(1, 700), lap(1, 750)], 1)).toBe(700);
+    // The figure on the wire is the rules' own: the client does not take a minimum of its own.
+    expect(bestAfterEvents(800, [lap(1, 650)], 1)).toBe(650);
+    expect(bestAfterEvents(800, [lap(1, 700), lap(1, 650)], 1)).toBe(650);
     expect(bestAfterEvents(800, [lap(2, 100), { type: 'bump', slot: 1 }], 1)).toBe(800);
   });
 

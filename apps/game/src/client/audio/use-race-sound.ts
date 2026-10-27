@@ -1,7 +1,6 @@
-import { RACE } from '@clicker/game';
+import { FINISHED, RACE } from '@clicker/game';
 import { useEffect } from 'react';
 import { renderDelay } from '../clock-estimate';
-import { FINISHED } from '../race/model';
 import { onRaceEvents, useRace } from '../race/store';
 import { useClient } from '../store';
 import { useMuted } from './mute';

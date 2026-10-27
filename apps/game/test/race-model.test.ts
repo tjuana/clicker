@@ -3,6 +3,7 @@ import {
   type Command,
   configFor,
   createRoomState,
+  ON_GRASS,
   type RaceState,
   type RoomState,
   TURN,
@@ -15,7 +16,7 @@ import {
   toFull,
 } from '@clicker/protocol';
 import { describe, expect, it } from 'vitest';
-import { applyDelta, fromFull, GRASS, TOUCHING } from '../src/client/race/model';
+import { applyDelta, fromFull } from '../src/client/race/model';
 
 /** A race the real rules ran, in the form it goes over the wire, and the cars after every tick. */
 function record(ticks: number): {
@@ -54,6 +55,9 @@ function record(ticks: number): {
   }
   return { full, deltas, states };
 }
+
+// The rules' bit for contact is not in the package's root exports, only its sibling flags are.
+const TOUCHING = 8;
 
 describe('replaying a recorded race', () => {
   const ticks = 600;
@@ -133,10 +137,15 @@ describe('applyDelta', () => {
     const model = fromFull(fullOf([3, 1]));
     const result = applyDelta(
       model,
-      deltaOf(11, [1, 100, 200, 300, 400, 1, GRASS, 3, 5, 6, 0, 7, 0, 0]),
+      deltaOf(11, [1, 100, 200, 300, 400, 1, ON_GRASS, 3, 5, 6, 0, 7, 0, 0]),
     );
     expect(result?.model.order).toEqual([1, 3]);
-    expect(result?.model.cars.get(1)).toMatchObject({ x: 100, y: 200, heading: 300, flags: GRASS });
+    expect(result?.model.cars.get(1)).toMatchObject({
+      x: 100,
+      y: 200,
+      heading: 300,
+      flags: ON_GRASS,
+    });
     expect(result?.model.cars.get(3)).toMatchObject({ x: 5, speed: 7 });
   });
 

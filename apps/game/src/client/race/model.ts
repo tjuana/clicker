@@ -1,10 +1,5 @@
+import { FINISHED } from '@clicker/game';
 import type { RaceDeltaMessage, RaceFullMessage } from '@clicker/protocol';
-
-/** The bits of `RaceCar.flags`, as the rules set them. */
-export const FINISHED = 1;
-export const GRASS = 2;
-export const WALL = 4;
-export const TOUCHING = 8;
 
 /** Numbers per car in a delta: slot, x, y, heading, speed, lap, flags. */
 const TUPLE = 7;

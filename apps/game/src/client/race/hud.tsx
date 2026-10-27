@@ -1,10 +1,10 @@
+import { FINISHED } from '@clicker/game';
 import { type CSSProperties, useEffect, useRef, useState } from 'react';
 import { SLOT_CSS } from '../cycles/hud';
 import { useClient } from '../store';
 import { strings } from '../strings';
 import { theme } from '../theme';
 import { bestAfterEvents, formatTicks, lapShown, placeOf, slotOfId } from './format';
-import { FINISHED } from './model';
 import { onRaceEvents, useRace } from './store';
 
 /** The colour of a car, the one the scene paints it in. Race slots count from zero. */

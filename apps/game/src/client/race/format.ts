@@ -30,19 +30,17 @@ export function lapShown(lap: number, laps: number): number {
 }
 
 /**
- * The best lap after a tick's events: the shortest time the rules reported for this slot's laps. A
- * crossing that ended no lap carries no time, so it changes nothing.
+ * The best lap after a tick's events. The lap event carries the best the rules hold for the car,
+ * so the latest one for this slot is the answer; a tick without one changes nothing.
  */
 export function bestAfterEvents(
   best: number | null,
-  events: readonly { type: string; slot: number; time?: number | null }[],
+  events: readonly { type: string; slot: number; best?: number | null }[],
   slot: number,
 ): number | null {
   let result = best;
   for (const event of events) {
-    if (event.type !== 'lap' || event.slot !== slot) continue;
-    const time = event.time ?? null;
-    if (time !== null && (result === null || time < result)) result = time;
+    if (event.type === 'lap' && event.slot === slot) result = event.best ?? null;
   }
   return result;
 }
