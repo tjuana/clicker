@@ -28,7 +28,9 @@ export function FrameMeter() {
       gl.info,
       extension === null ? null : createGpuTimer(context, extension),
     );
-    let published = 0;
+    // The first line waits a whole interval: published at once, it stood for a single frame and
+    // read "GPU n/a" while the GPU's first answers were still on their way.
+    let published = performance.now();
     const stopBegin = addEffect(() => meter.begin());
     const stopEnd = addAfterEffect((timestamp) => {
       meter.end();
