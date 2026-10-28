@@ -222,11 +222,10 @@ function Field({ side, tickMs, you }: { side: number; tickMs: number; you: strin
     [bikes],
   );
 
-  // R3F runs frame callbacks in ascending priority. The floor's Reflector renders the mirror
-  // while the scene is being drawn, reading the camera's world matrix and the bikes as they are
-  // then, so everything is brought up to date at -1 and only drawn at 1 (a positive priority is
-  // also what stops R3F rendering by itself). Done in one callback, the reflection showed the
-  // previous frame's arena.
+  // R3F runs frame callbacks in ascending priority. The floor's mirror is drawn at 0 (see Floor),
+  // reading the camera's world matrix and the bikes as they are then, so everything is brought up
+  // to date at -1 and only drawn at 1 (a positive priority is also what stops R3F rendering by
+  // itself). Done in one callback, the reflection showed the previous frame's arena.
   useFrame((_, delta) => {
     const { model, timeline } = useCycles.getState();
     const now = performance.now();

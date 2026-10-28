@@ -1,15 +1,19 @@
-import { useStore, useThree } from '@react-three/fiber';
+import { useFrame, useStore, useThree } from '@react-three/fiber';
 import { useEffect, useMemo } from 'react';
 import {
   AdditiveBlending,
   type Camera,
   Color,
+  Group,
   HalfFloatType,
+  type Material,
   PlaneGeometry,
+  type Scene,
   ShaderMaterial,
   UniformsLib,
   UniformsUtils,
   Vector2,
+  type WebGLRenderer,
   WebGLRenderTarget,
 } from 'three';
 import { Reflector } from 'three/examples/jsm/objects/Reflector.js';
@@ -87,6 +91,11 @@ const targetSize = (css: number): number => Math.max(1, Math.round(css * FLOOR.f
  * (RTR 9.8, Figure 11.40: microfacets stretch a reflection along the view). All three targets are
  * a fraction of the canvas, the same size, so the bilinear offsets in texels hold.
  *
+ * The mirror and both blurs are drawn in a frame callback at priority 0, after `Field` has updated
+ * the arena (-1) and before the composer draws it (1), not in the Reflector's `onBeforeRender`:
+ * there they would interrupt the composer's multisampled scene pass, which a tiled GPU pays for by
+ * storing and reloading every sample: 6.41 against 5.90 ms GPU at dpr 2 with 20 riders.
+ *
  * Mounted beside `Field`, not in it: `Field` is rebuilt on every side or tick change. Rebuilt
  * here only when the side changes, and then everything it made is disposed.
  */
@@ -107,6 +116,9 @@ export function Floor({ side }: { side: number }) {
     });
     reflector.rotation.x = -Math.PI / 2;
     reflector.position.set(side / 2, 0, side / 2);
+    // The mirror is drawn before the scene pass, which is what normally refreshes this matrix, and
+    // the floor never moves: refresh it once so the first frame's reflection is right.
+    reflector.updateMatrixWorld();
     const material = reflector.material as ShaderMaterial;
     material.fog = true;
 
@@ -132,10 +144,22 @@ export function Floor({ side }: { side: number }) {
     const verticalSrc = vertical.uniforms.src as { value: unknown };
     const shown = material.uniforms.tDiffuse as { value: unknown };
 
-    // Runs inside the frame, inside the composer's scene pass: nothing here allocates.
+    // Reflector renders its mirror from onBeforeRender, i.e. inside the scene pass. Keep its
+    // function, silence the hook, and call the function from the frame callback below.
     const reflect = reflector.onBeforeRender;
-    reflector.onBeforeRender = (renderer, scene, camera, geometry, mat, group) => {
-      reflect.call(reflector, renderer, scene, camera, geometry, mat, group);
+    reflector.onBeforeRender = () => {};
+    const group = new Group();
+    // Runs every frame at priority 0: nothing here allocates.
+    const draw = (renderer: WebGLRenderer, scene: Scene, camera: Camera) => {
+      reflect.call(
+        reflector,
+        renderer,
+        scene,
+        camera,
+        reflector.geometry,
+        reflector.material as Material,
+        group,
+      );
       const current = renderer.getRenderTarget();
       horizontalSrc.value = reflector.getRenderTarget().texture;
       quad.material = horizontal;
@@ -148,8 +172,10 @@ export function Floor({ side }: { side: number }) {
       renderer.setRenderTarget(current);
       shown.value = down.texture;
     };
-    return { reflector, across, down, acrossStep, downStep, horizontal, vertical, quad };
+    return { draw, reflector, across, down, acrossStep, downStep, horizontal, vertical, quad };
   }, [side, store]);
+
+  useFrame((state) => floor.draw(state.gl, state.scene, state.camera), 0);
 
   useEffect(() => {
     const w = targetSize(size.width);
