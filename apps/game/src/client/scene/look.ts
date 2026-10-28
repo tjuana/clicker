@@ -69,12 +69,14 @@ export const BLOOM = { strength: 0.55, radius: 0.35, threshold: 0.6 };
  * a sharper reflection read as a second, wrong arena under the real one.
  */
 export const FLOOR = {
-  /** Reflection texture size: soft smears need no more, and it is rendered a second time every frame. */
-  resolution: 512,
-  /** How far the reflection is smeared; high on purpose, the floor is wet asphalt, not a mirror. */
-  blur: [250, 250] as [number, number],
+  /** The mirror's and both blur targets' size as a fraction of the canvas (CSS px), aspect kept: soft smears need no more, and it is a second render of the arena every frame. */
+  fraction: 0.25,
+  /** Gaussian sigma across the view, in texels of the target: small, so a bike stays a narrow streak and not a blob. */
+  sigmaAcross: 1.5,
+  /** Gaussian sigma down the view, in texels: large, the microfacet stretch of RTR 9.8 that makes wet asphalt streak vertically. */
+  sigmaDown: 8,
   /** How much of the reflection shows; 6 doubled the glow of every wall and flooded the frame. */
-  mixStrength: 3,
+  strength: 2.3,
 };
 
 /** The grid's colour level: 1 was brighter than the reflections it sits on and read as a net over them. */

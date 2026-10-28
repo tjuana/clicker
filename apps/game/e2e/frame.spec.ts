@@ -8,13 +8,18 @@ import { type Browser, expect, type Page, test } from '@playwright/test';
  */
 const RACE_CALLS = 15;
 /**
- * The arena: 29 draws in every frame (the scene, the floor's reflection, the bloom's passes),
- * plus each of the four border boxes while in view. With their culling turned off the count sits
- * at 33, so 33 is the structure's ceiling, not a lucky reading. The minimum also guards the meter:
- * with three's per-render reset left on, a frame reads 1 — the race's gates cannot see that, as
- * its last render does not reset.
+ * The arena: 30 draws at most. Each is one of: the scene (grid, walls, bikes, the floor's plane,
+ * four border boxes: 8), the floor's reflection (three's Reflector draws the arena again without
+ * the grid: walls, bikes, four borders: 6), the floor's two blur passes (across, then down: 2),
+ * and the bloom and output passes (14). The four border boxes are the only draws that come and
+ * go with the view, in the scene and again in the reflection, so the count runs from 22 with all
+ * eight culled to 30; with their culling turned off a frame still reads 30, so that is the
+ * structure's ceiling, not a lucky reading. It was 33 with drei's reflector, whose Kawase blur
+ * spent more passes than these two. The minimum also guards the meter: with three's per-render
+ * reset left on, a frame reads 1 — the race's gates cannot see that, as its last render does not
+ * reset.
  */
-const CYCLES_CALLS = { min: 29, max: 33 };
+const CYCLES_CALLS = { min: 22, max: 30 };
 
 /** Host a room in `mode`, seat `bots` bots one at a time, start, and wait for the HUD. */
 async function host(page: Page, mode: 'race' | 'cycles', bots: number): Promise<void> {
