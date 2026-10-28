@@ -35,10 +35,45 @@ export const WALL_LEVEL = 0.3;
 export const BIKE_LEVEL = 1.25;
 /**
  * A bike that is not laying its wall: dark enough not to glow, bright enough to still be seen. The
- * brightest part (GLOW = 1) of the brightest slot colour (a 0xff channel, so 1.0) comes to
- * 1.0 * 0.45 = 0.45, below BLOOM.threshold 0.6, so an unlit bike gives no bloom at all.
+ * brightest the surface makes any fragment is CYCLE_SURFACE_MAX (the brightest of a rim, a seam and
+ * the stripe at 1, plus the Fresnel rim's 0.25, so 1.25); times the brightest channel of the
+ * brightest slot colour (a 0xff channel, so 1.0) times 0.45 comes to 0.5625, below
+ * BLOOM.threshold 0.6, so an unlit bike gives no bloom at all. test/cycle-bloom.test.ts holds it.
  */
 export const DIM_LEVEL = 0.45;
+
+/**
+ * The bikes' surface is procedural (RTR 6.3): its levels are multiplied by the slot's colour and
+ * BIKE_LEVEL or DIM_LEVEL, and bloom keys on the product against BLOOM.threshold. Lengths below are
+ * in the model's own units, the bike drawn at its 1.6 size, 2.2 long and 0.9 tall.
+ */
+/** The rims: the part of the bike that is a lit outline. */
+export const CYCLE_GLOW = 1;
+/** The body and nose between the lines: lit 0.4, under the threshold, so it stays a dark mass. */
+export const CYCLE_BODY = 0.32;
+/** Discs and canopy: nearly black, so the rims read as rings. */
+export const CYCLE_DARK = 0.16;
+/** The panel seams on the body: lit 0.875, past the threshold, so a few fine lines glow; dim 0.315. */
+export const CYCLE_SEAM = 0.7;
+/** The flank stripe: as bright as the rims, it is the bike's signature when seen side-on. */
+export const CYCLE_STRIPE = 1;
+/** Fresnel rim (RTR 9.5), added to the level: a body's grazing edge goes 0.32 to 0.57, lit 0.71, a lit outline. */
+export const CYCLE_RIM = 0.25;
+/** As the walls' RIM_EXPONENT: high keeps the glow to the silhouette and off the flat of the flank. */
+export const CYCLE_RIM_EXPONENT = 3.0;
+/** Distance between two seams along the body: five or six panels on a 1.5 long body. */
+export const SEAM_SPACING = 0.3;
+/** A seam's full width: about a pixel on the player's own bike at the chase camera, so it is a line, not a band. */
+export const SEAM_WIDTH = 0.02;
+/** Height of the stripe's centre: where the old stripe box sat, a little above the body's middle. */
+export const STRIPE_Y = 0.69;
+/** Half the stripe's height: 0.06 in all, thin enough to read as a light strip and not a painted band. */
+export const STRIPE_HALF = 0.03;
+/**
+ * The brightest level the surface can give any fragment, which the dim bike's no-bloom guarantee is
+ * built on: a seam or the stripe replaces the body's level (never adds to it), the rim adds.
+ */
+export const CYCLE_SURFACE_MAX = Math.max(CYCLE_GLOW, CYCLE_SEAM, CYCLE_STRIPE) + CYCLE_RIM;
 
 /** The wall's top band is this much brighter than its body: the edge that blooms. */
 export const TOP = 4.0;

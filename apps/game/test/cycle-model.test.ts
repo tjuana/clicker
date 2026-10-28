@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createCycleGeometry } from '../src/client/scene/cycle-model';
+import { CYCLE_BODY, CYCLE_DARK, CYCLE_GLOW } from '../src/client/scene/look';
 
 describe('the light-cycle model', () => {
   const geometry = createCycleGeometry();
@@ -16,11 +17,25 @@ describe('the light-cycle model', () => {
     expect(box?.max.x ?? 0).toBeGreaterThan(Math.abs(box?.min.x ?? 0));
   });
 
-  it('carries a brightness per vertex, so only rims and stripe reach the bloom', () => {
-    const colours = geometry.getAttribute('color');
-    expect(colours.count).toBe(geometry.getAttribute('position').count);
-    const values = new Set<number>();
-    for (let i = 0; i < colours.count; i += 1) values.add(Math.round(colours.getX(i) * 100));
-    expect([...values].sort((a, b) => a - b)).toEqual([16, 32, 100]);
+  it('tells the parts apart by level: rims brightest, body between, discs and canopy darkest', () => {
+    const levels = geometry.getAttribute('level');
+    expect(levels.count).toBe(geometry.getAttribute('position').count);
+    const found = new Set<number>();
+    for (let i = 0; i < levels.count; i += 1) found.add(Math.round(levels.getX(i) * 1000) / 1000);
+    expect([...found].sort((a, b) => a - b)).toEqual([CYCLE_DARK, CYCLE_BODY, CYCLE_GLOW]);
+    expect(CYCLE_DARK).toBeLessThan(CYCLE_BODY);
+    expect(CYCLE_BODY).toBeLessThan(CYCLE_GLOW);
+  });
+
+  it('has no stripe box: the flank stripe is drawn by the shader, not built', () => {
+    // The body box is 0.92 x 0.2 x 0.22 and the stripe box was 0.235 wide, wider than the body: a
+    // vertex out there is a stripe box.
+    const z = geometry.getAttribute('position');
+    let widest = 0;
+    for (let i = 0; i < z.count; i += 1) {
+      if (Math.abs(z.getY(i) / 1.6 - 0.43) < 0.02)
+        widest = Math.max(widest, Math.abs(z.getZ(i)) / 1.6);
+    }
+    expect(widest).toBeLessThan(0.115);
   });
 });

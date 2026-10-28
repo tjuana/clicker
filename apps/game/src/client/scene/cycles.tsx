@@ -7,7 +7,6 @@ import {
   HalfFloatType,
   InstancedMesh,
   Matrix4,
-  MeshBasicMaterial,
   Quaternion,
   Vector2,
   Vector3,
@@ -20,7 +19,7 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { seenOnScreen } from '../cycles/latency-store';
 import { useCycles } from '../cycles/store';
 import type { Sample, Step, Timeline } from '../cycles/timeline';
-import { createCycleGeometry } from './cycle-model';
+import { createCycleGeometry, createCycleMaterial } from './cycle-model';
 import { Floor, Grid } from './floor';
 import { FrameMeter } from './frame-meter';
 import { BIKE_LEVEL, BLOOM, BORDER_COLOUR, DIM_LEVEL, SLOT_COLOURS } from './look';
@@ -169,8 +168,8 @@ function Field({ side, tickMs, you }: { side: number; tickMs: number; you: strin
 
   const bikes = useMemo(() => {
     const geometry = createCycleGeometry();
-    // Vertex colours carry each part's brightness; the instance colour, the slot's.
-    const material = new MeshBasicMaterial({ toneMapped: false, vertexColors: true });
+    // The shader draws the surface; the instance colour is the slot's.
+    const material = createCycleMaterial();
     const mesh = new InstancedMesh(geometry, material, MAX_BIKES);
     mesh.frustumCulled = false;
     return { mesh, geometry, material };
