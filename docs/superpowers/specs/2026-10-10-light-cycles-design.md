@@ -398,5 +398,8 @@ The arena's look, rebuilt by the Real-Time Rendering study's exercises A to C
   body gets panel seams and a flank stripe from the model's own coordinates, antialiased with
   `fwidth` and faded to their average when too small to draw, and every grazing edge a Fresnel rim.
   Still one instanced draw for every bike. A bike that is not laying its wall never reaches the
-  bloom threshold, whatever the surface does (`test/cycle-bloom.test.ts`).
+  bloom threshold, whatever the surface does, and a body never does even at a grazing edge
+  (`test/cycle-bloom.test.ts`, over the figures in `look.ts`). The bloom keys on luminance, so a
+  lit bike's rims glow only on the brighter half of the palette; blue, violet and magenta do not.
+  That predates plan 16 and is the owner's call.
 - Draw calls in an arena frame: 30 at most (33 with drei's floor), whatever the number of riders.
