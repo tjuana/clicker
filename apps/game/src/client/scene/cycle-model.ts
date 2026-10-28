@@ -88,7 +88,9 @@ const glsl = (value: number): string => value.toFixed(4);
  * The bikes' material: a MeshBasicMaterial whose shader draws the surface from the model's own
  * coordinates, so one instanced draw serves every bike and no texture is read. Body panels seams
  * (RTR 6.3 procedural texturing) and the flank stripe are line coverage from fwidth, a box filter
- * over the pixel, so a line is a pixel wide with a soft edge at any distance; when seams come
+ * over the pixel. Seams and the stripe have a fixed width in model space (SEAM_WIDTH, STRIPE_HALF),
+ * so their width in pixels follows the distance; fwidth only gives their edge a soft coverage
+ * (only the grid's lines, divided by fwidth, stay a pixel wide everywhere). When seams come
  * closer than about two pixels (a far bike) they fade to their average instead of shimmering.
  * The stripe is a band in the shader and not a box in the geometry: less geometry, and it
  * antialiases the same way. A Fresnel rim (RTR 9.5) lifts every grazing edge.
