@@ -1,4 +1,4 @@
-import { type Browser, expect, type Page, test } from '@playwright/test';
+import { type Browser, type BrowserContext, expect, type Page, test } from '@playwright/test';
 
 /**
  * A race frame, measured in plan 14's prototype on the M2 and on CI's software renderer alike:
@@ -83,16 +83,25 @@ for (const riders of [4, 20]) {
   });
 }
 
-/** A clicker round with `players` people, each from a context of their own; returns the host. */
-async function clicker(browser: Browser, players: number): Promise<Page> {
-  const page = await (await browser.newContext()).newPage();
+/**
+ * A clicker round with `players` people, each from a context of their own; returns the host. Every
+ * context opened is pushed to `opened`, for the caller to close: a context left running keeps its
+ * room and its canvas (software GL in headless Chromium) alive and starves the tests after it.
+ */
+async function clicker(browser: Browser, players: number, opened: BrowserContext[]): Promise<Page> {
+  const open = async (): Promise<Page> => {
+    const context = await browser.newContext();
+    opened.push(context);
+    return context.newPage();
+  };
+  const page = await open();
   await page.goto('/');
   await page.getByTestId('create-room').click();
   await page.getByTestId('name-input').fill('Anna');
   await page.getByTestId('enter').click();
   await expect(page.getByTestId('start')).toBeVisible();
   for (let guest = 1; guest < players; guest += 1) {
-    const other = await (await browser.newContext()).newPage();
+    const other = await open();
     await other.goto(page.url());
     await other.getByTestId('name-input').fill(`Guest ${guest}`);
     await other.getByTestId('enter').click();
@@ -110,7 +119,12 @@ async function clicker(browser: Browser, players: number): Promise<Page> {
 test('a clicker frame costs the same draw calls for four players as for one', async ({
   browser,
 }) => {
-  const alone = await drawCalls(await clicker(browser, 1));
-  const four = await drawCalls(await clicker(browser, 4));
-  expect(four).toBe(alone);
+  const opened: BrowserContext[] = [];
+  try {
+    const alone = await drawCalls(await clicker(browser, 1, opened));
+    const four = await drawCalls(await clicker(browser, 4, opened));
+    expect(four).toBe(alone);
+  } finally {
+    await Promise.all(opened.map((context) => context.close()));
+  }
 });
