@@ -14,6 +14,7 @@ import {
   WebGLRenderTarget,
 } from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { seenOnScreen } from '../cycles/latency-store';
@@ -179,7 +180,10 @@ function Field({ side, tickMs, you }: { side: number; tickMs: number; you: strin
   // The size here is a placeholder: the effect below sets the real one, and again on every resize.
   // The composer renders into its own target, which the canvas's antialias flag does not reach:
   // without samples here every edge stair-steps. Half float keeps the bloom's brightness past 1.
-  const { composer, bloom } = useMemo(() => {
+  // OutputPass goes last so the whole picture, glow included, is tone-mapped and encoded once,
+  // at the final stage (RTR 5.6, 8.2.2). Without it the bloom, being last, drew its input to the
+  // screen encoded and then added linear glow on top, which was never tone-mapped.
+  const { composer, bloom, output } = useMemo(() => {
     const target = new WebGLRenderTarget(1, 1, { type: HalfFloatType, samples: 4 });
     const chain = new EffectComposer(gl, target);
     chain.addPass(new RenderPass(scene, camera));
@@ -190,7 +194,9 @@ function Field({ side, tickMs, you }: { side: number; tickMs: number; you: strin
       BLOOM.threshold,
     );
     chain.addPass(pass);
-    return { composer: chain, bloom: pass };
+    const out = new OutputPass();
+    chain.addPass(out);
+    return { composer: chain, bloom: pass, output: out };
   }, [gl, scene, camera]);
 
   useEffect(() => {
@@ -201,9 +207,10 @@ function Field({ side, tickMs, you }: { side: number; tickMs: number; you: strin
   useEffect(
     () => () => {
       bloom.dispose();
+      output.dispose();
       composer.dispose();
     },
-    [composer, bloom],
+    [composer, bloom, output],
   );
   useEffect(() => () => walls.dispose(), [walls]);
   useEffect(
