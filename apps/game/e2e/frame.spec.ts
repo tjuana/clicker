@@ -11,13 +11,16 @@ const RACE_CALLS = 15;
  * The arena: 30 draws at most. Each is one of: the scene (grid, walls, bikes, the floor's plane,
  * four border boxes: 8), the floor's reflection (three's Reflector draws the arena again without
  * the grid: walls, bikes, four borders: 6), the floor's two blur passes (across, then down: 2),
- * and the bloom and output passes (14). The four border boxes are the only draws that come and
- * go with the view, in the scene and again in the reflection, so the count runs from 22 with all
- * eight culled to 30; with their culling turned off a frame still reads 30, so that is the
- * structure's ceiling, not a lucky reading. It was 33 with drei's reflector, whose Kawase blur
- * spent more passes than these two. The minimum also guards the meter: with three's per-render
- * reset left on, a frame reads 1 — the race's gates cannot see that, as its last render does not
- * reset.
+ * and the bloom and output passes (14). 30 is the structure's ceiling: with the border boxes'
+ * culling turned off a frame still reads 30, so it is not a lucky reading. It was 33 with drei's
+ * reflector, whose Kawase blur spent more passes than these two.
+ *
+ * The minimum is not the structure's floor. Three issues no draw for an instanced mesh with zero
+ * instances, and the walls (none at the start) and the bikes (those shown) are instanced meshes;
+ * the border boxes the view culls drop out as well, so a frame may read fewer. 22 guards the
+ * meter: a frame reads 1 when three's per-render reset is left on, and the race's gates cannot see that, as
+ * its last render does not reset. It holds at the gate's moment because the spawn cells are
+ * already walls when it reads.
  */
 const CYCLES_CALLS = { min: 22, max: 30 };
 
