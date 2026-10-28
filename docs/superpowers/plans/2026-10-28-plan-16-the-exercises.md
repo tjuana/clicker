@@ -94,3 +94,31 @@ track's 48 metre marks, one draw each.
 - The study's Progress table: a row per exercise, numbers before and after, what it bought.
 - README counts; `pnpm format && pnpm check && pnpm typecheck && pnpm test`; e2e.
 - `review-and-merge` with an Opus reviewer; `--no-ff` into local `main`; not pushed.
+
+---
+
+## Where reality changed the plan
+
+- **Task 1.** The cars are three draws, not four: the Kit's car has one material, so a body part,
+  a rest part and the body's shadow. A frame is 9 draws for any number of players. The agent
+  measured headless only; GPU and CPU in a real window were measured in the main session.
+- **Task 2.** No re-tune: the halo kept its size. `measure` alone was misleading here: one run
+  said +0.6 ms; alternating runs said +0.5 ms at dpr 1, nothing at dpr 2 (the owner's screen),
+  and nothing at either without the composer's multisampling.
+- **Task 3.** "The blur in `onBeforeRender` after `Reflector`'s own" cost 0.5 ms at dpr 2: it
+  interrupts the composer's multisampled scene pass. The mirror and its blur moved to a frame
+  callback at priority 0, a commit of its own. The kernel's commit first failed `typecheck` on its
+  own (its fix had landed in the floor's commit); the two were rebuilt so each passes.
+  `CYCLES_CALLS` is `{ min: 22, max: 30 }`: 30 read at 4 and 20 riders, 22 derived from the
+  structure.
+- **Task 4.** The part id is a vertex attribute (`level`), not the vertex colour — three multiplies
+  the instance colour into it. The stripe box left the geometry. The bloom split became a unit
+  test.
+- **Every task.** `measure` runs at dpr 1, the owner's screen is dpr 2: every before/after was
+  repeated at dpr 2, alternating, two or three runs each, with a throwaway copy of the measure
+  config.
+- **Found on the way, outside the plan.** Half the arena's GPU time at dpr 2 is the composer's 4×
+  multisampled target. `test/room.test.ts` ("streams more than one snapshot during a running
+  round") fails about once in nine runs under load: phases move only on the Durable Object's alarm,
+  so a late alarm keeps the snapshots in `countdown` past `goAt` and skips the 200 ms round. Both
+  are left for the owner.
