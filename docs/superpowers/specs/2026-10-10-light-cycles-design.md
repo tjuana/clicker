@@ -357,6 +357,7 @@ The look of section 8 moved on; the design is in the
 - **The floor is a soft mirror** (drei's `MeshReflectorMaterial`, 512², blurred, weakly mixed), lit
   by an ambient light that reaches nothing else, since every other material is unlit. It is mounted
   at the canvas, not in the field that remounts between rounds: drei never disposes its targets.
+  *Replaced in plan 16, below.*
 - **The grid is a shader** on its own plane (a line every two cells, one pixel at any distance,
   fogged), on layer 1 so the mirror leaves it out. `GridHelper` is gone.
 - **A trail cell is one instance**, not a body and an edge strip: a shader patched into
@@ -376,3 +377,26 @@ The look of section 8 moved on; the design is in the
   hidden. The end-to-end key-listener race of plan 8 is still open: the theory that a plain effect
   attaches its listener after a paint is false in React 19.2.
 - Measured: 120 fps (the display's cap) with 20 participants on the M2 in a real window.
+
+## Decisions made while building plan 16 (2026-10-29)
+
+The arena's look, rebuilt by the Real-Time Rendering study's exercises A to C
+([arena by the book](2026-10-27-arena-by-the-book-design.md)).
+
+- **The colour chain ends in `OutputPass`**: the scene, the bloom, then one tone map and one sRGB
+  encoding for the whole picture, glow included (RTR 5.6). Before, the bloom added its linear glow
+  onto a picture already encoded for the screen.
+- **The floor is three's `Reflector` with a blur of our own**, replacing drei's mirror and the blob
+  its blur left under every bike. The mirror is rendered at a quarter of the canvas's CSS size,
+  keeping its aspect, then blurred by a separable Gaussian in bilinear taps, narrow across and wide
+  down (σ 1.5 and 8 texels), so a bike's reflection is a vertical streak. No ambient light: nothing
+  in the arena is lit. Everything the floor makes is disposed with it.
+- **The mirror is drawn at frame priority 0**, between the update at −1 and the composer at 1, not
+  in `Reflector`'s own `onBeforeRender`: there it interrupts the composer's multisampled scene pass,
+  which a tiled GPU pays for at every sample.
+- **The bikes' surface is a shader**: each part carries its base level in a vertex attribute; the
+  body gets panel seams and a flank stripe from the model's own coordinates, antialiased with
+  `fwidth` and faded to their average when too small to draw, and every grazing edge a Fresnel rim.
+  Still one instanced draw for every bike. A bike that is not laying its wall never reaches the
+  bloom threshold, whatever the surface does (`test/cycle-bloom.test.ts`).
+- Draw calls in an arena frame: 30 at most (33 with drei's floor), whatever the number of riders.
