@@ -98,11 +98,11 @@ async function clicker(browser: Browser, players: number): Promise<Page> {
   return page;
 }
 
-// The owner's first Real-Time Rendering exercise (RTR 18.4, 19): today every racer is a clone of
-// the car with five meshes of its own, so a frame costs 53 + 6 per player — 59 alone, 77 with four,
-// about 173 with twenty. Instanced, as the race's cars are, it would not grow. Remove `fixme` when
-// the clicker's cars are instanced.
-test.fixme('a clicker frame costs the same draw calls for four players as for one', async ({
+// The clicker's cars are two instanced meshes (the livery part and the rest of the car) and its
+// forty-eight metre marks one more, so a frame costs the same draw calls for one player as for
+// fifty. Each racer used to be a clone with five meshes of its own: 53 + 6 per player, 59 alone,
+// 77 with four, about 173 with twenty.
+test('a clicker frame costs the same draw calls for four players as for one', async ({
   browser,
 }) => {
   const alone = await drawCalls(await clicker(browser, 1));

@@ -1,18 +1,22 @@
+import { DEFAULT_CONFIG } from '@clicker/game';
 import { useGLTF } from '@react-three/drei';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { useMemo, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import {
   Box3,
-  type Group,
+  Color,
+  InstancedMesh,
   MathUtils,
-  Mesh,
-  type MeshStandardMaterial,
+  Matrix4,
+  type Mesh,
   type PerspectiveCamera,
+  Quaternion,
   Vector3,
 } from 'three';
 import { theme } from '../theme';
+import { bakeRally, type CarPart } from './clicker-cars';
 import { FrameMeter } from './frame-meter';
-import { distanceToFit, gridFor, slotFor } from './layout';
+import { distanceToFit, type Grid, gridFor, type Slot, slotFor } from './layout';
 
 /**
  * A rally hatchback from Kenney's Car Kit — CC0, so no attribution is owed.
@@ -74,57 +78,115 @@ const MARK_SPACING = 1;
 const damp = (current: number, target: number, delta: number, rate = 7): number =>
   MathUtils.damp(current, target, rate, delta);
 
-/** Named apart from the `Racer` data type on purpose: one is a shape on the track, the other a row of numbers. */
-function Runner({ x, z, colour, gold }: { x: number; z: number; colour: string; gold: boolean }) {
-  const group = useRef<Group>(null);
+/** The room's player cap: the most cars one round can ever draw, so the meshes never grow. */
+const CAPACITY = DEFAULT_CONFIG.maxPlayers;
+
+const LIVERY_COLOURS = LIVERY.map((hex) => new Color(hex));
+const UP = new Vector3(0, 1, 0);
+const ONE = new Vector3(CAR_SCALE, CAR_SCALE, CAR_SCALE);
+const place = new Matrix4();
+const spot = new Vector3();
+const turn = new Quaternion().setFromAxisAngle(UP, CAR_TURN);
+
+/**
+ * Every car in two instanced meshes (the livery part and the rest), so a frame costs the same
+ * draw calls for one racer as for fifty. Each racer was a clone of the model with five meshes of
+ * its own: six draws per player. Positions are damped here, in a map by racer id, instead of in
+ * a component per car.
+ */
+function Cars({ racers, you, grid }: { racers: Racer[]; you: string | null; grid: Grid }) {
   const { scene } = useGLTF(CAR);
+  const ring = useRef<Mesh>(null);
+  const xs = useMemo(() => new Map<string, number>(), []);
 
-  /**
-   * A clone per racer, each with its own materials. The kit ships one material shared by every
-   * mesh, so tinting it in place would repaint the entire field at once. Only the mesh named
-   * `body` takes the livery; wheels and glass keep what the model came with.
-   */
-  const car = useMemo(() => {
-    const copy = scene.clone(true);
-    copy.traverse((child) => {
-      if (!(child instanceof Mesh)) return;
+  // `slotFor` hands back an object; asked per racer per frame that is garbage sixty times a second.
+  const slots = useMemo(
+    () => Array.from({ length: Math.min(racers.length, CAPACITY) }, (_, i) => slotFor(i, grid)),
+    [racers.length, grid],
+  );
 
-      if (child.name !== 'body') {
-        // Wheels and glass keep the shared material they arrived with. Cloning one per mesh
-        // per car gave a hundred unique materials and cost more than half the frame rate.
-        child.castShadow = false;
-        return;
-      }
+  const meshes = useMemo(() => {
+    const baked = bakeRally(scene);
+    const make = (part: CarPart, shadow: boolean): InstancedMesh => {
+      const mesh = new InstancedMesh(part.geometry, part.material, CAPACITY);
+      // The instances stand away from the geometry's own origin, where its bounding sphere is.
+      mesh.frustumCulled = false;
+      mesh.castShadow = shadow;
+      mesh.count = 0;
+      return mesh;
+    };
+    return {
+      baked,
+      body: make(baked.body, true),
+      rest: baked.rest.map((part) => make(part, false)),
+    };
+  }, [scene]);
 
-      const material = (child.material as MeshStandardMaterial).clone();
-      // The atlas paints the body green, and `color` multiplies rather than replaces — every
-      // livery came out a shade of that green. Drop the map on the body alone, so the colour
-      // is the colour; the rest of the car keeps its baked detail.
-      material.map = null;
-      material.color.set(colour);
-      child.material = material;
-      child.castShadow = true;
-    });
-    return copy;
-  }, [scene, colour]);
+  useEffect(
+    () => () => {
+      // The cloned body material and the baked geometries are ours. The rest's materials belong
+      // to the loaded model, which useGLTF caches: disposing them would break the next mount.
+      meshes.baked.body.material.dispose();
+      meshes.baked.body.geometry.dispose();
+      for (const part of meshes.baked.rest) part.geometry.dispose();
+      meshes.body.dispose();
+      for (const mesh of meshes.rest) mesh.dispose();
+    },
+    [meshes],
+  );
+
+  // A colour per place in the list, set when the list changes rather than every frame.
+  useLayoutEffect(() => {
+    for (let i = 0; i < racers.length && i < CAPACITY; i++) {
+      meshes.body.setColorAt(i, LIVERY_COLOURS[i % LIVERY_COLOURS.length] as Color);
+    }
+    if (meshes.body.instanceColor !== null) meshes.body.instanceColor.needsUpdate = true;
+    const present = new Set(racers.map((racer) => racer.id));
+    for (const id of xs.keys()) if (!present.has(id)) xs.delete(id);
+  }, [racers, meshes, xs]);
 
   useFrame((_state, delta) => {
-    if (group.current === null) return;
-    group.current.position.x = damp(group.current.position.x, x, delta);
+    const count = Math.min(racers.length, CAPACITY);
+    let ownX = 0;
+    let ownZ = 0;
+    for (let i = 0; i < count; i++) {
+      const racer = racers[i] as Racer;
+      const slot = slots[i] as Slot;
+      // A racer new to the track starts at x 0 and slides to its place, as it always has.
+      const x = damp(xs.get(racer.id) ?? 0, racer.clicks * UNIT - slot.back, delta);
+      xs.set(racer.id, x);
+      place.compose(spot.set(x, 0, slot.z), turn, ONE);
+      meshes.body.setMatrixAt(i, place);
+      for (const mesh of meshes.rest) mesh.setMatrixAt(i, place);
+      if (racer.id === you) {
+        ownX = x;
+        ownZ = slot.z;
+      }
+    }
+    meshes.body.count = count;
+    meshes.body.instanceMatrix.needsUpdate = true;
+    for (const mesh of meshes.rest) {
+      mesh.count = count;
+      mesh.instanceMatrix.needsUpdate = true;
+    }
+    ring.current?.position.set(ownX, 0.02, ownZ);
   });
 
   return (
-    <group ref={group} position={[0, 0, z]}>
-      <primitive object={car} scale={CAR_SCALE} rotation={[0, CAR_TURN, 0]} />
+    <>
+      <primitive object={meshes.body} />
+      {meshes.rest.map((mesh) => (
+        <primitive key={mesh.uuid} object={mesh} />
+      ))}
       {/* Your own racer wears a ring on the ground: colour alone is not enough to find
           yourself in a pack of twenty when the figure is a few pixels wide. */}
-      {gold ? (
-        <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+      {racers.some((racer) => racer.id === you) ? (
+        <mesh ref={ring} rotation={[-Math.PI / 2, 0, 0]}>
           <ringGeometry args={[0.52, 0.66, 24]} />
           <meshBasicMaterial color={theme.goldBright} transparent opacity={0.9} />
         </mesh>
       ) : null}
-    </group>
+    </>
   );
 }
 
@@ -171,6 +233,31 @@ function Rig({
   return null;
 }
 
+/** The metre marks as one instanced mesh: forty-eight meshes were forty-eight draws. */
+function Marks({ width }: { width: number }) {
+  const marks = useRef<InstancedMesh>(null);
+  useLayoutEffect(() => {
+    const mesh = marks.current;
+    if (mesh === null) return;
+    const flat = new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), -Math.PI / 2);
+    const one = new Vector3(1, 1, 1);
+    const at = new Vector3();
+    const matrix = new Matrix4();
+    for (let i = 0; i < MARKS; i++) {
+      mesh.setMatrixAt(i, matrix.compose(at.set((i + 1) * MARK_SPACING, 0.03, 0), flat, one));
+    }
+    mesh.instanceMatrix.needsUpdate = true;
+  }, []);
+
+  return (
+    // Culling off: the bounding sphere of the plane alone would drop marks far from its origin.
+    <instancedMesh ref={marks} args={[undefined, undefined, MARKS]} frustumCulled={false}>
+      <planeGeometry args={[0.06, width]} />
+      <meshBasicMaterial color="#6d7a99" />
+    </instancedMesh>
+  );
+}
+
 function Track({ laneWidth }: { laneWidth: number }) {
   const width = laneWidth + 3;
 
@@ -201,13 +288,7 @@ function Track({ laneWidth }: { laneWidth: number }) {
         <planeGeometry args={[0.16, width]} />
         <meshBasicMaterial color="#efe6d8" />
       </mesh>
-      {/* Keyed by the distance each mark stands for, which is what actually identifies it. */}
-      {Array.from({ length: MARKS }, (_, index) => (index + 1) * MARK_SPACING).map((distance) => (
-        <mesh key={distance} position={[distance, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-          <planeGeometry args={[0.06, width]} />
-          <meshBasicMaterial color="#6d7a99" />
-        </mesh>
-      ))}
+      <Marks width={width} />
     </group>
   );
 }
@@ -259,18 +340,7 @@ export default function Race({ racers, you }: { racers: Racer[]; you: string | n
       <directionalLight position={[5, 16, 4]} intensity={2} color="#ffd9a8" castShadow />
 
       <Track laneWidth={grid.width} />
-      {racers.map((racer, index) => {
-        const slot = slotFor(index, grid);
-        return (
-          <Runner
-            key={racer.id}
-            x={racer.clicks * UNIT - slot.back}
-            z={slot.z}
-            colour={LIVERY[index % LIVERY.length] ?? '#4d5a85'}
-            gold={racer.id === you}
-          />
-        );
-      })}
+      <Cars racers={racers} you={you} grid={grid} />
 
       <Rig
         firstX={firstX}
