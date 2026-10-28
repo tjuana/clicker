@@ -135,15 +135,25 @@ function Cars({ racers, you, grid }: { racers: Racer[]; you: string | null; grid
     [meshes],
   );
 
-  // A colour per place in the list, set when the list changes rather than every frame.
+  // A colour depends only on the place in the list, so it is set when the field grows or shrinks,
+  // not on every snapshot (the racers array is rebuilt ten times a second).
+  const fieldSize = racers.length;
   useLayoutEffect(() => {
-    for (let i = 0; i < racers.length && i < CAPACITY; i++) {
+    for (let i = 0; i < fieldSize && i < CAPACITY; i++) {
       meshes.body.setColorAt(i, LIVERY_COLOURS[i % LIVERY_COLOURS.length] as Color);
     }
     if (meshes.body.instanceColor !== null) meshes.body.instanceColor.needsUpdate = true;
+  }, [fieldSize, meshes]);
+
+  // Departed racers must be forgotten, and only a look at the ids sees one leave while another
+  // joins (the length is unchanged), so this runs on every snapshot. It is cheap until it matters:
+  // a stale id shows as more entries than racers, and only then is the Set built. A swap shows one
+  // snapshot late, once the frame has given the newcomer its entry; the stale one is bounded.
+  useLayoutEffect(() => {
+    if (xs.size <= racers.length) return;
     const present = new Set(racers.map((racer) => racer.id));
     for (const id of xs.keys()) if (!present.has(id)) xs.delete(id);
-  }, [racers, meshes, xs]);
+  }, [racers, xs]);
 
   useFrame((_state, delta) => {
     const count = Math.min(racers.length, CAPACITY);
