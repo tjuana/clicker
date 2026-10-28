@@ -27,16 +27,21 @@ import {
 const SIZE = 1.6;
 
 /**
- * One float per vertex, the part's own base level (look.ts): the shader tells the body, which gets
- * seams and the stripe, from rims and discs by it (RTR 6.5, material mapping). The colour attribute
- * could not carry it: three multiplies the instance colour into it before the fragment sees it.
+ * Which material a vertex belongs to (RTR 6.5, material mapping). The shader maps the id to a base
+ * level from look.ts and gives only the body seams and the stripe, so any level can be retuned by
+ * eye without changing which parts get the pattern: a level used as the id broke when two parts'
+ * levels came close.
  */
-function tinted(geometry: BufferGeometry, level: number): BufferGeometry {
+export const CYCLE_PART = { dark: 0, body: 1, glow: 2 } as const;
+type Part = (typeof CYCLE_PART)[keyof typeof CYCLE_PART];
+
+/**
+ * One float per vertex, the part id. The colour attribute could not carry it: three multiplies the
+ * instance colour into it before the fragment sees it.
+ */
+function tinted(geometry: BufferGeometry, part: Part): BufferGeometry {
   const count = geometry.getAttribute('position').count;
-  geometry.setAttribute(
-    'level',
-    new Float32BufferAttribute(new Array<number>(count).fill(level), 1),
-  );
+  geometry.setAttribute('part', new Float32BufferAttribute(new Array<number>(count).fill(part), 1));
   return geometry;
 }
 
@@ -46,7 +51,7 @@ function wheel(x: number): BufferGeometry[] {
   const disc = new CylinderGeometry(0.21, 0.21, 0.08, 20)
     .rotateX(Math.PI / 2)
     .translate(x, 0.29, 0);
-  return [tinted(rim, CYCLE_GLOW), tinted(disc, CYCLE_DARK)];
+  return [tinted(rim, CYCLE_PART.glow), tinted(disc, CYCLE_PART.dark)];
 }
 
 /**
@@ -59,15 +64,15 @@ export function createCycleGeometry(): BufferGeometry {
     ...wheel(-0.46),
     ...wheel(0.48),
     // The body between the wheels, a little above them, and its nose.
-    tinted(new BoxGeometry(0.92, 0.2, 0.22).translate(0.02, 0.39, 0), CYCLE_BODY),
+    tinted(new BoxGeometry(0.92, 0.2, 0.22).translate(0.02, 0.39, 0), CYCLE_PART.body),
     tinted(
       new ConeGeometry(0.12, 0.3, 4).rotateZ(-Math.PI / 2).translate(0.62, 0.39, 0),
-      CYCLE_BODY,
+      CYCLE_PART.body,
     ),
     // The rider's canopy.
     tinted(
       new SphereGeometry(1, 12, 8).scale(0.3, 0.11, 0.13).translate(-0.06, 0.52, 0),
-      CYCLE_DARK,
+      CYCLE_PART.dark,
     ),
   ];
   const merged = mergeGeometries(parts);
@@ -95,8 +100,8 @@ export function createCycleMaterial(): MeshBasicMaterial {
       .replace(
         '#include <common>',
         `#include <common>
-attribute float level;
-varying float vLevel;
+attribute float part;
+varying float vPart;
 varying vec3 vObj;
 varying vec3 vViewNormal;
 varying vec3 vViewPos;`,
@@ -104,7 +109,7 @@ varying vec3 vViewPos;`,
       .replace(
         '#include <project_vertex>',
         `#include <project_vertex>
-vLevel = level;
+vPart = part;
 vObj = position;
 vViewNormal = normalize(normalMatrix * mat3(instanceMatrix) * normal);
 vViewPos = mvPosition.xyz;`,
@@ -113,7 +118,7 @@ vViewPos = mvPosition.xyz;`,
       .replace(
         '#include <common>',
         `#include <common>
-varying float vLevel;
+varying float vPart;
 varying vec3 vObj;
 varying vec3 vViewNormal;
 varying vec3 vViewPos;
@@ -125,7 +130,11 @@ float band(float d, float h, float fw) {
       .replace(
         '#include <color_fragment>',
         `#include <color_fragment>
-float isBody = 1.0 - step(0.01, abs(vLevel - ${glsl(CYCLE_BODY)}));
+float isBody = 1.0 - step(0.5, abs(vPart - ${CYCLE_PART.body}.0));
+float base = mix(
+  mix(${glsl(CYCLE_DARK)}, ${glsl(CYCLE_BODY)}, step(0.5, vPart)),
+  ${glsl(CYCLE_GLOW)},
+  step(1.5, vPart));
 vec2 fw = max(fwidth(vObj.xy), vec2(1e-5));
 float toSeam = abs(fract(vObj.x / ${glsl(SEAM_SPACING)} - 0.5) - 0.5) * ${glsl(SEAM_SPACING)};
 float seam = mix(
@@ -133,7 +142,7 @@ float seam = mix(
   band(toSeam, ${glsl(SEAM_WIDTH / 2)}, fw.x),
   smoothstep(2.0, 4.0, ${glsl(SEAM_SPACING)} / fw.x));
 float stripe = band(abs(vObj.y - ${glsl(STRIPE_Y)}), ${glsl(STRIPE_HALF)}, fw.y);
-float level = mix(vLevel, ${glsl(CYCLE_SEAM)}, seam * isBody);
+float level = mix(base, ${glsl(CYCLE_SEAM)}, seam * isBody);
 level = mix(level, ${glsl(CYCLE_STRIPE)}, stripe * isBody);
 float rim = pow(max(1.0 - abs(dot(normalize(vViewNormal), normalize(-vViewPos))), 0.0), ${glsl(CYCLE_RIM_EXPONENT)});
 diffuseColor.rgb *= level + ${glsl(CYCLE_RIM)} * rim;`,
