@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { bump } from '../src/modes/race/bump';
 import type { Car } from '../src/modes/race/car';
 import { RACE } from '../src/modes/race/config';
-import { cos, ONE, sin, TILE } from '../src/modes/race/fixed';
+import { TILE } from '../src/modes/race/fixed';
+import { axisDistance } from './race-body';
 
 const bounds = { x: 0, y: 0, width: 10, height: 10 };
 
@@ -28,25 +29,6 @@ function car(slot: number, x: number, y: number, over: Partial<Car> = {}): Car {
     touch: 0,
     ...over,
   };
-}
-
-/**
- * The distance between the axes of two cars, from 201 sampled points on each. It shares no code
- * with `src`: a car's body is its axis (+-reach along the heading) swept by the radius, so two
- * bodies are apart by this distance minus two radii.
- */
-function axisDistance(a: Car, b: Car, samples = 201): number {
-  const point = (c: Car, i: number): [number, number] => {
-    const u = ((2 * i) / (samples - 1) - 1) * RACE.reach;
-    return [c.x + (u * cos(c.heading)) / ONE, c.y + (u * sin(c.heading)) / ONE];
-  };
-  const pa = Array.from({ length: samples }, (_, i) => point(a, i));
-  const pb = Array.from({ length: samples }, (_, i) => point(b, i));
-  let best = Number.POSITIVE_INFINITY;
-  for (const p of pa) {
-    for (const q of pb) best = Math.min(best, (q[0] - p[0]) ** 2 + (q[1] - p[1]) ** 2);
-  }
-  return Math.sqrt(best);
 }
 
 const touching = 2 * RACE.radius;
