@@ -29,7 +29,11 @@ export const KERB_ROUGHNESS = 0.7;
 export const GROUND_SIZE = 200;
 /** Grass repeats per unit of ground: same density as the tiles' (REPEAT.grass). */
 export const GROUND_REPEAT = REPEAT.grass;
-/** Below the tiles' surface, or it z-fights with their grass. */
+/**
+ * Below the tiles' surface, or it z-fights with their grass. Not found by eye: at the farthest
+ * tile a camera sees (about 14.8 tiles) a 24-bit depth buffer with near 0.02 steps 0.00065, and
+ * this is about 4.6 times that. `test/scene-depth.test.ts` holds it at twice the step.
+ */
 export const GROUND_Y = -0.003;
 /** The grass is a little darker and cooler than the texture: untinted, the tiles' verge read tan against the ground. */
 export const GRASS_TINT = '#9ab88a';
