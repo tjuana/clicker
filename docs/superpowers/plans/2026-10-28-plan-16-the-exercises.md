@@ -122,3 +122,8 @@ track's 48 metre marks, one draw each.
   round") fails about once in nine runs under load: phases move only on the Durable Object's alarm,
   so a late alarm keeps the snapshots in `countdown` past `goAt` and skips the 200 ms round. Both
   are left for the owner.
+- **The clicker's gate leaked five browser contexts.** Turned on in Task 1, it left its rooms and
+  canvases running for the rest of the e2e worker; the walls spec's Wall-button test, which needs
+  the bike alive at its first lit tick, then failed in every full run and passed alone. The gate
+  closes its contexts now. The full suite runs 4 min 54 s, past the old 5-minute cap once the
+  failures were added; the cap is 7 minutes.
