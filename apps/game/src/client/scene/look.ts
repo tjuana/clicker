@@ -1,33 +1,32 @@
-import { Color } from 'three';
+import { Color, ColorManagement, Vector3 } from 'three';
+import { SLOT_HEX } from '../slots';
 
 /**
  * Every brightness and shape number of the scene lives here, so the owner's correction by eye is a
  * one-line change. Bloom keys on luminance (three's high-pass: linear Rec. 709 weights), which is why levels go past 1 on purpose.
  */
 
-/** One neon colour per slot, as far apart in hue as twenty can be. */
-export const SLOT_COLOURS = [
-  '#ffe066',
-  '#00f0ff',
-  '#ff3df2',
-  '#7dff6a',
-  '#ff8a3d',
-  '#8a7dff',
-  '#ff4d6d',
-  '#3dffb5',
-  '#ffd23d',
-  '#3da5ff',
-  '#d63dff',
-  '#b5ff3d',
-  '#ff6a3d',
-  '#3dfff0',
-  '#ff3d9e',
-  '#9eff3d',
-  '#3d6aff',
-  '#ffb53d',
-  '#3dff6a',
-  '#f03dff',
-].map((hex) => new Color(hex));
+/** The slot colours as they are, which is what the race's car bodies wear: paint, not light. */
+export const SLOT_COLOURS = SLOT_HEX.map((hex) => new Color(hex));
+
+/**
+ * The luminance every glowing thing takes from its slot colour. Bloom keys on luminance, and the
+ * palette's own run from 0.21 (blue) to 0.82 (yellow) made a yellow bike blaze and a blue one look
+ * switched off. 0.6 is the middle of that run, a gain of x0.92 to x3.62: lifting dark hues in the
+ * colour itself washed the blues to pastel and brought the closest pair to dE 5.6 (plan 19).
+ */
+export const SLOT_LUMINANCE = 0.6;
+
+const WEIGHTS = ColorManagement.getLuminanceCoefficients(new Vector3());
+
+/**
+ * Each slot colour scaled to SLOT_LUMINANCE, with the very coefficients three's bloom uses on the
+ * linear working-space colour: bikes and walls are built from these, so every rider is as bright
+ * as every other and the levels below mean the same thing for all of them.
+ */
+export const SLOT_GLOW = SLOT_COLOURS.map((c) =>
+  c.clone().multiplyScalar(SLOT_LUMINANCE / (c.r * WEIGHTS.x + c.g * WEIGHTS.y + c.b * WEIGHTS.z)),
+);
 
 /** A wall is dark and solid, below the bloom threshold; translucent ones stripe where they overlap. */
 export const WALL_LEVEL = 0.3;
@@ -36,9 +35,9 @@ export const BIKE_LEVEL = 1.25;
 /**
  * A bike that is not laying its wall: dark enough not to glow, bright enough to still be seen. The
  * brightest the surface makes any fragment is CYCLE_SURFACE_MAX (the brightest of a rim, a seam and
- * the stripe at 1, plus the Fresnel rim's 0.25, so 1.25); times the luminance of the brightest
- * slot colour (0.817) times 0.45 comes to 0.459, below BLOOM.threshold 0.6, so an unlit bike gives
- * no bloom at all. test/cycle-bloom.test.ts holds it for every slot colour.
+ * the stripe at 1, plus the Fresnel rim's 0.25, so 1.25); times SLOT_LUMINANCE 0.6 times 0.45 comes
+ * to 0.3375, below BLOOM.threshold 0.6, so an unlit bike gives no bloom at all.
+ * test/cycle-bloom.test.ts holds it for every slot.
  */
 export const DIM_LEVEL = 0.45;
 
@@ -47,22 +46,21 @@ export const DIM_LEVEL = 0.45;
  * BIKE_LEVEL or DIM_LEVEL, and bloom keys on the product's luminance against BLOOM.threshold. Lengths
  * below are in the model's own units, the bike drawn at its 1.6 size, 2.2 long and 0.9 tall.
  *
- * Known, and the owner's call: luminance is not the brightest channel, so a lit bike's rims and
- * stripe (level 1 x BIKE_LEVEL 1.25) bloom for only 10 of the 20 slot colours, its seams (0.7) for
- * 8 of 20; the blues and magentas (#3d6aff, #d63dff, #ff3df2) stay under the threshold. This
- * predates the procedural surface: the rims were 1 x 1.25 before it too. A body never blooms.
+ * Every slot glows at SLOT_LUMINANCE, so one set of numbers serves all of them: a lit bike's rims
+ * and stripe (level 1 x BIKE_LEVEL 1.25 x 0.6 = 0.75) bloom for every slot, its seams (0.7, so
+ * 0.525) for none. A body never blooms.
  */
 /** The rims: the part of the bike that is a lit outline. */
 export const CYCLE_GLOW = 1;
-/** The body and nose between the lines: lit 0.4, under the threshold for every slot colour, so it stays a dark mass. */
+/** The body and nose between the lines: lit 0.24, under the threshold, so it stays a dark mass. */
 export const CYCLE_BODY = 0.32;
 /** Discs and canopy: nearly black, so the rims read as rings. */
 export const CYCLE_DARK = 0.16;
-/** The panel seams on the body: lit 0.875 x luminance, so a few fine lines glow on the brighter colours (8 of 20); dim never. */
+/** The panel seams on the body: lit 0.525: under the threshold for every slot, so the seams are fine lines and never bloom, lit or dim. */
 export const CYCLE_SEAM = 0.7;
 /** The flank stripe: as bright as the rims, it is the bike's signature when seen side-on. */
 export const CYCLE_STRIPE = 1;
-/** Fresnel rim (RTR 9.5), added to the level: a body's grazing edge goes 0.32 to 0.57, lit 0.71: under the threshold even for the brightest slot (0.582), so it is a brighter edge, not a bloom. */
+/** Fresnel rim (RTR 9.5), added to the level: a body's grazing edge goes 0.32 to 0.57, lit 0.43: under the threshold for every slot, so it is a brighter edge, not a bloom. */
 export const CYCLE_RIM = 0.25;
 /** As the walls' RIM_EXPONENT: high keeps the glow to the silhouette and off the flat of the flank. */
 export const CYCLE_RIM_EXPONENT = 3.0;

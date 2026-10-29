@@ -16,7 +16,7 @@ import {
   PULSE_PERIOD_S,
   RIM,
   RIM_EXPONENT,
-  SLOT_COLOURS,
+  SLOT_GLOW,
   TOP,
   TOP_FROM,
   TOP_TO,
@@ -34,7 +34,7 @@ const THICK = 0.12;
 const WALL_HEIGHT = 0.42;
 const UP = new Vector3(0, 1, 0);
 
-const WALL = SLOT_COLOURS.map((c) => c.clone().multiplyScalar(WALL_LEVEL));
+const WALL = SLOT_GLOW.map((c) => c.clone().multiplyScalar(WALL_LEVEL));
 
 /** Scratch objects, one set for the whole module: nothing in the frame loop allocates. */
 const matrix = new Matrix4();
