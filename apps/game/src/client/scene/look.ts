@@ -42,6 +42,14 @@ export const BIKE_LEVEL = 1.25;
 export const DIM_LEVEL = 0.45;
 
 /**
+ * What is actually drawn: each slot's glow at the level of its part. Here and not beside the
+ * meshes so test/cycle-bloom.test.ts reads the very colours the bikes and walls are painted in.
+ */
+export const BIKE_COLOURS = SLOT_GLOW.map((c) => c.clone().multiplyScalar(BIKE_LEVEL));
+export const DIM_COLOURS = SLOT_GLOW.map((c) => c.clone().multiplyScalar(DIM_LEVEL));
+export const WALL_COLOURS = SLOT_GLOW.map((c) => c.clone().multiplyScalar(WALL_LEVEL));
+
+/**
  * The bikes' surface is procedural (RTR 6.3): its levels are multiplied by the slot's colour and
  * BIKE_LEVEL or DIM_LEVEL, and bloom keys on the product's luminance against BLOOM.threshold. Lengths
  * below are in the model's own units, the bike drawn at its 1.6 size, 2.2 long and 0.9 tall.

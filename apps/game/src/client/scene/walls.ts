@@ -16,11 +16,10 @@ import {
   PULSE_PERIOD_S,
   RIM,
   RIM_EXPONENT,
-  SLOT_GLOW,
   TOP,
   TOP_FROM,
   TOP_TO,
-  WALL_LEVEL,
+  WALL_COLOURS,
 } from './look';
 
 /** Twenty bikes with trails of at most 400 cells, and room for the cells a boost lays in passing. */
@@ -33,8 +32,6 @@ const THICK = 0.12;
  */
 const WALL_HEIGHT = 0.42;
 const UP = new Vector3(0, 1, 0);
-
-const WALL = SLOT_GLOW.map((c) => c.clone().multiplyScalar(WALL_LEVEL));
 
 /** Scratch objects, one set for the whole module: nothing in the frame loop allocates. */
 const matrix = new Matrix4();
@@ -164,7 +161,7 @@ diffuseColor.rgb *= body * (1.0 + ${glsl(RIM)} * rim + ${glsl(PULSE)} * pulse) +
       scale.set(along + THICK, WALL_HEIGHT, THICK),
     );
     mesh.setMatrixAt(i, matrix);
-    mesh.setColorAt(i, WALL[(slot - 1) % WALL.length] as Color);
+    mesh.setColorAt(i, WALL_COLOURS[(slot - 1) % WALL_COLOURS.length] as Color);
     laid.setX(i, date);
     touch(i);
   };

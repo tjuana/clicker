@@ -23,13 +23,11 @@ import { composerSamples } from './composer-samples';
 import { createCycleGeometry, createCycleMaterial } from './cycle-model';
 import { Floor, Grid } from './floor';
 import { FrameMeter } from './frame-meter';
-import { BIKE_LEVEL, BLOOM, BORDER_COLOUR, DIM_LEVEL, SLOT_GLOW } from './look';
+import { BIKE_COLOURS, BLOOM, BORDER_COLOUR, DIM_COLOURS } from './look';
 import { createWalls, type Walls } from './walls';
 
 const MAX_BIKES = 64;
 
-const BIKE = SLOT_GLOW.map((colour) => colour.clone().multiplyScalar(BIKE_LEVEL));
-const DIM = SLOT_GLOW.map((colour) => colour.clone().multiplyScalar(DIM_LEVEL));
 /**
  * The player's own bike is bigger, not brighter: a yellow bike at 1.25 is already past white,
  * and a harder glow only turned it into a blown-out blob.
@@ -141,7 +139,7 @@ function drawBike(
   );
   mesh.setMatrixAt(index, matrix);
   // Dim while the head it rides towards is not laying a wall: lit mode is told apart by eye.
-  const colours = end.lit ? BIKE : DIM;
+  const colours = end.lit ? BIKE_COLOURS : DIM_COLOURS;
   mesh.setColorAt(index, colours[(slot - 1) % colours.length] as Color);
   // The player's own bike wins over the one that killed it, which is followed only while the
   // player has none.
