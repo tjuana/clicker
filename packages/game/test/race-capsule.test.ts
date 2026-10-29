@@ -134,7 +134,7 @@ describe('the closest points of two segments', () => {
     const segment: Segment = { x: -100, y: 0, dx: 300, dy: 0 };
     const cases: [Segment, number][] = [
       [{ x: 50, y: 70, dx: 0, dy: 0 }, 70], // beside the middle
-      [{ x: 400, y: 0, dx: 0, dy: 0 }, 100], // past the far end
+      [{ x: 300, y: 0, dx: 0, dy: 0 }, 100], // past the far end
       [{ x: -130, y: 40, dx: 0, dy: 0 }, 50], // past the near end
       [{ x: 0, y: 0, dx: 0, dy: 0 }, 0], // on it
     ];
