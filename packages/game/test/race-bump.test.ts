@@ -93,6 +93,26 @@ describe('separation', () => {
     });
   });
 
+  // Axes that cross at a fractional point have a closest-point distance of rounding noise, not
+  // zero (here about 4e-12). That must still count as crossing: the noise has no direction, and
+  // pushing along it would throw the cars across the track. Found by search; the pair is fixed.
+  it('pushes axes that cross at a fractional point along the line between the centres', () => {
+    const a = car(0, mid, mid);
+    const b = car(1, mid + 85, mid + 90, { heading: 309 });
+    bump([a, b], bounds, RACE);
+    const [ax, ay, bx, by] = [a.x - mid, a.y - mid, b.x - mid - 85, b.y - mid - 90];
+    // Each car moved, in opposite directions, along (85, 90): a cross product of the move with
+    // that line, over its length and the move's, is the sine of the angle between them.
+    const sine = (x: number, y: number) =>
+      (x * 90 - y * 85) / Math.hypot(85, 90) / Math.hypot(x, y);
+    expect(Math.hypot(ax, ay)).toBeGreaterThan(0);
+    expect(Math.abs(sine(ax, ay))).toBeLessThan(0.05);
+    expect(Math.abs(sine(bx, by))).toBeLessThan(0.05);
+    expect(ax * bx + ay * by).toBeLessThan(0);
+    expect(Math.hypot(ax, ay)).toBeLessThan(touching);
+    expect(axisDistance(a, b)).toBeGreaterThanOrEqual(touching - 1);
+  });
+
   it('separates every overlapping pair of a sweep of positions and headings', () => {
     const samples = 201;
     let overlapping = 0;
