@@ -106,7 +106,7 @@ describe('separation', () => {
           overlapping += 1;
           bump([a, b], bounds, RACE);
           const left = axisDistance(a, b, samples);
-          if (left < touching - 6)
+          if (left < touching - 1)
             failures.push(`(${dx}, ${dy}) at ${heading}: ${left.toFixed(0)}`);
         }
       }
