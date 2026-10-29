@@ -248,6 +248,7 @@ Every step ends with a row here: what it measured before and after, and what tha
 | A — the arena's colour chain (plan 16) | 5.6, 8.2 | The glow added after encoding, never tone-mapped. Arena, twenty riders, GPU median: 6.05–6.06 ms at dpr 2, 1.90–1.98 ms at dpr 1; 33 calls | `OutputPass` last: 6.04–6.10 ms at dpr 2, 2.37–2.61 ms at dpr 1; 33 calls | One tone map and one encoding for the whole picture: the halo keeps its size, the hottest colours lean towards white. Free on the owner's screen; at dpr 1 it costs half a millisecond, and only with the composer's multisampling (1.17 against 1.20 ms without it). `look.ts` left as it was *(decided by the agents, for the owner's eye)*. |
 | B — the floor (plan 16) | 11.6.4, 12.1, 9.8 | drei's mirror: a blob and copies under every bike; 33 calls; 6.01–6.10 ms at dpr 2 | Three's `Reflector` at a quarter of the canvas, a separable Gaussian in bilinear taps, σ 1.5 texels across and 8 down: 30 calls; 5.85–5.93 ms at dpr 2, 2.40 ms at dpr 1 | A vertical streak under each bike, no blob, no copies; six kernel tests, red first. Drawn inside the scene pass, as `Reflector` does by default, it cost 6.41 ms at dpr 2; drawn before it, 5.90. Reflection strength 3 → 2.3 *(decided by the agents, for the owner's eye)*. |
 | C — the bikes' surface (plan 16) | 6.3, 6.5, 9.5 | Flat parts, a brightness per vertex; 5.88–5.91 ms at dpr 2, 2.28 ms at dpr 1 | Seams, a stripe and a Fresnel rim computed from the model's own coordinates, still one draw for every bike: 5.92–5.93 ms at dpr 2, 2.35 ms at dpr 1 | A panelled body with a stripe that ends in an arrow at the nose, at no measurable cost. A dim bike never blooms: a unit test over the look's figures now, not a comment; the shader is built from the same figures. The review found the bloom keys on luminance, not the brightest channel: a lit bike's rims glow on only half the palette, as they did before. The outline is unchanged; new models stay technical debt. |
+| Multisampling by density (plan 17) | 5.4.2, 18.2 | The composer's target 4× multisampled at every density: arena, twenty riders, 6.36 ms GPU median at dpr 2 (worst p95 7.3–7.5), 2.33–2.37 ms at dpr 1 | No samples at dpr 2 or more: 2.76–2.77 ms at dpr 2 (worst p95 3.3–3.6), 2.34–2.36 ms at dpr 1; 30 calls either way | More than half the arena's GPU time on the owner's screen, for an edge step of half a CSS pixel that shows only cropped 1:1; the grid and the bikes' seams antialias themselves in their shaders. Two samples would have kept most of the cost (5.05 ms): multisampling pays for storing its samples, not for shading them. |
 
 Measured on the M2 only. A phone's budget is still unknown: the next number worth having is the
 same measurement on a mid-range Android phone over USB. Prototype that first: whether Chrome on
@@ -348,13 +349,15 @@ change the arena's picture and come from the
 
 P7 and P8 only if the owner wants them.
 
-**Where the arena's time goes — answered in plan 16.** By RTR 18.2's method, one stage taken away
-at a time: on the owner's screen (dpr 2), twenty riders, the arena's GPU median is 6.05 ms with the
-composer's 4× multisampled half-float target and about 3.1 ms without it. Half the arena's frame is
-that target. Plan 15's 2.7 ms was measured at dpr 1, where the target is a quarter as large.
-Dropping the multisampling on dense screens changes how edges look, so it is the owner's call; the
-canvas's `dpr` is `[1, 2]`. And `measure` runs at dpr 1 only, which hid half of what plan 16 found:
-A costs something only at dpr 1, the floor's interrupted pass only at dpr 2.
+**Where the arena's time goes — answered in plan 16, acted on in plan 17.** By RTR 18.2's method,
+one stage taken away at a time: on the owner's screen (dpr 2), twenty riders, the arena's GPU median
+was 6.05 ms with the composer's 4× multisampled half-float target and about 3.1 ms without it. Half
+the arena's frame was that target. Plan 15's 2.7 ms was measured at dpr 1, where the target is a
+quarter as large. On the owner's go (2026-10-29) a screen of dpr 2 or more now gets no
+multisampling there (`scene/composer-samples.ts`): two samples had kept most of the cost (5.05 ms),
+so there was no cheap middle. And `measure` now runs at dpr 1 and dpr 2: at dpr 1 alone it had hidden
+half of what plan 16 found — A costs something only at dpr 1, the floor's interrupted pass only at
+dpr 2.
 
 Traps plan 14's review found on the way to these exercises:
 

@@ -90,7 +90,7 @@ pnpm check                                # linter and formatter
 pnpm format                               # apply formatting
 pnpm --filter @clicker/app run build      # build
 pnpm --filter @clicker/app run e2e        # end-to-end tests in a browser
-pnpm --filter @clicker/app run measure    # a frame's cost with twenty players, on a real GPU only
+pnpm --filter @clicker/app run measure    # a frame's cost with twenty players at dpr 1 and 2, on a real GPU only
 LABEL=before pnpm --filter @clicker/app run shots   # the arena at the same moments, into shots/ (pnpm dev stopped)
 pnpm --filter @clicker/app run deploy     # build and publish to Cloudflare
 ```
@@ -101,7 +101,7 @@ pnpm --filter @clicker/app run deploy     # build and publish to Cloudflare
 |---|---|
 | Game rules (`packages/game`) | clicker, light cycles and the ring race, 410 tests |
 | Wire format (`packages/protocol`) | version 4, 123 tests |
-| Room server and client (`apps/game`) | 323 tests, including integration tests in the Workers runtime |
+| Room server and client (`apps/game`) | 326 tests, including integration tests in the Workers runtime |
 | End to end | a clicker round, a light-cycle round against bots, walls on a key, a ring race, and the draw calls of a frame, desktop and phone |
 | Deploy | every push to `main`, through Cloudflare Workers Builds |
 

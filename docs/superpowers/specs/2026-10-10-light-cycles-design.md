@@ -403,3 +403,10 @@ The arena's look, rebuilt by the Real-Time Rendering study's exercises A to C
   lit bike's rims glow only on the brighter half of the palette; blue, violet and magenta do not.
   That predates plan 16 and is the owner's call.
 - Draw calls in an arena frame: 30 at most (33 with drei's floor), whatever the number of riders.
+
+## Decisions made in plan 17 (2026-10-29)
+
+- **No multisampling on dense screens.** The composer's target takes 4 samples below dpr 2 and none
+  at dpr 2 or more (`scene/composer-samples.ts`), rebuilt when the canvas's density changes. At
+  dpr 2 with twenty riders the arena's GPU median fell from 6.36 to 2.77 ms; dpr 1 is unchanged. The
+  edge it gives up is half a CSS pixel. On the owner's go after plan 16.

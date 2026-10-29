@@ -112,3 +112,22 @@ test's round is 200 ms (`COUNTDOWN_MS 50`, `ROUND_MS 200` in `vitest.config.ts`)
 - [ ] Light-cycles spec: the decision and its numbers. README: `measure` prints both densities.
 - [ ] `pnpm check && pnpm typecheck && pnpm test`, the e2e suite, `review-and-merge`.
 - [ ] Russian summary to the owner with the numbers.
+
+---
+
+## Where reality changed the plan
+
+- **Task 3's flake was the alarm, and it was not alone.** Before the fix, fifteen sequential runs of
+  the whole suite failed four times: "streams more than one snapshot" once (run 14: snapshots at
+  goAt + 51 … 453 ms all said `countdown`, the next one already `results`), "does not rewrite the
+  alarm" twice and the arena's "answers resync with the whole round" twice — each waits for a state
+  the alarm should have moved. After it, fourteen runs, no failure of any kind.
+- **The beat-counting test was dropped, then had to come back.** The engine agent removed it as a
+  race (three beats inside a 450 ms round). Mutating the beat so a beat that changes nothing no
+  longer broadcasts then left the whole app suite green, 323/323: it had been the only guard on
+  mid-round streaming. It is back without the race — a 5 s round, two snapshots with different
+  `serverNow` — and red on that mutation.
+- **Task 2's numbers**, `measure -g cycles` alternating after/before, two runs each, nothing else
+  running: dpr 2 6.36 / 6.36 ms → 2.76 / 2.77 ms GPU median (worst p95 7.31 / 7.53 → 3.55 / 3.27);
+  dpr 1 2.37 / 2.33 → 2.34 / 2.36. 30 calls in every run. Not checked in a real window: a window
+  moved between screens of different density (the memo depends on the canvas's `dpr`).
