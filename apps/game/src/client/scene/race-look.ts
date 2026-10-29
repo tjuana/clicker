@@ -81,8 +81,9 @@ export const OVERVIEW = {
 };
 
 /**
- * The cars. Their colours are the light cycles' slot palette (`look.ts`): twenty hues far apart,
- * and tried against the Kit's body red, white-multiplied, they read on asphalt and on grass.
+ * The cars. Their colours are the light cycles' slot palette (`slots.ts`): twelve hues far apart,
+ * wrapping past twelve, and tried against the Kit's body red, white-multiplied, they read on
+ * asphalt and on grass.
  */
 export const CAR = {
   /** Nose to tail in tiles; a lane is 0.69 wide, so a car takes under half of it. */

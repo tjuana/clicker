@@ -11,9 +11,12 @@ export const SLOT_COLOURS = SLOT_HEX.map((hex) => new Color(hex));
 
 /**
  * The luminance every glowing thing takes from its slot colour. Bloom keys on luminance, and the
- * palette's own run from 0.21 (blue) to 0.82 (yellow) made a yellow bike blaze and a blue one look
- * switched off. 0.6 is the middle of that run, a gain of x0.92 to x3.62: lifting dark hues in the
- * colour itself washed the blues to pastel and brought the closest pair to dE 5.6 (plan 19).
+ * palette's own run from 0.21 (violet #a052fe) to 0.82 (lime #c2fd0a) made a lime bike blaze and a
+ * violet one look switched off. 0.6 is chosen for what it does to the levels below: a lit rim at
+ * 1 x BIKE_LEVEL 1.25 comes to 0.75, over BLOOM.threshold 0.6 with margin, while seams (0.525),
+ * bodies and walls stay under it. The gain on the colour is x0.73 to x2.90 (x0.92 to x3.62 with
+ * BIKE_LEVEL in); lifting the dark hues in the colour itself washed the blues to pastel and
+ * brought the closest pair to dE 5.6 (plan 19).
  */
 export const SLOT_LUMINANCE = 0.6;
 
