@@ -11,6 +11,7 @@ import {
 import type { WallOp } from '../cycles/model';
 import {
   FOOT,
+  glowFor,
   PULSE,
   PULSE_EXPONENT,
   PULSE_PERIOD_S,
@@ -161,7 +162,7 @@ diffuseColor.rgb *= body * (1.0 + ${glsl(RIM)} * rim + ${glsl(PULSE)} * pulse) +
       scale.set(along + THICK, WALL_HEIGHT, THICK),
     );
     mesh.setMatrixAt(i, matrix);
-    mesh.setColorAt(i, WALL_COLOURS[(slot - 1) % WALL_COLOURS.length] as Color);
+    mesh.setColorAt(i, glowFor(WALL_COLOURS, slot));
     laid.setX(i, date);
     touch(i);
   };

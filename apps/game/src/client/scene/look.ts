@@ -50,6 +50,13 @@ export const DIM_COLOURS = SLOT_GLOW.map((c) => c.clone().multiplyScalar(DIM_LEV
 export const WALL_COLOURS = SLOT_GLOW.map((c) => c.clone().multiplyScalar(WALL_LEVEL));
 
 /**
+ * The colour a table gives an arena slot (they count from one), wrapping past the palette. One
+ * function for bikes and walls, so both agree with the HUD's slotColour (slots.ts).
+ */
+export const glowFor = (table: readonly Color[], slot: number): Color =>
+  table[(slot - 1) % table.length] as Color;
+
+/**
  * The bikes' surface is procedural (RTR 6.3): its levels are multiplied by the slot's colour and
  * BIKE_LEVEL or DIM_LEVEL, and bloom keys on the product's luminance against BLOOM.threshold. Lengths
  * below are in the model's own units, the bike drawn at its 1.6 size, 2.2 long and 0.9 tall.

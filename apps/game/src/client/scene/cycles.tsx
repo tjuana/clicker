@@ -2,7 +2,6 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { useEffect, useMemo } from 'react';
 import {
   type Camera,
-  type Color,
   type Fog,
   HalfFloatType,
   InstancedMesh,
@@ -23,7 +22,7 @@ import { composerSamples } from './composer-samples';
 import { createCycleGeometry, createCycleMaterial } from './cycle-model';
 import { Floor, Grid } from './floor';
 import { FrameMeter } from './frame-meter';
-import { BIKE_COLOURS, BLOOM, BORDER_COLOUR, DIM_COLOURS } from './look';
+import { BIKE_COLOURS, BLOOM, BORDER_COLOUR, DIM_COLOURS, glowFor } from './look';
 import { createWalls, type Walls } from './walls';
 
 const MAX_BIKES = 64;
@@ -140,7 +139,7 @@ function drawBike(
   mesh.setMatrixAt(index, matrix);
   // Dim while the head it rides towards is not laying a wall: lit mode is told apart by eye.
   const colours = end.lit ? BIKE_COLOURS : DIM_COLOURS;
-  mesh.setColorAt(index, colours[(slot - 1) % colours.length] as Color);
+  mesh.setColorAt(index, glowFor(colours, slot));
   // The player's own bike wins over the one that killed it, which is followed only while the
   // player has none.
   const { chase } = rig;
