@@ -128,3 +128,34 @@ The design canvas shows both palettes side by side ("Player slot palette").
   `shots/p19-arena.png`, twenty riders — every bike's rims and every wall's top glow, blue and
   violet included; `shots/p19-race-grid.png`, twenty racers — the HUD names match the car colours.
   The pictures are not in git (`shots/` is ignored).
+
+## Review (2026-10-29, independent Opus reviewer, read-only)
+
+No correctness defects: slot indexing (arena from one, race from zero), the luminance the bloom's
+high-pass sees (three 0.186 builds it from the same coefficients; nothing clamps a channel past 1
+before the high-pass) and every consumer of the old list were checked, some by a throwaway test.
+
+1. **The ΔE ≥ 0.09 promise holds for the hexes, not for the glow on screen** — confirmed by
+   arithmetic, not by eye: the arena's canvas leaves R3F's default ACES tone mapping, which washes
+   the scaled-up HDR glow towards white; on the lit rims slots 7/8 come out ΔE 0.020 apart, 6/7
+   0.023, 11/12 0.029 (the old palette: 0.011). Under `NeutralToneMapping`, which the race already
+   uses, the closest rim pair is 0.057 and hues hold (`shots/p19-neutral-arena.png`, by a one-line
+   scratch change, reverted). Changing the arena's tone mapping changes its whole look: **the
+   owner's call, not in this branch.**
+2. **Nothing tied the scene's per-slot lookup to the HUD's colour** — confirmed: with `walls.ts`
+   indexing `slot % length` all 332 app tests stayed green. Fixed in `fd44e45`: `glowFor` in
+   `look.ts`, used by bikes and walls, and a test over slots 1–20 that the bike's and the wall's
+   hue is `slotColour`'s; both mutations go red. Left: a wrong slot passed to `glowFor` inside
+   `drawBike` itself is not caught, since `drawBike` is private.
+3. **Stale comments** (race-look's "twenty hues", `SLOT_LUMINANCE`'s "middle of the run" and its
+   gain figures) — fixed in `c14e7ce`.
+4. **The race spec said nothing of the wrap** — a twenty-car race has eight pairs of cars, and HUD
+   names, in one colour. Recorded in the spec, `fb05fcb`; marking them apart is not in this plan.
+   Also noted: slot 1 is red `#fe052c`, near the race's red kerbs and the HUD's danger colour.
+
+Seen during verification, not caused by this branch (it touches no worker or package file): two
+different worker room tests each failed once under a full parallel `pnpm test` — "ends with
+light-cycle results, after which nothing more is streamed" and "sends everyone the whole round
+again when a bike joins mid-round" — and passed alone six times in a row and in two full reruns.
+
+Verified: `pnpm check`, `pnpm typecheck`, `pnpm test` — 410 + 123 + 334 tests, twice in a row.
