@@ -73,8 +73,8 @@ Everything is an integer, as in the light cycles; the purity gate extends to `mo
   wall's tangent — plan 5's A6, with the DooM_42 slide bug fixed: the dot product is taken once, and
   the result is never longer than the input. A glancing hit loses little speed, a head-on one stops
   the car.
-- **Bumps.** A car is two circles, front and rear (one circle let cars drive into each other's noses
-  and tails; see plan 11). Pairs are found through a grid of tiles (plan 5's A2): each car is
+- **Bumps.** A car is a capsule: its axis, a segment, swept by a radius (plan 18; before it, two
+  circles, front and rear, whose middle was a gap another car's nose could enter). Pairs are found through a grid of tiles (plan 5's A2): each car is
   binned by its tile, and only the same and neighbouring bins are compared. Every overlap is
   resolved from the positions before any are moved, with each car pushed half the overlap apart and
   the summed pushes applied together. The result does not depend on the order of the cars, the same
@@ -307,3 +307,24 @@ What plan 13's review changed:
 - **The end-to-end race checks that the car moves** under gas, not only that keys were sent.
 - Recorded: one app test failed once while two agents ran suites at the same time, and was not
   identified; three runs alone and five by the agent were green.
+
+## Decisions made in plan 18 (2026-10-29)
+
+- **A car is a capsule**, the segment 0.085 tile ahead of and behind its centre swept by 0.065
+  tile (RTR 22.2): two cars touch when their axes come within 0.13 tile. The two circles it replaces
+  did not touch each other, and a nose entered the middle of a car undetected up to about 0.03 tile
+  deep. One segment test a pair (`modes/race/capsule.ts`, Ericson 5.1.9).
+- **Crossing axes push along the line between the centres** (west if they coincide), far enough
+  that the axes' shadows on that line are two radii apart: an X has no closest-point direction.
+- **Pushes round away from zero**, so a pair is never left short of two radii by rounding.
+- **No car drives further in a tick than its radius** (top speed 218 units against 266), a tested
+  invariant: no car can drive through another between ticks without a swept test. A push is not
+  bound by it: up to 614 units a pass when axes cross.
+- **Measured by bodies**, a whole race of twenty bots (seed 1): the deepest overlap fell from 180.8
+  to 48.6 units. Plan 11's "worst overlap measured: 0.0147 tile" was measured by circles; by
+  bodies the old code reached about 0.044 tile. The race's tests now measure bodies too.
+- **Cars touch the walls more**: side contacts at a car's middle now push, and the longest run on
+  a wall went from 9 ticks to 24 (limit 60).
+- **Known, left:** the wall check reads the two ends of a car's axis. Against a bend's inner wall
+  the middle can be deeper than both: 6 to 14 car-ticks of a twenty-bot race, at most 69 units
+  (4 to 10, at most 138, before the capsules).

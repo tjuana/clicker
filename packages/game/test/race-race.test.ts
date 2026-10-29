@@ -7,6 +7,7 @@ import { over, raceResults, standings, startRace, stepRace } from '../src/modes/
 import { emptyRace, newCar, type RaceState } from '../src/modes/race/state';
 import { buildTrack, point, project, type TrackData } from '../src/modes/race/track';
 import { TRACKS } from '../src/modes/race/tracks';
+import { axisDistance } from './race-body';
 
 const track = buildTrack(TRACKS.ring as TrackData);
 const last = track.pieces.length - 1;
@@ -42,20 +43,6 @@ function run(state: RaceState, ticks: number): RaceState {
   return now;
 }
 
-/** The distance between the nearest circles of two cars. */
-function gap(a: Car, b: Car): number {
-  const circles = (c: Car) =>
-    [RACE.reach, -RACE.reach].map((end) => ({
-      x: c.x + Math.trunc((end * cos(c.heading)) / ONE),
-      y: c.y + Math.trunc((end * sin(c.heading)) / ONE),
-    }));
-  let best = Number.POSITIVE_INFINITY;
-  for (const p of circles(a)) {
-    for (const q of circles(b)) best = Math.min(best, Math.hypot(q.x - p.x, q.y - p.y));
-  }
-  return best;
-}
-
 describe('the grid', () => {
   it('puts twenty cars on the road, facing the way round, none inside another', () => {
     const { cars } = field(20);
@@ -72,7 +59,7 @@ describe('the grid', () => {
         const a = cars[i];
         const b = cars[j];
         if (!a || !b) throw new Error('missing car');
-        expect(gap(a, b)).toBeGreaterThan(2 * RACE.radius);
+        expect(axisDistance(a, b)).toBeGreaterThan(2 * RACE.radius);
       }
     }
   });

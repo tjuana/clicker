@@ -103,7 +103,10 @@ export function drive(car: Car, track: Track, config: RaceConfig): number {
 }
 
 /**
- * Both circles are checked, and the deeper one decides. The car is pushed back by the overlap;
+ * Both ends of the car's axis are checked, and the deeper one decides: against a straight wall
+ * or a bend's outer wall a capsule is deepest at one of its ends. Against a bend's inner wall its
+ * middle can be deeper than both ends; plan 18 measured that at 6 to 14 car-ticks of a twenty-bot
+ * race, at most 69 units deep, and left it. The car is pushed back by the overlap;
  * its speed is scaled by the cosine between heading and wall, taken once, so a glancing hit
  * keeps nearly all of it and a head-on hit none; and the nose turns a quarter of the way to the
  * wall's direction. Without that last part a car that hit head-on stays pointed into the wall at

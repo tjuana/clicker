@@ -66,7 +66,10 @@ Each of these was checked against the code or measured, not taken from the book 
    to enclose a single object", and capsules — "line swept spheres" (RTR 22.2, Figure 22.5) — give
    the minimum distance cheaply. Plan 11 moved from one circle to two after the owner saw cars
    inside each other; its agent then found that two cars crossing in an X push each other's
-   circles in opposite directions and barely separate. A capsule has no such case.
+   circles in opposite directions and barely separate. *Plan 18 found it worse:* two circles of
+   radius 0.065 tile, 0.085 from the middle, do not touch, so a car's middle is a waist another
+   car's nose entered undetected up to a quarter of a car's width. And a capsule has an X case of
+   its own: crossing axes have no closest-point direction, so they need a rule (see P3).
 5. **Steady motion needs a frame for every refresh.** RTR 12.5 opens with it. Measured: drawing
    cars at their last 30 Hz tick left the leader standing still on 271 of 361 frames; interpolated
    between ticks, on none.
@@ -137,6 +140,9 @@ proposal as first written:
   as a test: **a car never moves further in a tick than its radius**, so no wall or car can be
   tunnelled through without a swept test.
 - **Return.** The X-crossing case disappears; one shape instead of four circle pairs per car pair.
+  *Done in plan 18*, with one correction: when the axes cross the closest points coincide, so the
+  push goes along the line between the centres, far enough that the axes' shadows on it are two
+  radii apart.
 - **Risks.** It changes plan 11's bump code after its review; better done as the plan's own fix if
   the review hits the X case, or as plan 11.1.
 - **Example.** The closest points of segments `p0 + s·d0` and `q0 + t·d1`: solve for `s, t` from
@@ -249,6 +255,7 @@ Every step ends with a row here: what it measured before and after, and what tha
 | B — the floor (plan 16) | 11.6.4, 12.1, 9.8 | drei's mirror: a blob and copies under every bike; 33 calls; 6.01–6.10 ms at dpr 2 | Three's `Reflector` at a quarter of the canvas, a separable Gaussian in bilinear taps, σ 1.5 texels across and 8 down: 30 calls; 5.85–5.93 ms at dpr 2, 2.40 ms at dpr 1 | A vertical streak under each bike, no blob, no copies; six kernel tests, red first. Drawn inside the scene pass, as `Reflector` does by default, it cost 6.41 ms at dpr 2; drawn before it, 5.90. Reflection strength 3 → 2.3 *(decided by the agents, for the owner's eye)*. |
 | C — the bikes' surface (plan 16) | 6.3, 6.5, 9.5 | Flat parts, a brightness per vertex; 5.88–5.91 ms at dpr 2, 2.28 ms at dpr 1 | Seams, a stripe and a Fresnel rim computed from the model's own coordinates, still one draw for every bike: 5.92–5.93 ms at dpr 2, 2.35 ms at dpr 1 | A panelled body with a stripe that ends in an arrow at the nose, at no measurable cost. A dim bike never blooms: a unit test over the look's figures now, not a comment; the shader is built from the same figures. The review found the bloom keys on luminance, not the brightest channel: a lit bike's rims glow on only half the palette, as they did before. The outline is unchanged; new models stay technical debt. |
 | Multisampling by density (plan 17) | 5.4.2, 18.2 | The composer's target 4× multisampled at every density: arena, twenty riders, 6.36 ms GPU median at dpr 2 (worst p95 7.3–7.5), 2.33–2.37 ms at dpr 1 | No samples at dpr 2 or more: 2.76–2.77 ms at dpr 2 (worst p95 3.3–3.6), 2.34–2.36 ms at dpr 1; 30 calls either way | More than half the arena's GPU time on the owner's screen, for an edge step of half a CSS pixel that shows only cropped 1:1; the grid and the bikes' seams antialias themselves in their shaders. Two samples would have kept most of the cost (5.05 ms): multisampling pays for storing its samples, not for shading them. |
+| Cars as capsules (plan 18) | 22.2, 22.13; Ericson 5.1.9 | A car is two circles that do not touch. Two cars in every relative position on a 150-unit grid, every 256 heading steps, measured by their bodies (a sampled capsule distance): 946 of 1228 overlapping pairs still overlapping after a bump, 234 of 240 crossing ones; a nose in another car's side at the middle not seen at all up to 100 units deep (512 → 512, 432 → 432) | One capsule per car — its axis swept by the radius, one segment test a pair: 0 of 1228, 0 of 240, every waist hit pushed to 532. A pile of five 80 apart: 492 after one bump (524 before), 531 after five (530) | A car's middle is solid and an X separates. The pairs compared do not change (bins), each is one segment test instead of four circle tests. Pushes now round away from zero: truncating left pairs up to 2.6 units short. In a whole race of twenty bots, measured by bodies, the deepest overlap fell from 180.8 to 48.6 units — the old test measured circles and saw 81. Driving never moves a car further in a tick than its radius (218 against 266 units), now a test; a push can (up to 614 when axes cross). Side contacts now push, so cars touch the walls more: the longest run on a wall went from 9 ticks to 24. |
 
 Measured on the M2 only. A phone's budget is still unknown: the next number worth having is the
 same measurement on a mid-range Android phone over USB. Prototype that first: whether Chrome on
@@ -338,7 +345,7 @@ change the arena's picture and come from the
    - The outline stays a stick and a dumbbell: new models are technical debt (design §6).
 5. **Cars as capsules** (RTR 22.2, 22.13; P3). Pure and integer in `packages/game`, property tests,
    a growth test with `complexity.ts`; removes the X-crossing case. Costs the server nothing
-   measurable.
+   measurable. *Done in plan 18* — the row above.
 6. **Depth precision** (RTR 4.7.2). The race's camera has near 0.02 and far 400, a range of
    1 : 20 000, propped up by `GROUND_Y` and `TILE_LIFT` offsets against z-fighting. Reversed depth
    would make them unnecessary; prototype first whether three 0.186 and `EXT_clip_control` allow it.

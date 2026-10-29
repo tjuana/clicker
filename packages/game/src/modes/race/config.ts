@@ -65,9 +65,9 @@ export interface RaceConfig {
   road: number;
   /** Half the width of the corridor between the walls. */
   wall: number;
-  /** Radius of each of the car's two circles: 0.065 tile. */
+  /** Radius of the car's capsule, swept along its axis: 0.065 tile. */
   radius: number;
-  /** How far ahead of and behind the centre the circles sit: 0.085 tile. */
+  /** How far ahead of and behind the centre the capsule's axis reaches: 0.085 tile. */
   reach: number;
   /** Cosine, scaled by `ONE`, above which a nose is said to point at the other car. */
   aim: number;

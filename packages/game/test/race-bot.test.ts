@@ -3,12 +3,13 @@ import { binCars } from '../src/modes/race/bins';
 import { decide } from '../src/modes/race/bot';
 import { BRAKE, type Car, GAS, LEFT, RIGHT } from '../src/modes/race/car';
 import { RACE } from '../src/modes/race/config';
-import { cos, ONE, sin, TILE } from '../src/modes/race/fixed';
+import { TILE } from '../src/modes/race/fixed';
 import { startRace, stepRace } from '../src/modes/race/race';
 import { emptyRace, newCar, type RaceState } from '../src/modes/race/state';
 import { buildTrack, point, type TrackData } from '../src/modes/race/track';
 import { TRACKS } from '../src/modes/race/tracks';
 import { counted, growth } from './complexity';
+import { bodyOverlap } from './race-body';
 
 const track = buildTrack(TRACKS.ring as TrackData);
 
@@ -28,22 +29,12 @@ function keysOf(car: Car, others: Car[] = []): number {
   return decide(0, cars, binCars(cars, track.bounds), track, RACE);
 }
 
-/** The deepest two circles of different cars sink into each other, by an exact all-pairs check. */
+/** The deepest two bodies sink into each other, by an exact all-pairs check. */
 function deepest(cars: Car[]): number {
-  const circles = cars.map((c) =>
-    [RACE.reach, -RACE.reach].map((end) => ({
-      x: c.x + (end * cos(c.heading)) / ONE,
-      y: c.y + (end * sin(c.heading)) / ONE,
-    })),
-  );
   let worst = 0;
   for (let i = 0; i < cars.length; i += 1) {
     for (let j = i + 1; j < cars.length; j += 1) {
-      for (const a of circles[i] ?? []) {
-        for (const b of circles[j] ?? []) {
-          worst = Math.max(worst, 2 * RACE.radius - Math.hypot(b.x - a.x, b.y - a.y));
-        }
-      }
+      worst = Math.max(worst, bodyOverlap(cars[i] as Car, cars[j] as Car));
     }
   }
   return worst;
@@ -100,7 +91,8 @@ describe('twenty bots', () => {
   });
 
   it('never stay on a wall for more than two seconds', () => {
-    // Spec section 5: a car that has touched a wall for 60 ticks in a row is stuck. Measured: 16.
+    // Spec section 5: a car that has touched a wall for 60 ticks in a row is stuck. Measured: 24 (9 before
+    // plan 18's capsules: side contacts at a car's middle now push).
     expect(result.worstWall).toBeLessThanOrEqual(60);
   });
 
