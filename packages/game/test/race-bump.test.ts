@@ -30,22 +30,23 @@ function car(slot: number, x: number, y: number, over: Partial<Car> = {}): Car {
   };
 }
 
-function circles(c: Car): [number, number][] {
-  const ox = Math.trunc((RACE.reach * cos(c.heading)) / ONE);
-  const oy = Math.trunc((RACE.reach * sin(c.heading)) / ONE);
-  return [
-    [c.x + ox, c.y + oy],
-    [c.x - ox, c.y - oy],
-  ];
-}
-
-/** The distance between the nearest circles of two cars. */
-function gap(a: Car, b: Car): number {
+/**
+ * The distance between the axes of two cars, from 201 sampled points on each. It shares no code
+ * with `src`: a car's body is its axis (+-reach along the heading) swept by the radius, so two
+ * bodies are apart by this distance minus two radii.
+ */
+function axisDistance(a: Car, b: Car, samples = 201): number {
+  const point = (c: Car, i: number): [number, number] => {
+    const u = ((2 * i) / (samples - 1) - 1) * RACE.reach;
+    return [c.x + (u * cos(c.heading)) / ONE, c.y + (u * sin(c.heading)) / ONE];
+  };
+  const pa = Array.from({ length: samples }, (_, i) => point(a, i));
+  const pb = Array.from({ length: samples }, (_, i) => point(b, i));
   let best = Number.POSITIVE_INFINITY;
-  for (const p of circles(a)) {
-    for (const q of circles(b)) best = Math.min(best, Math.hypot(q[0] - p[0], q[1] - p[1]));
+  for (const p of pa) {
+    for (const q of pb) best = Math.min(best, (q[0] - p[0]) ** 2 + (q[1] - p[1]) ** 2);
   }
-  return best;
+  return Math.sqrt(best);
 }
 
 const touching = 2 * RACE.radius;
@@ -63,7 +64,7 @@ describe('separation', () => {
       const a = car(0, mid, mid, { heading: headA });
       const b = car(1, mid + dx, mid + dy, { heading: headB });
       bump([a, b], bounds, RACE);
-      expect(gap(a, b)).toBeGreaterThanOrEqual(touching - 1);
+      expect(axisDistance(a, b)).toBeGreaterThanOrEqual(touching - 1);
     }
   });
 
@@ -78,17 +79,59 @@ describe('separation', () => {
     const a = car(0, mid, mid);
     const b = car(1, mid, mid);
     bump([a, b], bounds, RACE);
-    expect(gap(a, b)).toBeGreaterThanOrEqual(touching - 1);
+    expect(axisDistance(a, b)).toBeGreaterThanOrEqual(touching - 1);
   });
 
   it('separates a pile of cars pushed by several neighbours', () => {
     const cars = [0, 1, 2, 3, 4].map((slot) => car(slot, mid + slot * 80, mid + (slot % 2) * 90));
-    bump(cars, bounds, RACE);
+    // Five cars inside 400 units is more than any tick of play produces; a few ticks clear it.
+    for (let tick = 0; tick < 5; tick += 1) bump(cars, bounds, RACE);
     for (let i = 0; i < cars.length; i += 1) {
       for (let j = i + 1; j < cars.length; j += 1) {
-        expect(gap(cars[i] as Car, cars[j] as Car)).toBeGreaterThanOrEqual(touching - 12);
+        expect(axisDistance(cars[i] as Car, cars[j] as Car)).toBeGreaterThanOrEqual(touching - 1);
       }
     }
+  });
+
+  // B points at the middle of A with its nose `depth` units inside A's body: the waist that two
+  // circles per car leave between them.
+  it.each([20, 60, 100, 150, 200])('separates a nose pushed %i deep into the middle', (depth) => {
+    const a = car(0, mid, mid);
+    const b = car(1, mid, mid + RACE.reach + touching - depth, { heading: 3072 });
+    bump([a, b], bounds, RACE);
+    expect(axisDistance(a, b)).toBeGreaterThanOrEqual(touching - 1);
+  });
+
+  describe.each([256, 512, 1024, 1536, 2048])('axes crossing, headings %i apart', (apart) => {
+    it.each([-200, 0, 200])('separates them with the crossing %i along the axis', (along) => {
+      const a = car(0, mid, mid);
+      const b = car(1, mid + along, mid, { heading: apart });
+      bump([a, b], bounds, RACE);
+      expect(axisDistance(a, b)).toBeGreaterThanOrEqual(touching - 1);
+    });
+  });
+
+  it('separates every overlapping pair of a sweep of positions and headings', () => {
+    const samples = 201;
+    let overlapping = 0;
+    const failures: string[] = [];
+    for (let dx = -600; dx <= 600; dx += 150) {
+      for (let dy = -600; dy <= 600; dy += 150) {
+        for (let heading = 0; heading < 4096; heading += 256) {
+          const a = car(0, mid, mid);
+          const b = car(1, mid + dx, mid + dy, { heading });
+          if (axisDistance(a, b, samples) >= touching) continue;
+          overlapping += 1;
+          bump([a, b], bounds, RACE);
+          const left = axisDistance(a, b, samples);
+          if (left < touching - 6)
+            failures.push(`(${dx}, ${dy}) at ${heading}: ${left.toFixed(0)}`);
+        }
+      }
+    }
+    expect(overlapping).toBeGreaterThan(1000);
+    // The first few say which pairs; the count says how many.
+    expect({ left: failures.length, first: failures.slice(0, 5) }).toEqual({ left: 0, first: [] });
   });
 });
 

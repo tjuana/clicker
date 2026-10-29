@@ -195,3 +195,11 @@ describe('the start line', () => {
     expect(car.piece).toBe(0);
   });
 });
+
+describe('the car config', () => {
+  it('never moves a car further in a tick than its radius, so none passes through another', () => {
+    for (const speed of [RACE.topSpeed, RACE.grassSpeed, RACE.reverseSpeed]) {
+      expect(speed).toBeLessThan(RACE.radius);
+    }
+  });
+});
