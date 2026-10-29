@@ -198,7 +198,9 @@ New message types. The old ones do not break, so `v` stays `1`. *(Superseded: th
   in the tail's ring buffer, so a delta updates exactly the instances that changed — without
   recreating them and without allocations in the frame. The limit is 20 × 400 = 8000 instances.
 - The bikes are low-poly glowing models built from primitives. The colour comes from the slot
-  palette; the player's own bike is brighter than the others.
+  palette: twelve hues in `apps/game/src/client/slots.ts`, no two closer than ΔE 0.09 in OKLab
+  (plan 19); slots 13–20 repeat 1–12. The HUD names a player in the same colour. The player's own
+  bike is bigger than the others, not brighter (`cycles.tsx`, `OWN_SIZE`).
 - The glow is a bloom post-processing pass. If a measurement shows it eating fps on an M2, we turn
   it down.
 
@@ -399,9 +401,10 @@ The arena's look, rebuilt by the Real-Time Rendering study's exercises A to C
   `fwidth` and faded to their average when too small to draw, and every grazing edge a Fresnel rim.
   Still one instanced draw for every bike. A bike that is not laying its wall never reaches the
   bloom threshold, whatever the surface does, and a body never does even at a grazing edge
-  (`test/cycle-bloom.test.ts`, over the figures in `look.ts`). The bloom keys on luminance, so a
-  lit bike's rims glow only on the brighter half of the palette; blue, violet and magenta do not.
-  That predates plan 16 and is the owner's call.
+  (`test/cycle-bloom.test.ts`, over the figures in `look.ts`). The bloom keys on luminance, so
+  bikes and walls take each slot colour scaled to one luminance, `SLOT_LUMINANCE` 0.6: every lit
+  bike's rims and stripe bloom (0.75), every slot is as bright as every other, and no seam, body or
+  wall body blooms (plan 19). The race's car bodies take the colours unscaled: paint, not light.
 - Draw calls in an arena frame: 30 at most (33 with drei's floor), whatever the number of riders.
 
 ## Decisions made in plan 17 (2026-10-29)
