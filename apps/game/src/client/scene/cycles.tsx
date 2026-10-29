@@ -181,7 +181,8 @@ function Field({ side, tickMs, you }: { side: number; tickMs: number; you: strin
   // The size here is a placeholder: the effect below sets the real one, and again on every resize.
   // The composer renders into its own target, which the canvas's antialias flag does not reach:
   // without samples here every edge stair-steps on an ordinary screen; a dense one drops them, see
-  // composerSamples. The composer reads the pixel ratio when built, so dpr rebuilds it. Half float keeps the bloom's brightness past 1.
+  // composerSamples. The composer reads the pixel ratio when built, so dpr rebuilds it. Half float
+  // keeps the bloom's brightness past 1.
   // OutputPass goes last so the whole picture, glow included, is tone-mapped and encoded once,
   // at the final stage (RTR 5.6, 8.2.2). Without it the bloom, being last, drew its input to the
   // screen encoded and then added linear glow on top, which was never tone-mapped.
