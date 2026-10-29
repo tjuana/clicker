@@ -257,4 +257,35 @@ describe('room over websocket', () => {
       mutableEnv.ROUND_MS = original.round;
     }
   });
+
+  it('streams snapshots while a clicker round runs', async () => {
+    const roomId = generateId();
+    const mutableEnv = env as unknown as { COUNTDOWN_MS: string; ROUND_MS: string };
+    const original = { countdown: mutableEnv.COUNTDOWN_MS, round: mutableEnv.ROUND_MS };
+    // About fifty beats fit in the round and the test needs two: no timing is left to chance.
+    mutableEnv.COUNTDOWN_MS = '50';
+    mutableEnv.ROUND_MS = '5000';
+
+    try {
+      const host = await connect(roomId);
+      host.send({ type: 'join', playerId: generateId(), name: 'Аня', hostKey: generateId() });
+      await host.waitFor(isWelcome);
+      host.send({ type: 'start' });
+
+      const deadline = Date.now() + 2000;
+      let times = new Set<number>();
+      do {
+        times = new Set(host.received.filter(isRunningSnapshot).map((s) => s.serverNow));
+        if (times.size >= 2) break;
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      } while (Date.now() < deadline);
+
+      expect(times.size).toBeGreaterThanOrEqual(2);
+
+      host.close();
+    } finally {
+      mutableEnv.COUNTDOWN_MS = original.countdown;
+      mutableEnv.ROUND_MS = original.round;
+    }
+  });
 });
