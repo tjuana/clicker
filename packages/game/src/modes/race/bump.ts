@@ -1,4 +1,5 @@
 import { binCars } from './bins';
+import { closest, type Segment } from './capsule';
 import type { Car } from './car';
 import type { RaceConfig } from './config';
 import { cos, ONE, sin } from './fixed';
@@ -6,12 +7,19 @@ import type { Track } from './track';
 
 type Bounds = Track['bounds'];
 
+// Away from zero, so a pair is never left short of `touching` by rounding: truncating lost up to
+// a unit per car, and the second pass's small leftover truncated to nothing.
+function outward(v: number): number {
+  return v < 0 ? -Math.ceil(-v) : Math.ceil(v);
+}
+
 /**
  * One round of simultaneous pushes. Every push is worked out from the positions before any car
  * moves and then applied together, and a pair is always worked out from its lower slot, so the
  * answer does not depend on the order of `cars`. Cars are binned by tile; two cars close enough
  * to touch are never more than one tile apart, so only a bin and its eight neighbours are
- * compared (see `binCars`).
+ * compared (see `binCars`). A car is one capsule, its axis swept by the radius; a pair is one
+ * segment test, and crossing axes, which give no direction, push along the line between centres.
  * Returns how many pairs of cars were compared.
  */
 function pass(cars: Car[], bounds: Bounds, config: RaceConfig): number {
@@ -26,9 +34,10 @@ function pass(cars: Car[], bounds: Bounds, config: RaceConfig): number {
   // Who each car overlapped this pass, as a bitmask over slots (see `Car.touch`).
   const touched = new Int32Array(count);
   const heading = new Int32Array(count);
-  // The two circles of car i: front at 2i, rear at 2i + 1.
-  const circleX = new Int32Array(2 * count);
-  const circleY = new Int32Array(2 * count);
+  // The two ends of car i's axis: front at 2i, rear at 2i + 1. The body is that segment swept by
+  // the radius, a capsule; two circles left a waist in the middle that a nose could enter.
+  const endX = new Int32Array(2 * count);
+  const endY = new Int32Array(2 * count);
 
   for (let i = 0; i < count; i += 1) {
     const car = cars[i] as Car;
@@ -40,10 +49,10 @@ function pass(cars: Car[], bounds: Bounds, config: RaceConfig): number {
     limit[i] = Number.MAX_SAFE_INTEGER;
     const ox = Math.trunc((config.reach * cos(car.heading)) / ONE);
     const oy = Math.trunc((config.reach * sin(car.heading)) / ONE);
-    circleX[2 * i] = car.x + ox;
-    circleY[2 * i] = car.y + oy;
-    circleX[2 * i + 1] = car.x - ox;
-    circleY[2 * i + 1] = car.y - oy;
+    endX[2 * i] = car.x + ox;
+    endY[2 * i] = car.y + oy;
+    endX[2 * i + 1] = car.x - ox;
+    endY[2 * i + 1] = car.y - oy;
   }
 
   const touching = 2 * config.radius;
@@ -63,35 +72,57 @@ function pass(cars: Car[], bounds: Bounds, config: RaceConfig): number {
   }
 
   function compare(i: number, j: number): void {
-    for (let a = 2 * i; a < 2 * i + 2; a += 1) {
-      for (let b = 2 * j; b < 2 * j + 2; b += 1) {
-        let dx = (circleX[b] as number) - (circleX[a] as number);
-        const dy = (circleY[b] as number) - (circleY[a] as number);
-        let dist = Math.round(Math.sqrt(dx * dx + dy * dy));
-        if (dist >= touching) continue;
-        if (dist === 0) {
-          // Exactly on top of each other: the lower slot is pushed west, deterministically.
-          dx = 1;
-          dist = 1;
-        }
-        const share = (touching - dist) / (2 * dist);
-        const sx = Math.trunc(dx * share);
-        const sy = Math.trunc(dy * share);
-        touched[i] = (touched[i] as number) | (1 << (slot[j] as number));
-        touched[j] = (touched[j] as number) | (1 << (slot[i] as number));
-        pushX[i] = (pushX[i] as number) - sx;
-        pushY[i] = (pushY[i] as number) - sy;
-        pushX[j] = (pushX[j] as number) + sx;
-        pushY[j] = (pushY[j] as number) + sy;
-        // The car whose nose points at the other is the one behind; it can go no faster than
-        // the one in front. The cap is that car's own speed, not a fraction of it: a factor
-        // compounds down a queue and slows the whole train to a crawl.
-        const iAim = (cos(heading[i] as number) * dx + sin(heading[i] as number) * dy) / dist;
-        const jAim = -(cos(heading[j] as number) * dx + sin(heading[j] as number) * dy) / dist;
-        if (iAim > config.aim) limit[i] = Math.min(limit[i] as number, (cars[j] as Car).speed);
-        if (jAim > config.aim) limit[j] = Math.min(limit[j] as number, (cars[i] as Car).speed);
+    // Axes run from the rear end to the front end.
+    const a: Segment = {
+      x: endX[2 * i + 1] as number,
+      y: endY[2 * i + 1] as number,
+      dx: (endX[2 * i] as number) - (endX[2 * i + 1] as number),
+      dy: (endY[2 * i] as number) - (endY[2 * i + 1] as number),
+    };
+    const b: Segment = {
+      x: endX[2 * j + 1] as number,
+      y: endY[2 * j + 1] as number,
+      dx: (endX[2 * j] as number) - (endX[2 * j + 1] as number),
+      dy: (endY[2 * j] as number) - (endY[2 * j + 1] as number),
+    };
+    const { s, t } = closest(a, b);
+    let dx = b.x + b.dx * t - (a.x + a.dx * s);
+    let dy = b.y + b.dy * t - (a.y + a.dy * s);
+    let dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist >= touching) return;
+    let need = touching - dist;
+    if (dist < 1) {
+      // The axes cross, so the closest points coincide and give no direction. Push along the
+      // line between the centres (west if they coincide, deterministically), far enough that the
+      // axes' shadows on that line are two radii apart.
+      dx = (px[j] as number) - (px[i] as number);
+      dy = (py[j] as number) - (py[i] as number);
+      dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < 1) {
+        dx = 1;
+        dy = 0;
+        dist = 1;
       }
+      const hA = Math.abs(a.dx * dx + a.dy * dy) / dist / 2;
+      const hB = Math.abs(b.dx * dx + b.dy * dy) / dist / 2;
+      need = hA + hB + touching - dist;
     }
+    const share = need / (2 * dist);
+    const sx = outward(dx * share);
+    const sy = outward(dy * share);
+    touched[i] = (touched[i] as number) | (1 << (slot[j] as number));
+    touched[j] = (touched[j] as number) | (1 << (slot[i] as number));
+    pushX[i] = (pushX[i] as number) - sx;
+    pushY[i] = (pushY[i] as number) - sy;
+    pushX[j] = (pushX[j] as number) + sx;
+    pushY[j] = (pushY[j] as number) + sy;
+    // The car whose nose points at the other is the one behind; it can go no faster than
+    // the one in front. The cap is that car's own speed, not a fraction of it: a factor
+    // compounds down a queue and slows the whole train to a crawl.
+    const iAim = (cos(heading[i] as number) * dx + sin(heading[i] as number) * dy) / dist;
+    const jAim = -(cos(heading[j] as number) * dx + sin(heading[j] as number) * dy) / dist;
+    if (iAim > config.aim) limit[i] = Math.min(limit[i] as number, (cars[j] as Car).speed);
+    if (jAim > config.aim) limit[j] = Math.min(limit[j] as number, (cars[i] as Car).speed);
   }
 
   for (let i = 0; i < count; i += 1) {
