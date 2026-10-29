@@ -32,7 +32,8 @@ export const GROUND_REPEAT = REPEAT.grass;
 /**
  * Below the tiles' surface, or it z-fights with their grass. Not found by eye: at the farthest
  * tile a camera sees (about 14.8 tiles) a 24-bit depth buffer with near 0.02 steps 0.00065, and
- * this is about 4.6 times that. `test/scene-depth.test.ts` holds it at twice the step.
+ * the gap to the grass (at y = 0 with `TILE_LIFT`) is about 4.6 times that. `test/scene-depth.test.ts`
+ * holds the signed gap at twice the step, so a ground above the grass or a changed lift fails.
  */
 export const GROUND_Y = -0.003;
 /** The grass is a little darker and cooler than the texture: untinted, the tiles' verge read tan against the ground. */
