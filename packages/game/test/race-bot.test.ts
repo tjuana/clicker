@@ -91,7 +91,8 @@ describe('twenty bots', () => {
   });
 
   it('never stay on a wall for more than two seconds', () => {
-    // Spec section 5: a car that has touched a wall for 60 ticks in a row is stuck. Measured: 16.
+    // Spec section 5: a car that has touched a wall for 60 ticks in a row is stuck. Measured: 24 (9 before
+    // plan 18's capsules: side contacts at a car's middle now push).
     expect(result.worstWall).toBeLessThanOrEqual(60);
   });
 
