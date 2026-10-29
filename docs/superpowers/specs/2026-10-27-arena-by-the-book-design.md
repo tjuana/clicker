@@ -153,3 +153,20 @@ numbers come from the frame meter: `P` in the arena, and
   phone tier may draw the floor without the mirror.
 - **The whole look moves with A.** Everything the owner tuned by eye was tuned on the old output;
   re-tuning `look.ts` is part of A, not a regression.
+
+## 8. Outcome (plan 16, 2026-10-29)
+
+Agents wrote A, B and C, on the owner's "делай все по порядку", in the order of §2. Where the work
+left this design:
+
+- **A** needed no re-tune of `look.ts`: the halo kept its size. Its cost exists only with the
+  composer's multisampling, and at dpr 2 it is none.
+- **B**'s mirror is not rendered "inside the frame it is drawn in" (§3 B, §7). Inside the scene
+  pass it cost 0.5 ms at dpr 2; it is drawn at frame priority 0 instead, as drei did, and the floor
+  ends up cheaper than drei's. The reflection's strength went from 3 to 2.3: with no blob to spread
+  it, 3 made a second arena of the walls.
+- **C**'s part id is a vertex attribute of its own, not the vertex colour, and the stripe box left
+  the geometry for a band in the shader.
+- **Found on the way:** half the arena's GPU time on the owner's screen is the composer's 4×
+  multisampled target (6.05 ms with it, about 3.1 without, at dpr 2). Whether to drop it on dense
+  screens is the owner's call.

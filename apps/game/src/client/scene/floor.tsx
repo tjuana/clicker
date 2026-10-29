@@ -1,34 +1,206 @@
-import { MeshReflectorMaterial } from '@react-three/drei';
+import { useFrame, useStore, useThree } from '@react-three/fiber';
 import { useEffect, useMemo } from 'react';
-import { AdditiveBlending, Color, ShaderMaterial, UniformsLib, UniformsUtils } from 'three';
+import {
+  AdditiveBlending,
+  type Camera,
+  Color,
+  Group,
+  HalfFloatType,
+  type Material,
+  PlaneGeometry,
+  type Scene,
+  ShaderMaterial,
+  UniformsLib,
+  UniformsUtils,
+  Vector2,
+  type WebGLRenderer,
+  WebGLRenderTarget,
+} from 'three';
+import { Reflector } from 'three/examples/jsm/objects/Reflector.js';
+import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
+import { gaussianTaps } from './blur-kernel';
 import { FLOOR, GRID_COLOUR, GRID_LEVEL, GRID_SPACING } from './look';
 
+// The mirror's own shader: the reflection, projected, times a strength, with fog. `color` is
+// declared because Reflector's constructor sets it and throws without it; nothing reads it.
+const FLOOR_SHADER = {
+  name: 'ArenaFloor',
+  uniforms: UniformsUtils.merge([
+    UniformsLib.fog,
+    {
+      color: { value: null },
+      tDiffuse: { value: null },
+      textureMatrix: { value: null },
+      strength: { value: FLOOR.strength },
+    },
+  ]),
+  vertexShader: `uniform mat4 textureMatrix;
+varying vec4 vUv;
+#include <fog_pars_vertex>
+void main() {
+  vUv = textureMatrix * vec4(position, 1.0);
+  vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+  gl_Position = projectionMatrix * mvPosition;
+#include <fog_vertex>
+}`,
+  fragmentShader: `uniform sampler2D tDiffuse;
+uniform float strength;
+varying vec4 vUv;
+#include <fog_pars_fragment>
+void main() {
+  gl_FragColor = vec4(texture2DProj(tDiffuse, vUv).rgb * strength, 1.0);
+#include <fog_fragment>
+}`,
+};
+
+/** One axis of the separable Gaussian: TAPS bilinear reads along `texelStep`, weighted. */
+function blurMaterial(sigma: number, axis: Vector2): ShaderMaterial {
+  const { offsets, weights } = gaussianTaps(sigma);
+  return new ShaderMaterial({
+    defines: { TAPS: offsets.length },
+    uniforms: {
+      src: { value: null },
+      offsets: { value: offsets },
+      weights: { value: weights },
+      // Mutated in place on resize: this is the texel size along the axis, zero across it.
+      texelStep: { value: axis },
+    },
+    vertexShader:
+      'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+    fragmentShader: `uniform sampler2D src;
+uniform float offsets[TAPS];
+uniform float weights[TAPS];
+uniform vec2 texelStep;
+varying vec2 vUv;
+void main() {
+  vec3 sum = vec3(0.0);
+  for (int i = 0; i < TAPS; i++) sum += texture2D(src, vUv + offsets[i] * texelStep).rgb * weights[i];
+  gl_FragColor = vec4(sum, 1.0);
+}`,
+    depthTest: false,
+    depthWrite: false,
+  });
+}
+
+const targetSize = (css: number): number => Math.max(1, Math.round(css * FLOOR.fraction));
+
 /**
- * The arena's floor: a soft mirror. Mounted beside `Field`, not in it: drei's reflector never
- * disposes its render targets, and `Field` is rebuilt whenever the side or the tick changes;
- * the canvas's own unmount loses the whole WebGL context, which is the only cleanup it gets.
+ * The arena's floor: a wet-asphalt mirror. Three's Reflector renders the arena upside down into a
+ * texture; before the floor is drawn that texture is blurred by two passes of a separable Gaussian
+ * (RTR 12.1), narrow across and wide down, so a bike's reflection is a soft vertical streak
+ * (RTR 9.8, Figure 11.40: microfacets stretch a reflection along the view). All three targets are
+ * a fraction of the canvas, the same size, so the bilinear offsets in texels hold.
+ *
+ * The mirror and both blurs are drawn in a frame callback at priority 0, after `Field` has updated
+ * the arena (-1) and before the composer draws it (1), not in the Reflector's `onBeforeRender`:
+ * there they would interrupt the composer's multisampled scene pass, which a tiled GPU pays for by
+ * storing and reloading every sample: 6.41 against 5.90 ms GPU at dpr 2 with 20 riders.
+ *
+ * Mounted beside `Field`, not in it: `Field` is rebuilt on every side or tick change. Rebuilt
+ * here only when the side changes, and then everything it made is disposed.
  */
 export function Floor({ side }: { side: number }) {
-  return (
-    <>
-      <ambientLight intensity={Math.PI} />
-      <mesh rotation-x={-Math.PI / 2} position={[side / 2, 0, side / 2]} scale={[side, side, 1]}>
-        <planeGeometry args={[1, 1]} />
-        <MeshReflectorMaterial
-          resolution={FLOOR.resolution}
-          blur={FLOOR.blur}
-          mixBlur={1}
-          mixStrength={FLOOR.mixStrength}
-          mirror={1}
-          depthScale={0}
-          color="#ffffff"
-          roughness={1}
-          metalness={0}
-          toneMapped={false}
-        />
-      </mesh>
-    </>
+  const store = useStore();
+  const size = useThree((s) => s.size);
+
+  const floor = useMemo(() => {
+    const { width, height } = store.getState().size;
+    const w = targetSize(width);
+    const h = targetSize(height);
+    // multisample 0: the edges are blurred away anyway.
+    const reflector = new Reflector(new PlaneGeometry(side, side), {
+      textureWidth: w,
+      textureHeight: h,
+      multisample: 0,
+      shader: FLOOR_SHADER,
+    });
+    reflector.rotation.x = -Math.PI / 2;
+    reflector.position.set(side / 2, 0, side / 2);
+    // The mirror is drawn before the scene pass, which is what normally refreshes this matrix, and
+    // the floor never moves: refresh it once so the first frame's reflection is right.
+    reflector.updateMatrixWorld();
+    const material = reflector.material as ShaderMaterial;
+    material.fog = true;
+
+    // The reflection camera is cloned from the main one once, layers included; the grid is on
+    // layer 1 and must not be mirrored.
+    const reflectionCamera = reflector.getReflectionCamera.bind(reflector);
+    reflector.getReflectionCamera = (camera: Camera) => {
+      const mirror = reflectionCamera(camera);
+      mirror.layers.set(0);
+      return mirror;
+    };
+
+    const options = { type: HalfFloatType, depthBuffer: false };
+    const across = new WebGLRenderTarget(w, h, options);
+    const down = new WebGLRenderTarget(w, h, options);
+    const acrossStep = new Vector2(1 / w, 0);
+    const downStep = new Vector2(0, 1 / h);
+    const horizontal = blurMaterial(FLOOR.sigmaAcross, acrossStep);
+    const vertical = blurMaterial(FLOOR.sigmaDown, downStep);
+    const quad = new FullScreenQuad(horizontal);
+    // The uniform objects, held so the frame does not look them up.
+    const horizontalSrc = horizontal.uniforms.src as { value: unknown };
+    const verticalSrc = vertical.uniforms.src as { value: unknown };
+    const shown = material.uniforms.tDiffuse as { value: unknown };
+
+    // Reflector renders its mirror from onBeforeRender, i.e. inside the scene pass. Keep its
+    // function, silence the hook, and call the function from the frame callback below.
+    const reflect = reflector.onBeforeRender;
+    reflector.onBeforeRender = () => {};
+    const group = new Group();
+    // Runs every frame at priority 0: nothing here allocates.
+    const draw = (renderer: WebGLRenderer, scene: Scene, camera: Camera) => {
+      reflect.call(
+        reflector,
+        renderer,
+        scene,
+        camera,
+        reflector.geometry,
+        reflector.material as Material,
+        group,
+      );
+      const current = renderer.getRenderTarget();
+      horizontalSrc.value = reflector.getRenderTarget().texture;
+      quad.material = horizontal;
+      renderer.setRenderTarget(across);
+      quad.render(renderer);
+      verticalSrc.value = across.texture;
+      quad.material = vertical;
+      renderer.setRenderTarget(down);
+      quad.render(renderer);
+      renderer.setRenderTarget(current);
+      shown.value = down.texture;
+    };
+    return { draw, reflector, across, down, acrossStep, downStep, horizontal, vertical, quad };
+  }, [side, store]);
+
+  useFrame((state) => floor.draw(state.gl, state.scene, state.camera), 0);
+
+  useEffect(() => {
+    const w = targetSize(size.width);
+    const h = targetSize(size.height);
+    floor.reflector.getRenderTarget().setSize(w, h);
+    floor.across.setSize(w, h);
+    floor.down.setSize(w, h);
+    floor.acrossStep.set(1 / w, 0);
+    floor.downStep.set(0, 1 / h);
+  }, [floor, size]);
+
+  useEffect(
+    () => () => {
+      floor.reflector.dispose();
+      floor.reflector.geometry.dispose();
+      floor.across.dispose();
+      floor.down.dispose();
+      floor.quad.dispose();
+      floor.horizontal.dispose();
+      floor.vertical.dispose();
+    },
+    [floor],
   );
+
+  return <primitive object={floor.reflector} />;
 }
 
 const VERTEX = `#include <fog_pars_vertex>

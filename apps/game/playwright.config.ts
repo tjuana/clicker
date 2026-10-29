@@ -10,7 +10,9 @@ export default defineConfig({
   timeout: 90_000,
   // A hard cap on the whole run. The per-test timeout above has been observed not to fire,
   // and a suite that hangs for a quarter of an hour in CI is worse than one that fails.
-  globalTimeout: 5 * 60_000,
+  // The suite's length is real rounds of ten seconds plus their countdowns, in two projects: it
+  // ran 4 min 54 s on 2026-10-29 (28 tests). The cap is about one and a half times that.
+  globalTimeout: 7 * 60_000,
   expect: { timeout: 25_000 },
   // One worker: a round already runs two browsers, and parallel rounds would fight over the
   // dev server for no gain.

@@ -24,9 +24,10 @@ function texels(sigma: number): Map<number, number> {
   return kernel;
 }
 
-// The owner's exercise B (docs/superpowers/specs/2026-10-27-arena-by-the-book-design.md, §3 B).
-// Skipped until he starts it: take `.skip` off and watch every test fail against the stub first.
-describe.skip('the floor blur kernel', () => {
+// Exercise B of the arena by the book (docs/superpowers/specs/2026-10-27-arena-by-the-book-design.md,
+// §3 B). Each test names a way a blur kernel goes wrong; all six were first seen failing against
+// a stub that threw.
+describe('the floor blur kernel', () => {
   it('neither brightens nor darkens what it blurs', () => {
     for (const sigma of SIGMAS) {
       const { weights } = gaussianTaps(sigma);

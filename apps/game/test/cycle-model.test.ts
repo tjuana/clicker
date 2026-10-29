@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createCycleGeometry } from '../src/client/scene/cycle-model';
+import { CYCLE_PART, createCycleGeometry } from '../src/client/scene/cycle-model';
 
 describe('the light-cycle model', () => {
   const geometry = createCycleGeometry();
@@ -16,11 +16,22 @@ describe('the light-cycle model', () => {
     expect(box?.max.x ?? 0).toBeGreaterThan(Math.abs(box?.min.x ?? 0));
   });
 
-  it('carries a brightness per vertex, so only rims and stripe reach the bloom', () => {
-    const colours = geometry.getAttribute('color');
-    expect(colours.count).toBe(geometry.getAttribute('position').count);
-    const values = new Set<number>();
-    for (let i = 0; i < colours.count; i += 1) values.add(Math.round(colours.getX(i) * 100));
-    expect([...values].sort((a, b) => a - b)).toEqual([16, 32, 100]);
+  it('gives the body id only to the body and nose, never to the canopy or the discs', () => {
+    const parts = geometry.getAttribute('part');
+    const position = geometry.getAttribute('position');
+    expect(parts.count).toBe(position.count);
+    const found = new Set<number>();
+    for (let i = 0; i < parts.count; i += 1) {
+      found.add(parts.getX(i));
+      if (parts.getX(i) !== CYCLE_PART.body) continue;
+      // The body box and the nose cone, in the model's own units before the 1.6 scale.
+      const [x, y, z] = [position.getX(i) / 1.6, position.getY(i) / 1.6, position.getZ(i) / 1.6];
+      expect(x).toBeGreaterThan(-0.45);
+      expect(x).toBeLessThan(0.78);
+      expect(y).toBeGreaterThan(0.26);
+      expect(y).toBeLessThan(0.52);
+      expect(Math.abs(z)).toBeLessThan(0.13);
+    }
+    expect([...found].sort()).toEqual([CYCLE_PART.dark, CYCLE_PART.body, CYCLE_PART.glow]);
   });
 });

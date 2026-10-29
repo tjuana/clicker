@@ -244,6 +244,10 @@ Every step ends with a row here: what it measured before and after, and what tha
 | Step | RTR | Before | After | What it bought |
 |---|---|---|---|---|
 | Frame meter (plan 14) | 18.1–18.3 | "120 fps" — the vsync cap, in every plan from 8 to 13 | M2 Pro, 1280 × 760, twenty players, vsync on: race GPU 1.20 ms (worst p95 2.01), CPU 0.30 ms (1.40), 15 draw calls, 64 k triangles; arena GPU 2.66 ms (4.46), CPU 0.30 ms (1.40), 29–33 calls, ~80 k triangles; clicker alone GPU 0.22 ms, 59 calls | The frame budget is 16.7 ms: the race uses about a fifth of it in the worst second and the arena about a third. Draw calls are gated in CI. On its first runs the gate caught plan 13 fetching the race's models again at the start and showing a blank race for two seconds in development (fixed). |
+| Clicker instanced (plan 16) | 18.4, 19 | 53 + 6 draw calls a player: 59 alone, 77 with four, 173 with twenty; four players clicking on the M2: GPU 0.22–0.24 ms, CPU 0.2–0.3 ms | 9 calls for any number of players; GPU 0.22–0.25 ms, CPU 0.1–0.2 ms | The draw count no longer grows with the room, and the clicker's gate runs in CI. The M2 never felt it; a phone's driver would have. |
+| A — the arena's colour chain (plan 16) | 5.6, 8.2 | The glow added after encoding, never tone-mapped. Arena, twenty riders, GPU median: 6.05–6.06 ms at dpr 2, 1.90–1.98 ms at dpr 1; 33 calls | `OutputPass` last: 6.04–6.10 ms at dpr 2, 2.37–2.61 ms at dpr 1; 33 calls | One tone map and one encoding for the whole picture: the halo keeps its size, the hottest colours lean towards white. Free on the owner's screen; at dpr 1 it costs half a millisecond, and only with the composer's multisampling (1.17 against 1.20 ms without it). `look.ts` left as it was *(decided by the agents, for the owner's eye)*. |
+| B — the floor (plan 16) | 11.6.4, 12.1, 9.8 | drei's mirror: a blob and copies under every bike; 33 calls; 6.01–6.10 ms at dpr 2 | Three's `Reflector` at a quarter of the canvas, a separable Gaussian in bilinear taps, σ 1.5 texels across and 8 down: 30 calls; 5.85–5.93 ms at dpr 2, 2.40 ms at dpr 1 | A vertical streak under each bike, no blob, no copies; six kernel tests, red first. Drawn inside the scene pass, as `Reflector` does by default, it cost 6.41 ms at dpr 2; drawn before it, 5.90. Reflection strength 3 → 2.3 *(decided by the agents, for the owner's eye)*. |
+| C — the bikes' surface (plan 16) | 6.3, 6.5, 9.5 | Flat parts, a brightness per vertex; 5.88–5.91 ms at dpr 2, 2.28 ms at dpr 1 | Seams, a stripe and a Fresnel rim computed from the model's own coordinates, still one draw for every bike: 5.92–5.93 ms at dpr 2, 2.35 ms at dpr 1 | A panelled body with a stripe that ends in an arrow at the nose, at no measurable cost. A dim bike never blooms: a unit test over the look's figures now, not a comment; the shader is built from the same figures. The review found the bloom keys on luminance, not the brightest channel: a lit bike's rims glow on only half the palette, as they did before. The outline is unchanged; new models stay technical debt. |
 
 Measured on the M2 only. A phone's budget is still unknown: the next number worth having is the
 same measurement on a mid-range Android phone over USB. Prototype that first: whether Chrome on
@@ -252,7 +256,9 @@ Android exposes `EXT_disjoint_timer_query_webgl2` is unverified, and `measure` i
 
 The exercises, in the order the owner chose on 2026-10-27. He writes each one; `qa` writes its red
 test first wherever an honest one exists; the frame meter measures it before and after, and the
-row above gets a sibling. A, B and C change the arena's picture and come from the
+row above gets a sibling. *Plan 16, 2026-10-29:* on the owner's "делай все по порядку" agents wrote
+exercises 1 to 4 instead, in this order, each with its row above; 5 to 8 are next. A, B and C
+change the arena's picture and come from the
 [arena-by-the-book design](2026-10-27-arena-by-the-book-design.md); their pictures are taken with
 `LABEL=before pnpm --filter @clicker/app run shots`, and again with `LABEL=after`.
 
@@ -312,6 +318,8 @@ row above gets a sibling. A, B and C change the arena's picture and come from th
        `FullScreenQuad` (`postprocessing/Pass.js`), restore the target, point `tDiffuse` at the
        result.
      - Taps three texels apart showed as horizontal bands across the streak.
+     - *Plan 16:* the blur did not stay in `onBeforeRender` — see "`Reflector` draws its mirror
+       inside the scene pass" below.
    - *Numbers:* on the M2 the floor costs nothing the meter can separate from noise — drei's
      2.64–2.70 ms GPU median, no floor at all 2.71–2.73, `Reflector` at 256² with two blur passes
      2.68. Record GPU and draw calls before and after; this one is judged by the picture.
@@ -340,10 +348,13 @@ row above gets a sibling. A, B and C change the arena's picture and come from th
 
 P7 and P8 only if the owner wants them.
 
-**Where the arena's time goes is still open.** Plan 15's prototype took the floor away entirely and
-the arena's GPU median stayed at 2.7 ms. The bloom's passes and the full-screen multisampled
-target are the suspects; a hunt by RTR 18.2's method — take one stage away, see whether the time
-moves — is track B's step 7.
+**Where the arena's time goes — answered in plan 16.** By RTR 18.2's method, one stage taken away
+at a time: on the owner's screen (dpr 2), twenty riders, the arena's GPU median is 6.05 ms with the
+composer's 4× multisampled half-float target and about 3.1 ms without it. Half the arena's frame is
+that target. Plan 15's 2.7 ms was measured at dpr 1, where the target is a quarter as large.
+Dropping the multisampling on dense screens changes how edges look, so it is the owner's call; the
+canvas's `dpr` is `[1, 2]`. And `measure` runs at dpr 1 only, which hid half of what plan 16 found:
+A costs something only at dpr 1, the floor's interrupted pass only at dpr 2.
 
 Traps plan 14's review found on the way to these exercises:
 
@@ -358,5 +369,13 @@ Traps plan 14's review found on the way to these exercises:
   within five frames, not on the first one.
 - **The floor and ambient occlusion move the gates' constants** (`CYCLES_CALLS`, `RACE_CALLS` in
   `e2e/frame.spec.ts`) — by design: drei's floor is 9 to 12 draws, `Reflector` 4 to 7 plus one per
-  blur pass. The commit says why. `OutputPass` moves nothing: it takes over the bloom's own copy
+  blur pass. *Plan 16:* the arena went from 33 to 30. The commit says why. `OutputPass` moves nothing: it takes over the bloom's own copy
   to the screen (plan 15's review, checked with the gate).
+- **`Reflector` draws its mirror inside the scene pass** (plan 16). Its `onBeforeRender` runs in
+  the middle of the composer drawing into its multisampled target, and a tiled GPU stores and
+  reloads every sample of that target around it: 6.41 against 5.90 ms at dpr 2, nothing visible
+  at dpr 1. The arena draws the mirror and its blur in a frame callback at priority 0, between the
+  update at −1 and the composer at 1, as drei did.
+- **The shader's material id cannot be the vertex colour** (plan 16). Three multiplies the
+  instance colour into `vColor` before the fragment shader reads it, so a slot colour with a zero
+  channel erases the id. The bikes carry their part's level in an attribute of its own.

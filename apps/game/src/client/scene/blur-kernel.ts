@@ -3,11 +3,11 @@
  * the weight of each. A tap may sit between two texels, so that one bilinear read weighs both
  * (RTR 12.1).
  *
- * Exercise B of the arena by the book, written by the owner against
- * `test/scene-blur-kernel.test.ts`. It asks for weights that sum to 1, mirror each other, fall
- * off from the centre and come from taps at most two texels apart, and a variance within a tenth
- * of σ². That last one wants the kernel to reach out about 2.5σ: Figure 12.2's five taps pass at
- * σ = 1, but cut at 2σ for wider blurs they come out narrower than asked for.
+ * The Gaussian is sampled at whole texels out to R = ceil(3 sigma), where it has fallen to a
+ * hundredth, and normalised to sum 1. Outwards from the centre, texels are merged in pairs
+ * (1,2), (3,4), ...: one read at the weighted mean position, with the summed weight, gives the
+ * bilinear filter exactly the two weights it was to blend. That is half the reads of the plain
+ * kernel for the identical picture. A last texel with no partner keeps a tap of its own.
  */
 export interface Taps {
   offsets: Float32Array;
@@ -15,5 +15,29 @@ export interface Taps {
 }
 
 export function gaussianTaps(sigma: number): Taps {
-  throw new Error(`gaussianTaps(${sigma}): exercise B, RTR 12.1, is not written yet`);
+  const reach = Math.ceil(3 * sigma);
+  const w = new Float64Array(reach + 1);
+  let total = 0;
+  for (let k = 0; k <= reach; k += 1) {
+    const weight = Math.exp((-k * k) / (2 * sigma * sigma));
+    w[k] = weight;
+    total += k === 0 ? weight : 2 * weight;
+  }
+  const pairs = Math.ceil(reach / 2);
+  const n = 2 * pairs + 1;
+  const offsets = new Float32Array(n);
+  const weights = new Float32Array(n);
+  weights[pairs] = (w[0] as number) / total;
+  for (let p = 0; p < pairs; p += 1) {
+    const k = 2 * p + 1;
+    const a = w[k] as number;
+    const b = k + 1 <= reach ? (w[k + 1] as number) : 0;
+    const weight = (a + b) / total;
+    const offset = (k * a + (k + 1) * b) / (a + b);
+    offsets[pairs + 1 + p] = offset;
+    weights[pairs + 1 + p] = weight;
+    offsets[pairs - 1 - p] = -offset;
+    weights[pairs - 1 - p] = weight;
+  }
+  return { offsets, weights };
 }

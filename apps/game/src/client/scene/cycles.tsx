@@ -7,19 +7,19 @@ import {
   HalfFloatType,
   InstancedMesh,
   Matrix4,
-  MeshBasicMaterial,
   Quaternion,
   Vector2,
   Vector3,
   WebGLRenderTarget,
 } from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { seenOnScreen } from '../cycles/latency-store';
 import { useCycles } from '../cycles/store';
 import type { Sample, Step, Timeline } from '../cycles/timeline';
-import { createCycleGeometry } from './cycle-model';
+import { createCycleGeometry, createCycleMaterial } from './cycle-model';
 import { Floor, Grid } from './floor';
 import { FrameMeter } from './frame-meter';
 import { BIKE_LEVEL, BLOOM, BORDER_COLOUR, DIM_LEVEL, SLOT_COLOURS } from './look';
@@ -168,8 +168,8 @@ function Field({ side, tickMs, you }: { side: number; tickMs: number; you: strin
 
   const bikes = useMemo(() => {
     const geometry = createCycleGeometry();
-    // Vertex colours carry each part's brightness; the instance colour, the slot's.
-    const material = new MeshBasicMaterial({ toneMapped: false, vertexColors: true });
+    // The shader draws the surface; the instance colour is the slot's.
+    const material = createCycleMaterial();
     const mesh = new InstancedMesh(geometry, material, MAX_BIKES);
     mesh.frustumCulled = false;
     return { mesh, geometry, material };
@@ -179,7 +179,10 @@ function Field({ side, tickMs, you }: { side: number; tickMs: number; you: strin
   // The size here is a placeholder: the effect below sets the real one, and again on every resize.
   // The composer renders into its own target, which the canvas's antialias flag does not reach:
   // without samples here every edge stair-steps. Half float keeps the bloom's brightness past 1.
-  const { composer, bloom } = useMemo(() => {
+  // OutputPass goes last so the whole picture, glow included, is tone-mapped and encoded once,
+  // at the final stage (RTR 5.6, 8.2.2). Without it the bloom, being last, drew its input to the
+  // screen encoded and then added linear glow on top, which was never tone-mapped.
+  const { composer, bloom, output } = useMemo(() => {
     const target = new WebGLRenderTarget(1, 1, { type: HalfFloatType, samples: 4 });
     const chain = new EffectComposer(gl, target);
     chain.addPass(new RenderPass(scene, camera));
@@ -190,7 +193,9 @@ function Field({ side, tickMs, you }: { side: number; tickMs: number; you: strin
       BLOOM.threshold,
     );
     chain.addPass(pass);
-    return { composer: chain, bloom: pass };
+    const out = new OutputPass();
+    chain.addPass(out);
+    return { composer: chain, bloom: pass, output: out };
   }, [gl, scene, camera]);
 
   useEffect(() => {
@@ -201,9 +206,10 @@ function Field({ side, tickMs, you }: { side: number; tickMs: number; you: strin
   useEffect(
     () => () => {
       bloom.dispose();
+      output.dispose();
       composer.dispose();
     },
-    [composer, bloom],
+    [composer, bloom, output],
   );
   useEffect(() => () => walls.dispose(), [walls]);
   useEffect(
@@ -215,10 +221,10 @@ function Field({ side, tickMs, you }: { side: number; tickMs: number; you: strin
     [bikes],
   );
 
-  // R3F runs frame callbacks in ascending priority, and drei's reflector renders the floor's
-  // mirror at priority 0. The scene is therefore brought up to date at -1, before the mirror
-  // looks at it, and only drawn at 1 (a positive priority is also what stops R3F rendering by
-  // itself). Done in one callback at 1, the reflection showed the previous frame's arena.
+  // R3F runs frame callbacks in ascending priority. The floor's mirror is drawn at 0 (see Floor),
+  // reading the camera's world matrix and the bikes as they are then, so everything is brought up
+  // to date at -1 and only drawn at 1 (a positive priority is also what stops R3F rendering by
+  // itself). Done in one callback, the reflection showed the previous frame's arena.
   useFrame((_, delta) => {
     const { model, timeline } = useCycles.getState();
     const now = performance.now();
@@ -358,7 +364,7 @@ export default function Cycles({ you }: { you: string | null }) {
   return (
     <Canvas
       dpr={[1, 2]}
-      // Only the bloom pass's full-screen quad reaches the default framebuffer now; the scene is
+      // Only the output pass's full-screen quad reaches the default framebuffer now; the scene is
       // drawn into the composer's own multisampled target. Canvas MSAA would cost a multisampled
       // colour and depth buffer and a resolve every frame for edges nobody sees. Depth stays.
       gl={{ antialias: false }}
