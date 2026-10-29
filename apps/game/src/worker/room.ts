@@ -310,7 +310,7 @@ export class Room extends Server<Env> {
     const round = this.#state.phase === 'countdown' || this.#state.phase === 'running';
     const live = round && this.#config.tickMs === null;
     if (live && this.#timer === null) {
-      this.#timer = setInterval(() => this.#broadcastSnapshot(), SNAPSHOT_INTERVAL_MS);
+      this.#timer = setInterval(() => this.#beat(), SNAPSHOT_INTERVAL_MS);
       return;
     }
     if (!live && this.#timer !== null) {
@@ -330,6 +330,17 @@ export class Room extends Server<Env> {
     // Only the end of the round has anything to write; a plain step settles nothing.
     if (phaseChanged) void this.#settle({ type: 'step' }, true);
     return this.#state.phase === 'running';
+  }
+
+  /**
+   * One beat of a clicker round. Time moves the phase here too, not only the alarm: the alarm can
+   * come late on a loaded machine, and until it does every snapshot would still say `countdown`
+   * for a goAt that has passed. A beat that changes nothing writes nothing: this is ten a second.
+   */
+  #beat(): void {
+    const phaseChanged = this.#apply({ type: 'tick' });
+    if (phaseChanged) void this.#settle({ type: 'tick' }, true);
+    else this.#broadcastSnapshot();
   }
 
   /** The snapshot is built once for everyone, not per connection. */

@@ -226,6 +226,38 @@ describe('room over websocket', () => {
     client.close();
   });
 
+  it('moves the phase from its own heartbeat when the alarm is late', async () => {
+    const roomId = generateId();
+    const mutableEnv = env as unknown as { COUNTDOWN_MS: string; ROUND_MS: string };
+    const original = { countdown: mutableEnv.COUNTDOWN_MS, round: mutableEnv.ROUND_MS };
+    // A countdown long enough to delete the alarm well before it is due, a round long enough
+    // not to end under the test: no timing between the two is left to chance.
+    mutableEnv.COUNTDOWN_MS = '600';
+    mutableEnv.ROUND_MS = '5000';
+
+    try {
+      const host = await connect(roomId);
+      host.send({ type: 'join', playerId: generateId(), name: 'Аня', hostKey: generateId() });
+      await host.waitFor(isWelcome);
+      host.send({ type: 'start' });
+      await host.waitFor(
+        (message): message is Snapshot => isSnapshot(message) && message.round !== null,
+      );
+
+      // The alarm is what a loaded machine delivers late; here it never comes at all.
+      const stub = env.Room.get(env.Room.idFromName(roomId));
+      await runInDurableObject(stub, (_instance, state) => state.storage.deleteAlarm());
+
+      const running = await host.waitFor(isRunningSnapshot);
+      expect(running.phase).toBe('running');
+
+      host.close();
+    } finally {
+      mutableEnv.COUNTDOWN_MS = original.countdown;
+      mutableEnv.ROUND_MS = original.round;
+    }
+  });
+
   it('streams more than one snapshot during a running round', async () => {
     const roomId = generateId();
     const host = await connect(roomId);
