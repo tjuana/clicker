@@ -2,6 +2,7 @@ import { RACE, TILE, TURN } from '@clicker/game';
 import {
   Box3,
   BufferGeometry,
+  Color,
   InstancedMesh,
   Matrix4,
   MeshBasicMaterial,
@@ -12,7 +13,8 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { describe, expect, it } from 'vitest';
 import car from '../public/race/raceCarRed.glb?inline';
 import type { Sample } from '../src/client/race/timeline';
-import { bakeCar, carYaw, chasePlace, poseCars } from '../src/client/scene/race-cars';
+import { SLOT_COLOURS } from '../src/client/scene/look';
+import { bakeCar, carYaw, chasePlace, paintBodies, poseCars } from '../src/client/scene/race-cars';
 import { CAR, CHASE } from '../src/client/scene/race-look';
 
 async function loadCar(): Promise<Object3D> {
@@ -116,6 +118,20 @@ describe('posing the cars', () => {
   it('skips a slot past the instances instead of writing out of bounds', () => {
     const m = mesh();
     expect(() => poseCars([m], sample([CAR.capacity + 4]))).not.toThrow();
+  });
+});
+
+describe('painting the car bodies', () => {
+  it('paints every car body a slot colour, the thirteenth like the first', () => {
+    // The palette is shorter than the grid: instances past it keep three's default white unless
+    // the slot wraps.
+    const m = new InstancedMesh(new BufferGeometry(), new MeshBasicMaterial(), CAR.capacity);
+    paintBodies(m);
+    const got = new Color();
+    for (let slot = 0; slot < CAR.capacity; slot++) {
+      m.getColorAt(slot, got);
+      expect(got.getHex()).toBe((SLOT_COLOURS[slot % SLOT_COLOURS.length] as Color).getHex());
+    }
   });
 });
 

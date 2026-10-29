@@ -9,7 +9,7 @@ import {
   CYCLE_STRIPE,
   CYCLE_SURFACE_MAX,
   DIM_LEVEL,
-  SLOT_COLOURS,
+  SLOT_GLOW,
 } from '../src/client/scene/look';
 
 /**
@@ -18,8 +18,7 @@ import {
  * dim. The same coefficients three uses, applied to the same linear working-space colours.
  */
 const WEIGHTS = ColorManagement.getLuminanceCoefficients(new Vector3());
-const luminances = SLOT_COLOURS.map((c) => c.r * WEIGHTS.x + c.g * WEIGHTS.y + c.b * WEIGHTS.z);
-const BRIGHTEST = Math.max(...luminances);
+const luminances = SLOT_GLOW.map((c) => c.r * WEIGHTS.x + c.g * WEIGHTS.y + c.b * WEIGHTS.z);
 
 describe('the bikes and the bloom threshold', () => {
   it('a bike that is not laying its wall never blooms, whatever the surface does', () => {
@@ -34,9 +33,17 @@ describe('the bikes and the bloom threshold', () => {
     }
   });
 
-  it('a lit bike glows at all: the rims and stripe of the brightest slot bloom', () => {
-    for (const level of [CYCLE_GLOW, CYCLE_STRIPE]) {
-      expect(level * BIKE_LEVEL * BRIGHTEST).toBeGreaterThan(BLOOM.threshold);
+  it("every slot's lit rims and stripe bloom", () => {
+    // Not the brightest slot only: with raw colours half the palette (every blue, violet, magenta
+    // and red) stayed under the threshold and those bikes looked switched off.
+    for (const lum of luminances) {
+      for (const level of [CYCLE_GLOW, CYCLE_STRIPE]) {
+        expect(level * BIKE_LEVEL * lum).toBeGreaterThan(BLOOM.threshold);
+      }
     }
+  });
+
+  it('every slot glows equally bright', () => {
+    for (const lum of luminances) expect(lum).toBeCloseTo(luminances[0] as number, 6);
   });
 });
