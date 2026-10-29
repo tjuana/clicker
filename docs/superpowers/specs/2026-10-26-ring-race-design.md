@@ -317,5 +317,14 @@ What plan 13's review changed:
 - **Crossing axes push along the line between the centres** (west if they coincide), far enough
   that the axes' shadows on that line are two radii apart: an X has no closest-point direction.
 - **Pushes round away from zero**, so a pair is never left short of two radii by rounding.
-- **No car moves further in a tick than its radius** (top speed 218 units against 266), a tested
-  invariant: no car can pass through another between ticks without a swept test.
+- **No car drives further in a tick than its radius** (top speed 218 units against 266), a tested
+  invariant: no car can drive through another between ticks without a swept test. A push is not
+  bound by it: up to 614 units a pass when axes cross.
+- **Measured by bodies**, a whole race of twenty bots (seed 1): the deepest overlap fell from 180.8
+  to 48.6 units. Plan 11's "worst overlap measured: 0.0147 tile" was measured by circles; by
+  bodies the old code reached about 0.044 tile. The race's tests now measure bodies too.
+- **Cars touch the walls more**: side contacts at a car's middle now push, and the longest run on
+  a wall went from 9 ticks to 24 (limit 60).
+- **Known, left:** the wall check reads the two ends of a car's axis. Against a bend's inner wall
+  the middle can be deeper than both: 6 to 14 car-ticks of a twenty-bot race, at most 69 units
+  (4 to 10, at most 138, before the capsules).

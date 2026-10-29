@@ -147,3 +147,35 @@ change (bins), and each pair is one segment test instead of four circle tests.
 - [ ] Study doc: finding 4 and P3 corrected (the waist; a capsule's own X case), a Progress row.
   The race's spec: the decision.
 - [ ] `review-and-merge`; the Russian summary.
+
+---
+
+## Where reality changed the plan
+
+- **A red test was wrong.** "A segment of no length" expected 100 from (400, 0) to a segment ending
+  at x = 200. The engine agent stopped instead of fitting the code to it; the point moved to x = 300.
+- **Truncated pushes left pairs short.** The prototype passed every new test but an old one,
+  530.4 against 531: `Math.trunc` of each push, and the second pass's leftover truncated to 0.
+  Pushes round away from zero.
+
+## What the review found
+
+An Opus review of `5503235..bca09ed` found no defect in `closest` or `compare`. It checked two cars
+exactly over 149,908 overlapping positions (none left short), determinism over 200 shuffles, bounded
+pushes. Its findings, each reproduced as a test that fails on the defect:
+
+1. **The whole-race tests still measured circles**, so they could not see what this plan fixes: the
+   pre-plan code's deepest overlap in the test's own race was 180.8 units by bodies (limit 122.9)
+   and 81 by circles. `race-bot`, `race-race` and `race-bump` now share a body measure
+   (`test/race-body.ts`); on the old bump the race test is red.
+2. **The sweep allowed 6 units of shortfall**, which let truncated pushes through; now 1 (568 pairs
+   red with `Math.trunc`).
+3. **The crossing threshold was unguarded**: `dist === 0` instead of `dist < 1` passed everything,
+   though crossing at a fractional point leaves a distance of 3.6e-12 and the push then went at
+   right angles to the centre line. A test now pins the direction.
+4. **Wall contact grew** (longest run 9 → 24 ticks) and stale numbers and comments: recorded in the
+   race spec and the study doc, comments fixed.
+5. Information: three small objects per compared pair; changed only if a measurement says so.
+
+Found while fixing the comments: the wall check reads the axis's two ends, and at a bend's inner wall
+the middle can be deeper than both. Measured and left (race spec, "Known, left").
