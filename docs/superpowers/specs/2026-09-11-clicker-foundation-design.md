@@ -420,8 +420,9 @@ In the connection state (survives sleep): `{ playerId, publicId }` after a succe
   that does not need it returns nothing, and the server sends nothing.
 - **Simulation tick.** If the mode has `tickMs !== null`, the same room timer first advances time
   with the `tick` command, and only then broadcasts a snapshot. The clicker's `tickMs` is empty:
-  time is advanced by incoming commands and the alarm, and the timer is busy with the broadcast
-  alone. A snake, on the contrary, has to move even when nobody presses keys — there the simulation
+  it has no simulation step, and time is advanced by incoming commands, the alarm and the snapshot
+  timer, which applies a `tick` before every broadcast (plan 17: a late alarm had left every
+  snapshot saying `countdown` past `goAt`). A beat that changes nothing writes nothing. A snake, on the contrary, has to move even when nobody presses keys — there the simulation
   step will become the main engine of the round. The broadcast rate stays its own: the simulation
   can run more often than snapshots go out.
 

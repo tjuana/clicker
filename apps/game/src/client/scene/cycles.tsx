@@ -19,6 +19,7 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { seenOnScreen } from '../cycles/latency-store';
 import { useCycles } from '../cycles/store';
 import type { Sample, Step, Timeline } from '../cycles/timeline';
+import { composerSamples } from './composer-samples';
 import { createCycleGeometry, createCycleMaterial } from './cycle-model';
 import { Floor, Grid } from './floor';
 import { FrameMeter } from './frame-meter';
@@ -158,6 +159,7 @@ const wrapAngle = (angle: number): number => Math.atan2(Math.sin(angle), Math.co
 
 function Field({ side, tickMs, you }: { side: number; tickMs: number; you: string | null }) {
   const { gl, scene, camera, size } = useThree();
+  const dpr = useThree((s) => s.viewport.dpr);
   const walls = useMemo(() => createWalls(side, tickMs), [side, tickMs]);
   const rig = useMemo(createRig, []);
 
@@ -178,12 +180,17 @@ function Field({ side, tickMs, you }: { side: number; tickMs: number; you: strin
   // Bloom keys on brightness: see BIKE_LEVEL. Its figures are in look.ts.
   // The size here is a placeholder: the effect below sets the real one, and again on every resize.
   // The composer renders into its own target, which the canvas's antialias flag does not reach:
-  // without samples here every edge stair-steps. Half float keeps the bloom's brightness past 1.
+  // without samples here every edge stair-steps on an ordinary screen; a dense one drops them, see
+  // composerSamples. The composer reads the pixel ratio when built, so dpr rebuilds it. Half float
+  // keeps the bloom's brightness past 1.
   // OutputPass goes last so the whole picture, glow included, is tone-mapped and encoded once,
   // at the final stage (RTR 5.6, 8.2.2). Without it the bloom, being last, drew its input to the
   // screen encoded and then added linear glow on top, which was never tone-mapped.
   const { composer, bloom, output } = useMemo(() => {
-    const target = new WebGLRenderTarget(1, 1, { type: HalfFloatType, samples: 4 });
+    const target = new WebGLRenderTarget(1, 1, {
+      type: HalfFloatType,
+      samples: composerSamples(dpr),
+    });
     const chain = new EffectComposer(gl, target);
     chain.addPass(new RenderPass(scene, camera));
     const pass = new UnrealBloomPass(
@@ -196,7 +203,7 @@ function Field({ side, tickMs, you }: { side: number; tickMs: number; you: strin
     const out = new OutputPass();
     chain.addPass(out);
     return { composer: chain, bloom: pass, output: out };
-  }, [gl, scene, camera]);
+  }, [gl, scene, camera, dpr]);
 
   useEffect(() => {
     composer.setSize(size.width, size.height);
@@ -365,8 +372,9 @@ export default function Cycles({ you }: { you: string | null }) {
     <Canvas
       dpr={[1, 2]}
       // Only the output pass's full-screen quad reaches the default framebuffer now; the scene is
-      // drawn into the composer's own multisampled target. Canvas MSAA would cost a multisampled
-      // colour and depth buffer and a resolve every frame for edges nobody sees. Depth stays.
+      // drawn into the composer's own target, multisampled below dpr 2. Canvas MSAA would cost a
+      // multisampled colour and depth buffer and a resolve every frame for edges nobody sees.
+      // Depth stays.
       gl={{ antialias: false }}
       camera={{ fov: 60, near: 0.1, far: 400, position: [side / 2, 20, side / 2] }}
       style={{ width: '100%', height: '100%' }}

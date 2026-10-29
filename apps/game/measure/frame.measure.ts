@@ -34,7 +34,7 @@ const median = (xs: number[]): number =>
   [...xs].sort((a, b) => a - b)[Math.floor((xs.length - 1) / 2)] as number;
 
 for (const mode of ['race', 'cycles'] as const) {
-  test(`${mode}, twenty players: a frame fits in 60 fps`, async ({ page }) => {
+  test(`${mode}, twenty players: a frame fits in 60 fps`, async ({ page }, testInfo) => {
     await host(page, mode, 19);
     // The player's own car drives, so the chase camera moves as it does in play.
     if (mode === 'race') await page.keyboard.down('ArrowUp');
@@ -64,7 +64,7 @@ for (const mode of ['race', 'cycles'] as const) {
     const headroom = FRAME_MS - gpu.worst - cpu.worst;
     console.log(
       [
-        `${mode}, 20 players, 1280x760`,
+        `${mode}, 20 players, 1280x760 at dpr ${testInfo.project.use.deviceScaleFactor}`,
         `  GPU  median ${gpu.median.toFixed(2)} ms, worst p95 ${gpu.worst.toFixed(2)} ms`,
         `  CPU  median ${cpu.median.toFixed(2)} ms, worst p95 ${cpu.worst.toFixed(2)} ms`,
         `  ${calls} draw calls, ${Math.round(tris / 1000)}k triangles`,

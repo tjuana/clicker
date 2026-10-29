@@ -44,7 +44,7 @@ Hard rules:
 - **A frame's cost is read from the frame meter, never from fps.** `requestAnimationFrame` caps fps
   at the display's refresh rate, and that cap was reported as a measurement in plans 8 to 13. Press
   `P` in a scene, or run `pnpm --filter @clicker/app run measure`: GPU and CPU milliseconds and draw
-  calls.
+  calls, at dpr 1 and dpr 2 — plan 16 found costs that showed at one density only.
 - **Comments explain why.** What the code does is visible in the code.
 - **No invisible characters in source.** A test that checks a control character or a bidi override
   writes it as an escape — `'\u0000'`, `'\u202e'` — never as the raw character. One raw NUL makes git

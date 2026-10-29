@@ -93,8 +93,9 @@ const targetSize = (css: number): number => Math.max(1, Math.round(css * FLOOR.f
  *
  * The mirror and both blurs are drawn in a frame callback at priority 0, after `Field` has updated
  * the arena (-1) and before the composer draws it (1), not in the Reflector's `onBeforeRender`:
- * there they would interrupt the composer's multisampled scene pass, which a tiled GPU pays for by
- * storing and reloading every sample: 6.41 against 5.90 ms GPU at dpr 2 with 20 riders.
+ * there they would interrupt the composer's scene pass, which a tiled GPU pays for by storing and
+ * reloading its target: 6.41 against 5.90 ms GPU at dpr 2 with 20 riders, measured when that target
+ * was still multisampled at every density (plan 16; it is not at dpr 2 since plan 17).
  *
  * Mounted beside `Field`, not in it: `Field` is rebuilt on every side or tick change. Rebuilt
  * here only when the side changes, and then everything it made is disposed.

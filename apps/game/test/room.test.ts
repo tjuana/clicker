@@ -1,6 +1,6 @@
 import { runInDurableObject, SELF } from 'cloudflare:test';
 import { env } from 'cloudflare:workers';
-import type { RoomState } from '@clicker/game';
+import { DEFAULT_CONFIG, type RoomState } from '@clicker/game';
 import { generateId, PROTOCOL_VERSION } from '@clicker/protocol';
 import { describe, expect, it } from 'vitest';
 import { connect, isError, isSnapshot, isWelcome, type Snapshot } from './support';
@@ -226,27 +226,76 @@ describe('room over websocket', () => {
     client.close();
   });
 
-  it('streams more than one snapshot during a running round', async () => {
+  it('moves the phase from its own heartbeat when the alarm is late', async () => {
     const roomId = generateId();
-    const host = await connect(roomId);
+    const mutableEnv = env as unknown as { COUNTDOWN_MS: string; ROUND_MS: string };
+    const original = { countdown: mutableEnv.COUNTDOWN_MS, round: mutableEnv.ROUND_MS };
+    // A countdown long enough to delete the alarm well before it is due, a round long enough
+    // not to end under the test: no timing between the two is left to chance.
+    mutableEnv.COUNTDOWN_MS = '600';
+    mutableEnv.ROUND_MS = '5000';
 
-    host.send({ type: 'join', playerId: generateId(), name: 'Аня', hostKey: generateId() });
-    await host.waitFor(isWelcome);
-    host.send({ type: 'start' });
-    await host.waitFor(isRunningSnapshot);
+    try {
+      const host = await connect(roomId);
+      host.send({ type: 'join', playerId: generateId(), name: 'Аня', hostKey: generateId() });
+      await host.waitFor(isWelcome);
+      host.send({ type: 'start' });
+      await host.waitFor(
+        (message): message is Snapshot => isSnapshot(message) && message.round !== null,
+      );
 
-    // The 10 Hz broadcast is the server's heartbeat: we wait until at least three running-phase
-    // snapshots pile up, instead of guessing with a fixed pause.
-    const deadline = Date.now() + 2000;
-    let runningSnapshots: Snapshot[] = [];
-    do {
-      runningSnapshots = host.received.filter(isRunningSnapshot);
-      if (runningSnapshots.length >= 3) break;
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    } while (Date.now() < deadline);
+      // The alarm is what a loaded machine delivers late; here it never comes at all.
+      const stub = env.Room.get(env.Room.idFromName(roomId));
+      await runInDurableObject(stub, (_instance, state) => state.storage.deleteAlarm());
 
-    expect(runningSnapshots.length).toBeGreaterThanOrEqual(3);
+      const running = await host.waitFor(isRunningSnapshot);
+      expect(running.phase).toBe('running');
 
-    host.close();
+      // The beat that moved the phase must also keep it: the put is issued before the broadcast,
+      // so storage already says `running`, and the alarm has moved on to the round's end. Without
+      // them a restart would read the round the beat finished as aborted.
+      const { stored, alarm } = await runInDurableObject(stub, async (_instance, state) => ({
+        stored: await state.storage.get<RoomState>('state'),
+        alarm: await state.storage.getAlarm(),
+      }));
+      expect(stored?.phase).toBe('running');
+      expect(alarm).toBe((running.round?.endsAt ?? Number.NaN) + DEFAULT_CONFIG.lateGraceMs);
+
+      host.close();
+    } finally {
+      mutableEnv.COUNTDOWN_MS = original.countdown;
+      mutableEnv.ROUND_MS = original.round;
+    }
+  });
+
+  it('streams snapshots while a clicker round runs', async () => {
+    const roomId = generateId();
+    const mutableEnv = env as unknown as { COUNTDOWN_MS: string; ROUND_MS: string };
+    const original = { countdown: mutableEnv.COUNTDOWN_MS, round: mutableEnv.ROUND_MS };
+    // About fifty beats fit in the round and the test needs two: no timing is left to chance.
+    mutableEnv.COUNTDOWN_MS = '50';
+    mutableEnv.ROUND_MS = '5000';
+
+    try {
+      const host = await connect(roomId);
+      host.send({ type: 'join', playerId: generateId(), name: 'Аня', hostKey: generateId() });
+      await host.waitFor(isWelcome);
+      host.send({ type: 'start' });
+
+      const deadline = Date.now() + 2000;
+      let times = new Set<number>();
+      do {
+        times = new Set(host.received.filter(isRunningSnapshot).map((s) => s.serverNow));
+        if (times.size >= 2) break;
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      } while (Date.now() < deadline);
+
+      expect(times.size).toBeGreaterThanOrEqual(2);
+
+      host.close();
+    } finally {
+      mutableEnv.COUNTDOWN_MS = original.countdown;
+      mutableEnv.ROUND_MS = original.round;
+    }
   });
 });
