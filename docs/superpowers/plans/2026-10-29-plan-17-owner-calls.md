@@ -131,3 +131,24 @@ test's round is 200 ms (`COUNTDOWN_MS 50`, `ROUND_MS 200` in `vitest.config.ts`)
   running: dpr 2 6.36 / 6.36 ms → 2.76 / 2.77 ms GPU median (worst p95 7.31 / 7.53 → 3.55 / 3.27);
   dpr 1 2.37 / 2.33 → 2.34 / 2.36. 30 calls in every run. Not checked in a real window: a window
   moved between screens of different density (the memo depends on the canvas's `dpr`).
+
+## What the review found
+
+An Opus review of `d3e66fd..e314130` found no defect in the code. Its findings:
+
+1. **The heartbeat test did not check that the beat's phase change is stored** — confirmed: with the
+   beat broadcasting but never settling, `room.test.ts` stayed 13/13. The test now also reads the
+   stored phase and the rescheduled alarm, and goes red on that mutation.
+2. **One redundant write a round** — confirmed by the reviewer's throwaway test, recorded, not
+   fixed. In production the countdown is 3000 ms, thirty beats, so the thirtieth beat and the alarm
+   at `goAt` are due together; when the beat wins, the alarm already dispatched writes the same
+   state and the same alarm again. Same content, in order, one phase change. A narrow follow-on is
+   plausible, not reproduced: a stale alarm that lands inside "does not rewrite the alarm"'s patched
+   window would fail that test; in the test config the beat only wins when the alarm is ≥ 50 ms
+   late.
+3. **Stale comments and spec text** — the clicker foundation spec, `tickMs`'s comment, the
+   arena's canvas and floor comments. Fixed.
+4. **A window moved between screens does not rebuild the composer by itself** — information, not a
+   defect: R3F recomputes `viewport.dpr` only when the canvas's box changes, so a move at the same
+   CSS size leaves both the renderer's ratio and the composer at the old density until the next
+   resize. They stay consistent with each other.
