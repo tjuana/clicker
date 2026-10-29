@@ -1,5 +1,5 @@
 import { formatTicks, formatTiles } from '../race/format';
-import { raceColour } from '../slot-colours';
+import { raceColour } from '../slots';
 import { useClient } from '../store';
 import { strings } from '../strings';
 import { theme } from '../theme';

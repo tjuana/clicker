@@ -1,7 +1,7 @@
 import { type CSSProperties, useEffect, useRef } from 'react';
 import { useMuted } from '../audio/mute';
 import { secondsLeft, useServerClock } from '../clock';
-import { slotColour } from '../slot-colours';
+import { slotColour } from '../slots';
 import { useClient } from '../store';
 import { strings } from '../strings';
 import { theme } from '../theme';

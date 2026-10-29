@@ -1,6 +1,6 @@
 import { FINISHED } from '@clicker/game';
 import { type CSSProperties, useEffect, useRef, useState } from 'react';
-import { raceColour } from '../slot-colours';
+import { raceColour } from '../slots';
 import { useClient } from '../store';
 import { strings } from '../strings';
 import { theme } from '../theme';

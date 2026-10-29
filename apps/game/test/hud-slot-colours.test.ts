@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SLOT_COLOURS } from '../src/client/scene/look';
-import { raceColour, slotColour } from '../src/client/slot-colours';
+import { raceColour, slotColour } from '../src/client/slots';
 
 const sceneHex = (index: number): string =>
   `#${(SLOT_COLOURS[index % SLOT_COLOURS.length] as { getHexString(): string }).getHexString()}`;
