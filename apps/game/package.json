@@ -10,7 +10,7 @@
     "deploy": "vite build && wrangler deploy",
     "e2e": "playwright test",
     "measure": "playwright test -c playwright.measure.config.ts measure/frame.measure",
-    "shots": "playwright test -c playwright.measure.config.ts measure/shots.measure",
+    "shots": "playwright test -c playwright.measure.config.ts --project=dpr2 measure/shots.measure",
     "test": "vitest run",
     "types": "wrangler types",
     "typecheck": "wrangler types && tsc -p tsconfig.client.json --noEmit && tsc -p tsconfig.worker.json --noEmit"
