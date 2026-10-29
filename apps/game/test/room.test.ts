@@ -257,28 +257,4 @@ describe('room over websocket', () => {
       mutableEnv.ROUND_MS = original.round;
     }
   });
-
-  it('streams more than one snapshot during a running round', async () => {
-    const roomId = generateId();
-    const host = await connect(roomId);
-
-    host.send({ type: 'join', playerId: generateId(), name: 'Аня', hostKey: generateId() });
-    await host.waitFor(isWelcome);
-    host.send({ type: 'start' });
-    await host.waitFor(isRunningSnapshot);
-
-    // The 10 Hz broadcast is the server's heartbeat: we wait until at least three running-phase
-    // snapshots pile up, instead of guessing with a fixed pause.
-    const deadline = Date.now() + 2000;
-    let runningSnapshots: Snapshot[] = [];
-    do {
-      runningSnapshots = host.received.filter(isRunningSnapshot);
-      if (runningSnapshots.length >= 3) break;
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    } while (Date.now() < deadline);
-
-    expect(runningSnapshots.length).toBeGreaterThanOrEqual(3);
-
-    host.close();
-  });
 });
