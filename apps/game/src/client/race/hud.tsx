@@ -1,14 +1,11 @@
 import { FINISHED } from '@clicker/game';
 import { type CSSProperties, useEffect, useRef, useState } from 'react';
-import { SLOT_CSS } from '../cycles/hud';
+import { raceColour } from '../slot-colours';
 import { useClient } from '../store';
 import { strings } from '../strings';
 import { theme } from '../theme';
 import { bestAfterEvents, formatTicks, lapShown, placeOf, slotOfId } from './format';
 import { onRaceEvents, useRace } from './store';
-
-/** The colour of a car, the one the scene paints it in. Race slots count from zero. */
-export const raceColour = (slot: number): string => SLOT_CSS[slot % SLOT_CSS.length] as string;
 
 /**
  * The player's slot, or -1. A number, so a component that reads it re-renders when the slot

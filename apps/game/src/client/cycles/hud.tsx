@@ -1,38 +1,13 @@
 import { type CSSProperties, useEffect, useRef } from 'react';
 import { useMuted } from '../audio/mute';
 import { secondsLeft, useServerClock } from '../clock';
+import { slotColour } from '../slot-colours';
 import { useClient } from '../store';
 import { strings } from '../strings';
 import { theme } from '../theme';
 import { useLatencyView } from './latency-store';
 import type { CyclesModel } from './model';
 import { type FeedItem, useCycles } from './store';
-
-/** The slot colours of the scene, as CSS: a name in the HUD wears the colour of its bike. */
-export const SLOT_CSS = [
-  '#ffe066',
-  '#00f0ff',
-  '#ff3df2',
-  '#7dff6a',
-  '#ff8a3d',
-  '#8a7dff',
-  '#ff4d6d',
-  '#3dffb5',
-  '#ffd23d',
-  '#3da5ff',
-  '#d63dff',
-  '#b5ff3d',
-  '#ff6a3d',
-  '#3dfff0',
-  '#ff3d9e',
-  '#9eff3d',
-  '#3d6aff',
-  '#ffb53d',
-  '#3dff6a',
-  '#f03dff',
-];
-export const slotColour = (slot: number): string =>
-  SLOT_CSS[(slot - 1) % SLOT_CSS.length] as string;
 
 /** The slot of a public id in this round, or -1. */
 export function slotOfId(model: CyclesModel | null, id: string | null): number {
