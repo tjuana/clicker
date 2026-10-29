@@ -372,8 +372,9 @@ export default function Cycles({ you }: { you: string | null }) {
     <Canvas
       dpr={[1, 2]}
       // Only the output pass's full-screen quad reaches the default framebuffer now; the scene is
-      // drawn into the composer's own multisampled target. Canvas MSAA would cost a multisampled
-      // colour and depth buffer and a resolve every frame for edges nobody sees. Depth stays.
+      // drawn into the composer's own target, multisampled below dpr 2. Canvas MSAA would cost a
+      // multisampled colour and depth buffer and a resolve every frame for edges nobody sees.
+      // Depth stays.
       gl={{ antialias: false }}
       camera={{ fov: 60, near: 0.1, far: 400, position: [side / 2, 20, side / 2] }}
       style={{ width: '100%', height: '100%' }}

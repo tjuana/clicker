@@ -29,7 +29,8 @@ export interface GameConfig {
   maxPlayers: number;
   /**
    * How often the room advances time on its own during a round.
-   * `null` — only commands and the alarm move it: that is the clicker, it has nowhere to move.
+   * `null` — no simulation step: that is the clicker, it has nowhere to move. Commands, the alarm
+   *   and the room's snapshot timer still apply time, so its phases change on time.
    * A number — the simulation step in milliseconds: a snake has to keep crawling while nobody types.
    */
   tickMs: number | null;
