@@ -107,3 +107,24 @@ The design canvas shows both palettes side by side ("Player slot palette").
   blooms, slots 13–20 repeat; strike the "owner's call" sentence. Same pass.
 - [ ] Commit: `docs(spec): the light cycles' slot palette`.
 - [ ] Review per `review-and-merge`; PR for the history; the owner merges.
+
+---
+
+## Where reality differed (2026-10-29)
+
+- **Task 1's third breakage check could not go red as planned.** Building the bikes from the raw
+  colours changed no test: `BIKE`, `DIM` and `WALL` were private to `cycles.tsx` and `walls.ts`, and
+  the bloom test read `SLOT_GLOW`. They became `BIKE_COLOURS`, `DIM_COLOURS` and `WALL_COLOURS` in
+  `look.ts`, and the bloom tests read those — the colours the meshes are painted in. A wall built
+  from raw colours still passes the wall ceiling (0.59 against 0.6), so "every slot glows equally
+  bright" covers lit, unlit and wall tables, and that is the test that catches it (`9f59545`).
+- **Task 2: the HUD's lookups live in `slots.ts`, not in the HUD.** The test project has no JSX
+  setting, so a test cannot import `slotColour` from a `.tsx`; `race/hud.tsx` and
+  `screens/race-room.tsx` read them too. `slotColour` (arena, from one) and `raceColour` (race, from
+  zero) sit beside `SLOT_HEX` (`37e5d22`, `01d9b25`).
+- **The red commit does not build alone.** `a566566` imports what `65b402c` and `18271f7` add, as
+  plan 18's red commit did.
+- **Pictures** (`vite dev` on 5174, headed Metal, dpr 2, scratch spec deleted after):
+  `shots/p19-arena.png`, twenty riders — every bike's rims and every wall's top glow, blue and
+  violet included; `shots/p19-race-grid.png`, twenty racers — the HUD names match the car colours.
+  The pictures are not in git (`shots/` is ignored).
