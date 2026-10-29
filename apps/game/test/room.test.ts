@@ -1,6 +1,6 @@
 import { runInDurableObject, SELF } from 'cloudflare:test';
 import { env } from 'cloudflare:workers';
-import type { RoomState } from '@clicker/game';
+import { DEFAULT_CONFIG, type RoomState } from '@clicker/game';
 import { generateId, PROTOCOL_VERSION } from '@clicker/protocol';
 import { describe, expect, it } from 'vitest';
 import { connect, isError, isSnapshot, isWelcome, type Snapshot } from './support';
@@ -250,6 +250,16 @@ describe('room over websocket', () => {
 
       const running = await host.waitFor(isRunningSnapshot);
       expect(running.phase).toBe('running');
+
+      // The beat that moved the phase must also keep it: the put is issued before the broadcast,
+      // so storage already says `running`, and the alarm has moved on to the round's end. Without
+      // them a restart would read the round the beat finished as aborted.
+      const { stored, alarm } = await runInDurableObject(stub, async (_instance, state) => ({
+        stored: await state.storage.get<RoomState>('state'),
+        alarm: await state.storage.getAlarm(),
+      }));
+      expect(stored?.phase).toBe('running');
+      expect(alarm).toBe((running.round?.endsAt ?? Number.NaN) + DEFAULT_CONFIG.lateGraceMs);
 
       host.close();
     } finally {
