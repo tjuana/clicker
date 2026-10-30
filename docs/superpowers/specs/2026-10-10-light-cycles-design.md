@@ -405,6 +405,8 @@ The arena's look, rebuilt by the Real-Time Rendering study's exercises A to C
   bikes and walls take each slot colour scaled to one luminance, `SLOT_LUMINANCE` 0.6: every lit
   bike's rims and stripe bloom (0.75), every slot is as bright as every other, and no seam, body or
   wall body blooms (plan 19). The race's car bodies take the colours unscaled: paint, not light.
+  The arena tone-maps with Neutral, not R3F's default ACES, which washed the glow towards white:
+  on screen no two slots' lit rims are closer than ΔE 0.05 (`test/scene-arena-tone.test.ts`).
 - Draw calls in an arena frame: 30 at most (33 with drei's floor), whatever the number of riders.
 
 ## Decisions made in plan 17 (2026-10-29)

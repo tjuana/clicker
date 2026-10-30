@@ -182,5 +182,10 @@ the closest pair of lit rims is ΔE 0.057 and the hues hold (`shots/p19-neutral-
   renderer's tone mapping, so the whole picture, glow included, goes through it once.
 - [ ] `pnpm check`, `pnpm typecheck`, `pnpm test`; break-check by setting the constant back to ACES.
 - [ ] Commit: `feat(scene): the arena tone-maps with Neutral, so slot hues survive the glow`.
-- [ ] Main session: screenshots of the arena with 20 riders in the chase view and the overview,
+- [x] Main session: screenshots of the arena with 20 riders in the chase view and the overview,
   against `shots/p19-arena.png`; the spec's scene section says the arena tone-maps with Neutral.
+
+Task 4 done in `5b598b9`: under ACES the test computes the closest lit-rim pair at ΔE 0.0204 (red),
+under Neutral 0.0575 (green). Pictures `shots/p19-t4-chase.png` and `shots/p19-t4-later.png` (dpr 2,
+twenty riders): every hue holds through the glow; grid, border and floor read as before.
+Verified: 410 + 123 + 335 tests.
