@@ -101,7 +101,7 @@ pnpm --filter @clicker/app run deploy     # build and publish to Cloudflare
 |---|---|
 | Game rules (`packages/game`) | clicker, light cycles and the ring race, 440 tests |
 | Wire format (`packages/protocol`) | version 4, 123 tests |
-| Room server and client (`apps/game`) | 356 tests, including integration tests in the Workers runtime |
+| Room server and client (`apps/game`) | 362 tests, including integration tests in the Workers runtime |
 | End to end | a clicker round, a light-cycle round against bots, walls on a key, a ring race, and the draw calls of a frame, desktop and phone |
 | Deploy | every push to `main`, through Cloudflare Workers Builds |
 

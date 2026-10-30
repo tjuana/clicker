@@ -135,7 +135,7 @@ below, emitting nothing).
 - **The dust took three tries.** The prototype's smear; the implementer's retune (10 a second,
   0.55 s, 0.04, 0.25 opaque) could not be seen from the chase camera at all, and the implementer
   said so instead of claiming it; the main session took 1:1 crops of the own car scraping along the
-  verge and settled on 18 a second, 0.7 s, 0.06, doubling, 0.35 opaque — soft puffs.
+  verge and settled on 18 a second, 0.7 s, 0.06, growing to three times that, 0.35 opaque — soft puffs.
 - **Numbers** (`measure -g race`, after/before alternating, two runs each): dpr 1 0.89 / 0.88 against
   0.88 / 0.88 ms; dpr 2 2.63 / 2.60 against 2.16 / 2.50 ms; 17 against 15 calls in every run.
 - **The full app suite now loses one alarm-bound light-cycle test a run** (`cycles.test.ts`: the
@@ -145,3 +145,26 @@ below, emitting nothing).
   file alone is 26/26 three times. The defect is the tests' (and the living modes' alarm-only
   start, recorded in plan 17); the owner's branch `claude/magical-rosalind-0a3412` gives those
   tests a live round without the race.
+
+## What the review found
+
+An Opus review of `567a8e9..db7351b` checked the wrap bookkeeping, the time base, the lifecycle, the
+billboard and the emitter tests as sound, and found, each reproduced before it was fixed:
+
+1. **A stalled tab's first frame back burst both pools** — R3F's delta is uncapped: a 30 s gap with
+   three cars on grass and one at a wall made 1620 dust and 750 sparks in one frame (a test: 1080
+   against at most 2). The emitter now steps by at most `CHASE.maxDt`.
+2. **More births than slots in one frame was unguarded** — a mutant without the clamp kept every
+   pool test green while asking three to upload past the array. A test now holds the ranges inside
+   it and over every slot.
+3. **The particles' colours were not the ones in `race-look.ts`** — the shader wrote linear colour
+   to the sRGB canvas: dust #76522b for #b59a72, sparks #ff7310 for #ffb347. The fragment shader now
+   ends with three's tone-mapping and colour-space chunks; dust is tone-mapped like the scene,
+   sparks not. Its test reads the shader's source — structural, the only check short of a GPU.
+4. **Clearing the update ranges in `tick` would have dropped a skipped frame's births.** Ranges now
+   stack until three uploads them; two range objects per attribute are reused, so a frame makes
+   none (a frame after a skipped one falls back to three's `addUpdateRange`).
+5. **A fresh puff was cut by the ground**, and the plan said "doubling" for a growth that triples.
+   Dust is born half its size up.
+
+Recorded: `Racers` and `RaceEffects` each sample the timeline every frame (O(cars), twice).
