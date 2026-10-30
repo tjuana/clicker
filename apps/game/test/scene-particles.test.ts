@@ -141,6 +141,13 @@ describe('the particle pool', () => {
     });
   });
 
+  it('converts its colour to the canvas, as every other material does', () => {
+    const { p } = pool(4);
+    expect((p.mesh.material as ShaderMaterial).fragmentShader).toContain(
+      '#include <colorspace_fragment>',
+    );
+  });
+
   it('hands the shader the time it was ticked with', () => {
     const { p } = pool(4);
     p.tick(12.5);

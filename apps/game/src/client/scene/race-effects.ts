@@ -68,7 +68,7 @@ export function createRaceEffects(pools: { dust: Spawner; sparks: Spawner }, ran
           for (let n = 0; n < dustN; n += 1) {
             pools.dust.spawn(
               x - c * 0.12,
-              0.02,
+              DUST.size / 2,
               z - s * 0.12,
               -c * v * 0.2 + (random() - 0.5) * 0.2,
               0.1 + random() * 0.1,

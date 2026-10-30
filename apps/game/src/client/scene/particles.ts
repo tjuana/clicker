@@ -14,6 +14,8 @@ type UpdateRange = { start: number; count: number };
 export interface PoolLook {
   colour: string;
   blending: Blending;
+  /** Dust is tone-mapped like the scene it sits in; sparks are not, so they stay hot. */
+  toneMapped: boolean;
   /** Downward acceleration, tiles/s². */
   gravity: number;
   /** How much a particle grows over its life: 1 doubles it. */
@@ -49,6 +51,9 @@ void main() {
   float d = length(vUv - 0.5) * 2.0;
   float a = (1.0 - smoothstep(0.5, 1.0, d)) * (1.0 - vAge) * opacity;
   gl_FragColor = vec4(colour, a);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+
 }`;
 
 export function createPool(capacity: number, look: PoolLook) {
@@ -85,7 +90,7 @@ export function createPool(capacity: number, look: PoolLook) {
     transparent: true,
     depthWrite: false,
     blending: look.blending,
-    toneMapped: false,
+    toneMapped: look.toneMapped,
   });
   const mesh = new Mesh(geometry, material);
   mesh.frustumCulled = false;

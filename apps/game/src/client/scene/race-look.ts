@@ -143,6 +143,7 @@ export const DUST: PoolFigures = {
   size: 0.06,
   colour: '#b59a72',
   blending: NormalBlending,
+  toneMapped: true,
   gravity: -0.05,
   grow: 2,
   opacity: 0.35,
@@ -158,6 +159,7 @@ export const SPARKS: PoolFigures & { burst: number } = {
   size: 0.02,
   colour: '#ffb347',
   blending: AdditiveBlending,
+  toneMapped: false,
   gravity: 3,
   grow: -0.6,
   opacity: 1,
@@ -170,6 +172,7 @@ export interface PoolFigures {
   size: number;
   colour: string;
   blending: Blending;
+  toneMapped: boolean;
   gravity: number;
   grow: number;
   opacity: number;

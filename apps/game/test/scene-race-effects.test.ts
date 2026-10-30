@@ -78,6 +78,13 @@ describe('dust', () => {
     }
   });
 
+  it('is born above the ground by half its size, not cut by it', () => {
+    const h = harness();
+    run(h.fx, sample(car(0, { flags: ON_GRASS, speed: fast(DUST.minSpeed) })), 1);
+    expect(h.dust.length).toBeGreaterThan(0);
+    for (const b of h.dust) expect(b.y).toBeGreaterThanOrEqual(DUST.size / 2);
+  });
+
   it('is not raised below the minimum speed', () => {
     const h = harness();
     run(h.fx, sample(car(0, { flags: ON_GRASS, speed: DUST.minSpeed - 1 })), 1);
