@@ -331,3 +331,14 @@ What plan 13's review changed:
 - **Known, left:** the wall check reads the two ends of a car's axis. Against a bend's inner wall
   the middle can be deeper than both: 6 to 14 car-ticks of a twenty-bot race, at most 69 units
   (4 to 10, at most 138, before the capsules).
+
+## Decisions made in plan 21 (2026-10-30)
+
+- **Dust and sparks, drawn by the client from what every delta already carries**: dust behind a car
+  on the grass (`ON_GRASS`) above a speed, sparks while it scrapes a wall (`AT_WALL`), and a burst
+  when it starts touching another car (`TOUCHING`'s rising edge, per slot). No rules or wire change.
+- **One pool per look** (`scene/particles.ts`): instanced billboards whose motion the vertex shader
+  computes from birth; the whole pool is drawn every frame, so the race's draw count is 17 whatever
+  is alive. Figures in `race-look.ts` (`DUST`, `SPARKS`), tuned by eye from the chase camera.
+- **No tyre smoke yet**: a delta carries speed and flags, not the keys, so the client cannot tell
+  braking from a bump; it needs a flag from the rules if the owner wants it.

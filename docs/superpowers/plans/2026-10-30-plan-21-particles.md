@@ -127,3 +127,21 @@ below, emitting nothing).
 - [ ] Study doc: exercise 7's Progress row, the trap about the gate rewritten (solved by drawing the
   whole pool). Race spec: the decision. README if counts change.
 - [ ] Opus review, reproduce findings, merge `--no-ff`, Russian summary.
+
+---
+
+## Where reality changed the plan
+
+- **The dust took three tries.** The prototype's smear; the implementer's retune (10 a second,
+  0.55 s, 0.04, 0.25 opaque) could not be seen from the chase camera at all, and the implementer
+  said so instead of claiming it; the main session took 1:1 crops of the own car scraping along the
+  verge and settled on 18 a second, 0.7 s, 0.06, doubling, 0.35 opaque — soft puffs.
+- **Numbers** (`measure -g race`, after/before alternating, two runs each): dpr 1 0.89 / 0.88 against
+  0.88 / 0.88 ms; dpr 2 2.63 / 2.60 against 2.16 / 2.50 ms; 17 against 15 calls in every run.
+- **The full app suite now loses one alarm-bound light-cycle test a run** (`cycles.test.ts`: the
+  round's start waits for the Durable Object alarm, which arrives a second late under load). The
+  two new test files take 11 ms to run but 2.5 s to import three.js, and that load is enough:
+  without them the suite was green twice, with them it lost one test in each of three runs; the
+  file alone is 26/26 three times. The defect is the tests' (and the living modes' alarm-only
+  start, recorded in plan 17); the owner's branch `claude/magical-rosalind-0a3412` gives those
+  tests a live round without the race.
