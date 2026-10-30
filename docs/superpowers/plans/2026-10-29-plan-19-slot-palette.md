@@ -159,3 +159,28 @@ light-cycle results, after which nothing more is streamed" and "sends everyone t
 again when a bike joins mid-round" — and passed alone six times in a row and in two full reruns.
 
 Verified: `pnpm check`, `pnpm typecheck`, `pnpm test` — 410 + 123 + 334 tests, twice in a row.
+
+---
+
+### Task 4 (`graphics`), the owner's call of 2026-10-30 on review finding 1: the arena under Neutral
+
+The arena's canvas sets no tone mapping, so R3F's default ACES applies, and ACES washes the glow
+colours towards white: the lit rims of slots 7/8 reach the screen ΔE 0.020 apart. Under
+`NeutralToneMapping` (three's Khronos PBR Neutral, which the race already uses, `race-look.ts`)
+the closest pair of lit rims is ΔE 0.057 and the hues hold (`shots/p19-neutral-arena.png`).
+
+**Files:** `apps/game/src/client/scene/look.ts`, `cycles.tsx`; a test in `apps/game/test/`.
+
+- [ ] Red first: "on screen, no two slots' lit rims are closer than ΔE 0.05". The test takes each
+  `BIKE_COLOURS` entry (rim level 1), passes it through the arena's tone mapping, sRGB-encodes it
+  and measures OKLab distances. The tone mapping comes from a constant in `look.ts`,
+  `ARENA_TONE_MAPPING`; the test ports three 0.186's GLSL for `ACESFilmicToneMapping` and
+  `NeutralToneMapping` (`tonemapping_pars_fragment`, exposure 1) to a few lines of TypeScript and
+  picks by that constant. With `ACESFilmicToneMapping` it is red (0.020).
+- [ ] `look.ts`: `ARENA_TONE_MAPPING = NeutralToneMapping`, with the why. `cycles.tsx` passes it to
+  the canvas (`gl={{ antialias: false, toneMapping: ARENA_TONE_MAPPING }}`); `OutputPass` reads the
+  renderer's tone mapping, so the whole picture, glow included, goes through it once.
+- [ ] `pnpm check`, `pnpm typecheck`, `pnpm test`; break-check by setting the constant back to ACES.
+- [ ] Commit: `feat(scene): the arena tone-maps with Neutral, so slot hues survive the glow`.
+- [ ] Main session: screenshots of the arena with 20 riders in the chase view and the overview,
+  against `shots/p19-arena.png`; the spec's scene section says the arena tone-maps with Neutral.
