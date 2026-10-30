@@ -4,9 +4,11 @@ import { type Browser, type BrowserContext, expect, type Page, test } from '@pla
  * A race frame, measured in plan 14's prototype on the M2 and on CI's software renderer alike:
  * three track layers, the ground, the barriers, four car parts and the sky, then five draws into
  * the sun's shadow map. Cars that are not on the field stay in their instanced mesh at zero scale,
- * so the count does not move with the number of cars.
+ * so the count does not move with the number of cars. Plus two particle pools, dust and sparks:
+ * the count does not depend on what is alive either, because a dead particle is still drawn,
+ * collapsed to a point.
  */
-const RACE_CALLS = 15;
+const RACE_CALLS = 17;
 /**
  * The arena: 30 draws at most. Each is one of: the scene (grid, walls, bikes, the floor's plane,
  * four border boxes: 8), the floor's reflection (three's Reflector draws the arena again without

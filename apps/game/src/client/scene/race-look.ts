@@ -120,3 +120,32 @@ export const CHASE = {
   /** A stalled tab's first frame back must not throw the camera across the track. */
   maxDt: 0.05,
 };
+
+/**
+ * Particles. Dust rises behind a car on the grass, sparks fly where it scrapes a wall or meets
+ * another car. `rate` is per second, `minSpeed` in rules units a tick, `life` in seconds, `size` in
+ * tiles, `gravity` in tiles a second squared, `grow` the share of its size a particle gains over
+ * its life.
+ */
+export const DUST = {
+  rate: 30,
+  minSpeed: 40,
+  life: 0.9,
+  size: 0.08,
+  colour: '#b59a72',
+  gravity: -0.05,
+  grow: 2,
+  opacity: 0.45,
+};
+export const SPARKS = {
+  rate: 60,
+  minSpeed: 30,
+  /** Sparks at the moment two cars touch. */
+  burst: 12,
+  life: 0.35,
+  size: 0.025,
+  colour: '#ffb347',
+  gravity: 3,
+  grow: -0.6,
+  opacity: 1,
+};
