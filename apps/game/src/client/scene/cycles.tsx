@@ -22,7 +22,14 @@ import { composerSamples } from './composer-samples';
 import { createCycleGeometry, createCycleMaterial } from './cycle-model';
 import { Floor, Grid } from './floor';
 import { FrameMeter } from './frame-meter';
-import { BIKE_COLOURS, BLOOM, BORDER_COLOUR, DIM_COLOURS, glowFor } from './look';
+import {
+  ARENA_TONE_MAPPING,
+  BIKE_COLOURS,
+  BLOOM,
+  BORDER_COLOUR,
+  DIM_COLOURS,
+  glowFor,
+} from './look';
 import { createWalls, type Walls } from './walls';
 
 const MAX_BIKES = 64;
@@ -372,7 +379,7 @@ export default function Cycles({ you }: { you: string | null }) {
       // drawn into the composer's own target, multisampled below dpr 2. Canvas MSAA would cost a
       // multisampled colour and depth buffer and a resolve every frame for edges nobody sees.
       // Depth stays.
-      gl={{ antialias: false }}
+      gl={{ antialias: false, toneMapping: ARENA_TONE_MAPPING }}
       camera={{ fov: 60, near: 0.1, far: 400, position: [side / 2, 20, side / 2] }}
       style={{ width: '100%', height: '100%' }}
     >

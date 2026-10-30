@@ -1,10 +1,19 @@
-import { Color, ColorManagement, Vector3 } from 'three';
+import { Color, ColorManagement, NeutralToneMapping, type ToneMapping, Vector3 } from 'three';
 import { SLOT_HEX } from '../slots';
 
 /**
  * Every brightness and shape number of the scene lives here, so the owner's correction by eye is a
  * one-line change. Bloom keys on luminance (three's high-pass: linear Rec. 709 weights), which is why levels go past 1 on purpose.
  */
+
+/**
+ * R3F's default, ACES, washes the scaled-up HDR glow towards white and collapses neighbouring hues:
+ * on screen the lit rims of slots 7 and 8 came out dE 0.020 apart. Neutral (Khronos PBR Neutral)
+ * keeps hues and only rolls the highlights off, so the closest pair is 0.057 (test/scene-arena-tone
+ * .test.ts holds 0.05). The race already uses it (race-look.ts). The composer's OutputPass reads
+ * the renderer's tone mapping, so the whole picture, glow included, goes through it once.
+ */
+export const ARENA_TONE_MAPPING: ToneMapping = NeutralToneMapping;
 
 /** The slot colours as they are, which is what the race's car bodies wear: paint, not light. */
 export const SLOT_COLOURS = SLOT_HEX.map((hex) => new Color(hex));
