@@ -2,7 +2,6 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { useEffect, useMemo } from 'react';
 import {
   type Camera,
-  type Color,
   type Fog,
   HalfFloatType,
   InstancedMesh,
@@ -23,13 +22,18 @@ import { composerSamples } from './composer-samples';
 import { createCycleGeometry, createCycleMaterial } from './cycle-model';
 import { Floor, Grid } from './floor';
 import { FrameMeter } from './frame-meter';
-import { BIKE_LEVEL, BLOOM, BORDER_COLOUR, DIM_LEVEL, SLOT_COLOURS } from './look';
+import {
+  ARENA_TONE_MAPPING,
+  BIKE_COLOURS,
+  BLOOM,
+  BORDER_COLOUR,
+  DIM_COLOURS,
+  glowFor,
+} from './look';
 import { createWalls, type Walls } from './walls';
 
 const MAX_BIKES = 64;
 
-const BIKE = SLOT_COLOURS.map((colour) => colour.clone().multiplyScalar(BIKE_LEVEL));
-const DIM = SLOT_COLOURS.map((colour) => colour.clone().multiplyScalar(DIM_LEVEL));
 /**
  * The player's own bike is bigger, not brighter: a yellow bike at 1.25 is already past white,
  * and a harder glow only turned it into a blown-out blob.
@@ -141,8 +145,8 @@ function drawBike(
   );
   mesh.setMatrixAt(index, matrix);
   // Dim while the head it rides towards is not laying a wall: lit mode is told apart by eye.
-  const colours = end.lit ? BIKE : DIM;
-  mesh.setColorAt(index, colours[(slot - 1) % colours.length] as Color);
+  const colours = end.lit ? BIKE_COLOURS : DIM_COLOURS;
+  mesh.setColorAt(index, glowFor(colours, slot));
   // The player's own bike wins over the one that killed it, which is followed only while the
   // player has none.
   const { chase } = rig;
@@ -375,7 +379,7 @@ export default function Cycles({ you }: { you: string | null }) {
       // drawn into the composer's own target, multisampled below dpr 2. Canvas MSAA would cost a
       // multisampled colour and depth buffer and a resolve every frame for edges nobody sees.
       // Depth stays.
-      gl={{ antialias: false }}
+      gl={{ antialias: false, toneMapping: ARENA_TONE_MAPPING }}
       camera={{ fov: 60, near: 0.1, far: 400, position: [side / 2, 20, side / 2] }}
       style={{ width: '100%', height: '100%' }}
     >

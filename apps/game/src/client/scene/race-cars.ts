@@ -2,6 +2,7 @@ import { TILE, TURN } from '@clicker/game';
 import {
   Box3,
   type BufferGeometry,
+  type Color,
   type InstancedMesh,
   type Material,
   Matrix4,
@@ -13,6 +14,7 @@ import {
 } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Sample } from '../race/timeline';
+import { SLOT_COLOURS } from './look';
 import { CAR, CHASE } from './race-look';
 
 /** One material of the car with every mesh that wears it merged: one draw call per part. */
@@ -79,6 +81,16 @@ const spot = new Vector3();
 const turn = new Quaternion();
 /** A car with no place this frame: scaled to nothing, so it draws no pixel. */
 const HIDDEN = new Matrix4().makeScale(0, 0, 0);
+
+/**
+ * Gives every instance of the body its slot's colour, once. The palette is shorter than the grid
+ * (twelve against `CAR.capacity` twenty), so the slot wraps: an instance left unpainted draws white.
+ */
+export function paintBodies(mesh: InstancedMesh): void {
+  for (let slot = 0; slot < CAR.capacity; slot++) {
+    mesh.setColorAt(slot, SLOT_COLOURS[slot % SLOT_COLOURS.length] as Color);
+  }
+}
 
 /** Writes the sample into the instances, the slot being the instance, so colours are set once. */
 export function poseCars(meshes: readonly InstancedMesh[], sample: Sample): void {

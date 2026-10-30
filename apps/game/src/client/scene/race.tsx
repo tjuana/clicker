@@ -6,8 +6,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { CarInfo } from '../race/model';
 import { useRace } from '../race/store';
 import { useClient } from '../store';
-import { SLOT_COLOURS } from './look';
-import { bakeCar, chasePlace, poseCars } from './race-cars';
+import { bakeCar, chasePlace, paintBodies, poseCars } from './race-cars';
 import { ASSETS, CAR, CHASE } from './race-look';
 
 const CAR_URL = `${ASSETS}/raceCarRed.glb`;
@@ -36,11 +35,7 @@ export function Racers() {
       mesh.castShadow = true;
       // Instances move every frame, so the bounds of the one geometry at the origin mean nothing.
       mesh.frustumCulled = false;
-      if (material.name === CAR.bodyMaterial) {
-        SLOT_COLOURS.forEach((colour, slot) => {
-          if (slot < CAR.capacity) mesh.setColorAt(slot, colour);
-        });
-      }
+      if (material.name === CAR.bodyMaterial) paintBodies(mesh);
       return mesh;
     });
     return out;

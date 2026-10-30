@@ -162,7 +162,10 @@ shadows, from about 3.3 MB of assets. What it found:
   overlap z-fight and flicker) and with room left on curves, where straight blocks meet at an angle.
 - **Bake the track into one geometry per material** (three draw calls), with UVs from world
   position: the tiles' own UVs are palette coordinates. **Bake the car per material** into
-  instanced meshes, four draw calls for twenty cars; the body material takes the slot colour.
+  instanced meshes, four draw calls for twenty cars; the body material takes the slot colour from
+  `slots.ts`, unscaled (paint, not light). There are twelve hues, so a full twenty-car race has cars
+  0-7 and 12-19 in eight identical pairs, in the scene and in the HUD's standings and results;
+  marking them apart is not in plan 19.
 - **Interpolate between ticks.** The owner saw everything jerk. Measured: drawing cars at their last
   30 Hz tick on a 120 Hz screen left the leader standing still on 271 frames of 361; between the
   last two ticks, on none. The chase camera eases towards its place instead of sitting on the car.
