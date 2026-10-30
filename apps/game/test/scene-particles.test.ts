@@ -128,6 +128,19 @@ describe('the particle pool', () => {
     expect(p.mesh.geometry.instanceCount).toBe(16);
   });
 
+  it('uploads every slot, inside the array, after more births than slots in a frame', () => {
+    const { p, attr } = pool(16);
+    for (let k = 0; k < 40; k += 1) birth(p, k);
+    p.tick(1);
+    for (const n of NAMES) {
+      for (const r of attr(n).updateRanges) {
+        expect(r.start).toBeGreaterThanOrEqual(0);
+        expect(r.start + r.count).toBeLessThanOrEqual(attr(n).array.length);
+      }
+      expect(covered(attr(n))).toEqual(Array.from({ length: 16 }, (_, i) => i));
+    }
+  });
+
   it('writes in a frame as much as it was born, however large the pool', () => {
     const changed = (capacity: number): { elements: number; uploaded: number } => {
       const { p, attr } = pool(capacity);
