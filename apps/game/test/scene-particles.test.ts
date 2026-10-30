@@ -92,6 +92,33 @@ describe('the particle pool', () => {
     }
   });
 
+  it('keeps the births of a frame the renderer skipped, until it uploads', () => {
+    const { p, attr, uploaded } = pool(10);
+    birth(p, 1);
+    p.tick(0);
+    birth(p, 2);
+    birth(p, 3);
+    p.tick(0.1);
+    for (const n of NAMES) expect(covered(attr(n))).toEqual([0, 1, 2]);
+    uploaded();
+    birth(p, 4);
+    p.tick(0.2);
+    for (const n of NAMES) expect(covered(attr(n))).toEqual([3]);
+  });
+
+  it('makes no range objects of its own once the renderer has uploaded', () => {
+    const { p, attr, uploaded } = pool(10);
+    birth(p, 1);
+    p.tick(0);
+    const first = NAMES.map((n) => attr(n).updateRanges[0]);
+    uploaded();
+    birth(p, 2);
+    p.tick(0.1);
+    NAMES.forEach((n, i) => {
+      expect(attr(n).updateRanges[0]).toBe(first[i]);
+    });
+  });
+
   it('uploads nothing in a tick with no births', () => {
     const { p, attr, uploaded } = pool(10);
     birth(p, 1);

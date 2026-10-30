@@ -9,6 +9,8 @@ import {
   ShaderMaterial,
 } from 'three';
 
+type UpdateRange = { start: number; count: number };
+
 export interface PoolLook {
   colour: string;
   blending: Blending;
@@ -90,6 +92,11 @@ export function createPool(capacity: number, look: PoolLook) {
   const time = material.uniforms.time as { value: number };
 
   const attributes = [origin, velocity, timing];
+  /** Two ranges an attribute may need in a frame, made once. */
+  const ranges = attributes.map(() => [
+    { start: 0, count: 0 },
+    { start: 0, count: 0 },
+  ]);
   let next = 0;
   let first = -1;
   let count = 0;
@@ -123,15 +130,32 @@ export function createPool(capacity: number, look: PoolLook) {
   function tick(now: number): void {
     time.value = now;
     if (count === 0) return;
-    for (const a of attributes) {
-      // The renderer clears ranges only after it uploads them; clearing here keeps a frame the
-      // renderer skipped from stacking ranges.
-      a.clearUpdateRanges();
-      const end = first + count;
-      if (end <= capacity) a.addUpdateRange(first * 3, count * 3);
-      else {
-        a.addUpdateRange(first * 3, (capacity - first) * 3);
-        a.addUpdateRange(0, (end - capacity) * 3);
+    const end = first + count;
+    const wraps = end > capacity;
+    for (let k = 0; k < attributes.length; k += 1) {
+      const a = attributes[k] as InstancedBufferAttribute;
+      const mine = ranges[k] as [UpdateRange, UpdateRange];
+      const [one, two] = mine;
+      if (a.updateRanges.length === 0) {
+        // Nothing pending: push our own two objects, so a frame makes none. Three empties the
+        // list after it uploads, which frees them for the next frame.
+        one.start = first * 3;
+        one.count = (wraps ? capacity - first : count) * 3;
+        a.updateRanges.push(one);
+        if (wraps) {
+          two.start = 0;
+          two.count = (end - capacity) * 3;
+          a.updateRanges.push(two);
+        }
+      } else {
+        // A frame the renderer skipped left its ranges pending, and they may be our objects:
+        // pushing them again would alias them. This is rare, so it may allocate; stacking is what
+        // keeps the skipped frame's births.
+        if (!wraps) a.addUpdateRange(first * 3, count * 3);
+        else {
+          a.addUpdateRange(first * 3, (capacity - first) * 3);
+          a.addUpdateRange(0, (end - capacity) * 3);
+        }
       }
       a.needsUpdate = true;
     }
