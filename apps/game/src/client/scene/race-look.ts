@@ -1,4 +1,10 @@
-import { NeutralToneMapping, type ToneMapping } from 'three';
+import {
+  AdditiveBlending,
+  type Blending,
+  NeutralToneMapping,
+  NormalBlending,
+  type ToneMapping,
+} from 'three';
 
 /**
  * Every brightness, size and texture figure of the ring race's scene lives here, so the owner's
@@ -120,3 +126,54 @@ export const CHASE = {
   /** A stalled tab's first frame back must not throw the camera across the track. */
   maxDt: 0.05,
 };
+
+/**
+ * Particles. Dust rises behind a car on the grass, sparks fly where it scrapes a wall or meets
+ * another car. `rate` is per second, `minSpeed` in rules units a tick, `life` in seconds, `size` in
+ * tiles, `gravity` in tiles a second squared, `grow` the share of its size a particle gains over
+ * its life.
+ */
+export const DUST: PoolFigures = {
+  // The first cut (30 a second, 0.9 s, tripling, 0.45 opaque) piled into a brown smear; the
+  // second (10, 0.55 s, 0.04, 0.25) could not be seen from the chase camera at all. Puffs that
+  // grow and thin out before the next ones overlap them read as dust kicked up.
+  rate: 18,
+  minSpeed: 40,
+  life: 0.7,
+  size: 0.06,
+  colour: '#b59a72',
+  blending: NormalBlending,
+  toneMapped: true,
+  gravity: -0.05,
+  grow: 2,
+  opacity: 0.35,
+};
+export const SPARKS: PoolFigures & { burst: number } = {
+  // `rate` is for scraping a wall only; cars that rub in a pack get the one burst, because
+  // TOUCHING is on for most ticks there and a stream made every pack a fountain.
+  rate: 25,
+  minSpeed: 30,
+  /** Sparks at the moment two cars touch. */
+  burst: 8,
+  life: 0.3,
+  size: 0.02,
+  colour: '#ffb347',
+  blending: AdditiveBlending,
+  toneMapped: false,
+  gravity: 3,
+  grow: -0.6,
+  opacity: 1,
+};
+
+export interface PoolFigures {
+  rate: number;
+  minSpeed: number;
+  life: number;
+  size: number;
+  colour: string;
+  blending: Blending;
+  toneMapped: boolean;
+  gravity: number;
+  grow: number;
+  opacity: number;
+}

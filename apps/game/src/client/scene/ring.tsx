@@ -18,7 +18,7 @@ import {
 } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { FrameMeter } from './frame-meter';
-import { Racers } from './race';
+import { RaceEffects, Racers } from './race';
 import {
   ASSETS,
   BARRIER,
@@ -270,6 +270,7 @@ export default function Ring({ track = 'ring' }: { track?: string }) {
         />
         <Track pieces={pieces} />
         <Racers />
+        <RaceEffects />
       </Suspense>
     </Canvas>
   );

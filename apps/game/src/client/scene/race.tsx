@@ -6,8 +6,10 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { CarInfo } from '../race/model';
 import { useRace } from '../race/store';
 import { useClient } from '../store';
+import { createPool } from './particles';
 import { bakeCar, chasePlace, paintBodies, poseCars } from './race-cars';
-import { ASSETS, CAR, CHASE } from './race-look';
+import { createRaceEffects } from './race-effects';
+import { ASSETS, CAR, CHASE, DUST, SPARKS } from './race-look';
 
 const CAR_URL = `${ASSETS}/raceCarRed.glb`;
 
@@ -109,6 +111,41 @@ export function Racers() {
       {meshes.map((mesh) => (
         <primitive key={mesh.uuid} object={mesh} />
       ))}
+    </>
+  );
+}
+
+/** Pool sizes: the longest life times the busiest rate for a full grid, with room to spare. */
+const DUST_CAPACITY = 1024;
+const SPARK_CAPACITY = 512;
+
+/** Dust and sparks, driven by the same timeline sample the cars are drawn from. */
+export function RaceEffects() {
+  const { pools, fx } = useMemo(() => {
+    const dust = createPool(DUST_CAPACITY, DUST);
+    const sparks = createPool(SPARK_CAPACITY, SPARKS);
+    return { pools: { dust, sparks }, fx: createRaceEffects({ dust, sparks }, Math.random) };
+  }, []);
+  useEffect(
+    () => () => {
+      pools.dust.dispose();
+      pools.sparks.dispose();
+    },
+    [pools],
+  );
+  const start = useMemo(() => performance.now(), []);
+  useFrame((_, delta) => {
+    const at = performance.now();
+    const now = (at - start) / 1000;
+    const sample = useRace.getState().timeline?.sample(at) ?? null;
+    if (sample !== null) fx.update(sample, now, delta);
+    pools.dust.tick(now);
+    pools.sparks.tick(now);
+  });
+  return (
+    <>
+      <primitive object={pools.dust.mesh} />
+      <primitive object={pools.sparks.mesh} />
     </>
   );
 }

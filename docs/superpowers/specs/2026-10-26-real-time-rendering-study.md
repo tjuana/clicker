@@ -257,6 +257,7 @@ Every step ends with a row here: what it measured before and after, and what tha
 | Multisampling by density (plan 17) | 5.4.2, 18.2 | The composer's target 4× multisampled at every density: arena, twenty riders, 6.36 ms GPU median at dpr 2 (worst p95 7.3–7.5), 2.33–2.37 ms at dpr 1 | No samples at dpr 2 or more: 2.76–2.77 ms at dpr 2 (worst p95 3.3–3.6), 2.34–2.36 ms at dpr 1; 30 calls either way | More than half the arena's GPU time on the owner's screen, for an edge step of half a CSS pixel that shows only cropped 1:1; the grid and the bikes' seams antialias themselves in their shaders. Two samples would have kept most of the cost (5.05 ms): multisampling pays for storing its samples, not for shading them. |
 | Cars as capsules (plan 18) | 22.2, 22.13; Ericson 5.1.9 | A car is two circles that do not touch. Two cars in every relative position on a 150-unit grid, every 256 heading steps, measured by their bodies (a sampled capsule distance): 946 of 1228 overlapping pairs still overlapping after a bump, 234 of 240 crossing ones; a nose in another car's side at the middle not seen at all up to 100 units deep (512 → 512, 432 → 432) | One capsule per car — its axis swept by the radius, one segment test a pair: 0 of 1228, 0 of 240, every waist hit pushed to 532. A pile of five 80 apart: 492 after one bump (524 before), 531 after five (530) | A car's middle is solid and an X separates. The pairs compared do not change (bins), each is one segment test instead of four circle tests. Pushes now round away from zero: truncating left pairs up to 2.6 units short. In a whole race of twenty bots, measured by bodies, the deepest overlap fell from 180.8 to 48.6 units — the old test measured circles and saw 81. Driving never moves a car further in a tick than its radius (218 against 266 units), now a test; a push can (up to 614 when axes cross). Side contacts now push, so cars touch the walls more: the longest run on a wall went from 9 ticks to 24. |
 | Depth precision (plan 20) | 4.7.2 | `GROUND_Y` −0.003, a number found by eye; near 0.02, far 400; `DEPTH_BITS` 24 | The same number, now held by a test: the gap from the tiles' grass clears the fixed-point step `z²(f − n)/(f · n · 2²⁴)` at the farthest tile a camera sees (14.8 tiles, step 6.5 × 10⁻⁴) twice over | A bare three.js probe on the M2: two planes 0.0001 apart fight with standard depth (3,145 pixels), not with reversed (0); at 0.00003, 45,604 against 5,153. Reversed depth on a 24-bit buffer could not do that, so Metal gives the canvas float depth. Neither precision makes coplanar surfaces safe: the offset stays. Today's offset is thirty times where fighting starts, so nothing changed on screen; reversed depth waits for the race's composer (exercise 8). A first probe that seemed to show the race's grass eaten was the camera's pose, and is withdrawn. |
+| One particle pool (plan 21) | 13.6, 13.8 | No particles; race 15 draw calls, GPU median 0.88 / 0.88 ms at dpr 1, 2.16 / 2.50 ms at dpr 2 | Dust behind a car on the grass and sparks at a wall or when two cars touch, from two pools of instanced billboards (1024 + 512): 17 calls whatever is alive, 0.89 / 0.88 ms at dpr 1, 2.63 / 2.60 ms at dpr 2 | The CPU writes a particle once, at birth, into typed arrays and uploads only the slots written that frame; the vertex shader moves it from where and when it was born, and collapses a dead one to a point — so the draw count never depends on what is alive and the frame gate stays exact. Free at dpr 1; at dpr 2 a few tenths of a millisecond of transparent fill, inside the noise of bots that drive differently every run. Sparks on contact are a burst when it begins: in a pack the contact flag is on for most ticks. The dust took three tries by eye: a smear, then nothing visible from the chase camera, then puffs. |
 
 Measured on the M2 only. A phone's budget is still unknown: the next number worth having is the
 same measurement on a mid-range Android phone over USB. Prototype that first: whether Chrome on
@@ -354,7 +355,8 @@ change the arena's picture and come from the
    helps on the M2 even on the canvas, but no surface fights today and no precision makes
    coplanar ones safe; it moves into exercise 8.
 7. **One particle pool** (RTR 13.6, 13.8; P6). Instanced billboards, typed arrays, no allocation in
-   the frame; tyre smoke and sparks first.
+   the frame; tyre smoke and sparks first. *Done in plan 21* — the row above: dust on the grass and
+   sparks; tyre smoke waits, the client has no braking signal (the delta carries speed and flags).
 8. **Ambient occlusion in the race** (RTR 11.3; P5), desktop only, its cost read off the meter. It
    gives the race its first composer, and P1's shared module arrives with it. *Since plan 20:* the
    composer's scene target can carry a float depth texture (`DEPTH_COMPONENT32F`), and with it the
@@ -377,8 +379,9 @@ Traps plan 14's review found on the way to these exercises:
 
 - **An instanced mesh with no instances draws nothing** (`WebGLBufferRenderer.js`: a `count` of 0
   issues no call). The arena's floor of 29 calls holds because a bike's spawn cell is already a
-  wall when the gate reads. A particle pool will make the count depend on whether any particle is
-  alive, so its gate needs a moment when that cannot change.
+  wall when the gate reads. A particle pool would have made the count depend on whether any
+  particle is alive; *plan 21* draws the whole pool every frame instead, a dead particle collapsed
+  to a point in the vertex shader, so the race's count is 17 whatever is alive.
 - **`addEffect` is global and the readout's store is one.** Two canvases mounted at once would mix
   their figures, and each frame's CPU bracket would hold both roots. Not reachable today: a screen
   has one canvas.
