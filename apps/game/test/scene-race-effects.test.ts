@@ -2,7 +2,7 @@ import { AT_WALL, ON_GRASS, TOUCHING, TURN } from '@clicker/game';
 import { describe, expect, it } from 'vitest';
 import type { Sample, SampledCar } from '../src/client/race/timeline';
 import { createRaceEffects } from '../src/client/scene/race-effects';
-import { DUST, SPARKS } from '../src/client/scene/race-look';
+import { CHASE, DUST, SPARKS } from '../src/client/scene/race-look';
 
 interface Birth {
   x: number;
@@ -34,6 +34,8 @@ const car = (slot: number, over: Partial<SampledCar> = {}): SampledCar => ({
 const sample = (...cars: SampledCar[]): Sample => ({ alpha: 1, count: cars.length, cars });
 
 const DT = 1 / 60;
+/** The longest frame the emitter counts; the camera's own cap, for the same stalled tab. */
+const CAP = CHASE.maxDt;
 /** Frames for `seconds`, the sample being the same each time; returns the clock after. */
 function run(fx: ReturnType<typeof harness>['fx'], s: Sample, seconds: number, from = 0): number {
   let now = from;
@@ -134,5 +136,20 @@ describe('sparks on contact', () => {
     now = run(h.fx, sample(apart(1)), 0.2, now);
     run(h.fx, sample(touching(0), apart(1)), 0.2, now);
     expect(h.sparks).toHaveLength(bursts);
+  });
+});
+
+describe('a stalled tab', () => {
+  it('does not burst: one frame of thirty seconds emits what a capped frame would', () => {
+    const h = harness();
+    const cars = sample(
+      car(0, { flags: ON_GRASS, speed: fast(DUST.minSpeed) }),
+      car(1, { flags: ON_GRASS, speed: fast(DUST.minSpeed) }),
+      car(2, { flags: AT_WALL, speed: fast(SPARKS.minSpeed) }),
+    );
+    h.fx.update(cars, 0, 30);
+    // A capped frame is a fraction of a second: at most one particle a car at these rates.
+    expect(h.dust.length).toBeLessThanOrEqual(2 * Math.ceil(DUST.rate * CAP));
+    expect(h.sparks.length).toBeLessThanOrEqual(Math.ceil(SPARKS.rate * CAP));
   });
 });

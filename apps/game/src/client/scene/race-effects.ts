@@ -1,6 +1,6 @@
 import { AT_WALL, ON_GRASS, TILE, TOUCHING, TURN } from '@clicker/game';
 import { MAX_SLOTS, type Sample } from '../race/timeline';
-import { DUST, SPARKS } from './race-look';
+import { CHASE, DUST, SPARKS } from './race-look';
 
 export interface Spawner {
   spawn(
@@ -46,8 +46,11 @@ export function createRaceEffects(pools: { dust: Spawner; sparks: Spawner }, ran
 
   return {
     update(sample: Sample, now: number, dt: number): void {
-      dustDebt += dt * DUST.rate;
-      sparkDebt += dt * SPARKS.rate;
+      // A stalled tab's first frame back would otherwise owe thirty seconds of particles at once;
+      // the same cap the camera uses, for the same reason.
+      const step = Math.min(dt, CHASE.maxDt);
+      dustDebt += step * DUST.rate;
+      sparkDebt += step * SPARKS.rate;
       const dustN = Math.floor(dustDebt);
       const sparkN = Math.floor(sparkDebt);
       dustDebt -= dustN;
