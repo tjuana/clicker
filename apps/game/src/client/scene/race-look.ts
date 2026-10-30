@@ -1,4 +1,10 @@
-import { NeutralToneMapping, type ToneMapping } from 'three';
+import {
+  AdditiveBlending,
+  type Blending,
+  NeutralToneMapping,
+  NormalBlending,
+  type ToneMapping,
+} from 'three';
 
 /**
  * Every brightness, size and texture figure of the ring race's scene lives here, so the owner's
@@ -127,25 +133,43 @@ export const CHASE = {
  * tiles, `gravity` in tiles a second squared, `grow` the share of its size a particle gains over
  * its life.
  */
-export const DUST = {
-  rate: 30,
+export const DUST: PoolFigures = {
+  // The first cut (30 a second, 0.9 s, tripling) piled into a brown smear: a few small puffs that
+  // are gone before they merge read as dust kicked up, not as a trail painted on the grass.
+  rate: 10,
   minSpeed: 40,
-  life: 0.9,
-  size: 0.08,
+  life: 0.55,
+  size: 0.04,
   colour: '#b59a72',
+  blending: NormalBlending,
   gravity: -0.05,
-  grow: 2,
-  opacity: 0.45,
+  grow: 1.5,
+  opacity: 0.25,
 };
-export const SPARKS = {
-  rate: 60,
+export const SPARKS: PoolFigures & { burst: number } = {
+  // `rate` is for scraping a wall only; cars that rub in a pack get the one burst, because
+  // TOUCHING is on for most ticks there and a stream made every pack a fountain.
+  rate: 25,
   minSpeed: 30,
   /** Sparks at the moment two cars touch. */
-  burst: 12,
-  life: 0.35,
-  size: 0.025,
+  burst: 8,
+  life: 0.3,
+  size: 0.02,
   colour: '#ffb347',
+  blending: AdditiveBlending,
   gravity: 3,
   grow: -0.6,
   opacity: 1,
 };
+
+export interface PoolFigures {
+  rate: number;
+  minSpeed: number;
+  life: number;
+  size: number;
+  colour: string;
+  blending: Blending;
+  gravity: number;
+  grow: number;
+  opacity: number;
+}
