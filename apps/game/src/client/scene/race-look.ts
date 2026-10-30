@@ -134,17 +134,18 @@ export const CHASE = {
  * its life.
  */
 export const DUST: PoolFigures = {
-  // The first cut (30 a second, 0.9 s, tripling) piled into a brown smear: a few small puffs that
-  // are gone before they merge read as dust kicked up, not as a trail painted on the grass.
-  rate: 10,
+  // The first cut (30 a second, 0.9 s, tripling, 0.45 opaque) piled into a brown smear; the
+  // second (10, 0.55 s, 0.04, 0.25) could not be seen from the chase camera at all. Puffs that
+  // grow and thin out before the next ones overlap them read as dust kicked up.
+  rate: 18,
   minSpeed: 40,
-  life: 0.55,
-  size: 0.04,
+  life: 0.7,
+  size: 0.06,
   colour: '#b59a72',
   blending: NormalBlending,
   gravity: -0.05,
-  grow: 1.5,
-  opacity: 0.25,
+  grow: 2,
+  opacity: 0.35,
 };
 export const SPARKS: PoolFigures & { burst: number } = {
   // `rate` is for scraping a wall only; cars that rub in a pack get the one burst, because
